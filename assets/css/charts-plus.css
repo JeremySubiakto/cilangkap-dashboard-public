@@ -1,0 +1,664 @@
+/* ==========================================================================
+ * Acquisition Dashboard · chart kit for the merchant acquisition sections
+ * (assets/js/charts-plus.js: combo, donut, pie, heatmap, statusBar, bigNumber)
+ *
+ * Bold status colours, the same everywhere (COPY_STYLE_EN item 11):
+ *   --status-ok green = already acquired / on target
+ *   --status-mid amber = partly / close
+ *   --status-bad red = not yet / behind
+ *   --status-none grey = no data
+ *   --status-potential blue = potential before the LVM file is imported
+ * Calm data blues come from --chart-1 … --chart-5, the one highlight from
+ * --chart-hl (DESIGN_DIRECTION_V2 §1.4). Tokens only: no raw colours here.
+ * Fills are set from JS as var(--token), so Day / Night switch at once.
+ * Hosts may set --mcp-bg to the panel colour behind the chart (text halos,
+ * slice separators); it defaults to --surface-sheet.
+ * ========================================================================== */
+
+.mcp {
+  --mcp-bg: var(--surface-sheet);
+  --mcp-dur: 650ms;
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  color: var(--ink-2);
+  font: 400 12px/16px var(--font-sans);
+  font-variant-numeric: lining-nums tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+.mcp *, .mcp *::before, .mcp *::after { box-sizing: border-box; }
+/* Exhibit panels and drawers are opaque cards: halos match the solid surface. */
+.exhibit .mcp, .drawer .mcp { --mcp-bg: var(--surface-solid); }
+
+/* The host element has its own height: the plot takes what the legend leaves. */
+.mcp.is-fixed { display: flex; flex-direction: column; height: 100%; }
+.mcp.is-fixed > .mcp__plot { flex: 1 1 auto; min-height: 0; }
+.mcp.is-fixed > .mcp__legend, .mcp.is-fixed > .mcp__below, .mcp.is-fixed > .mcp__foot, .mcp.is-fixed > .mcp__dt { flex: 0 0 auto; }
+
+.mcp__plot { position: relative; width: 100%; min-width: 0; outline: none; border-radius: var(--r-ctl); }
+.mcp__plot:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+.mcp__plot.is-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.mcp__svg { display: block; max-width: none; overflow: visible; user-select: none; -webkit-user-select: none; }
+.mcp__plot.is-scroll .mcp__svg { overflow: hidden; }
+
+/* Screen-reader only (summary, live region, keyboard hint) */
+.mcp-sr {
+  position: absolute !important;
+  width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.mcp-empty {
+  margin: 0;
+  padding: 24px 8px;
+  text-align: center;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--ink-3);
+}
+
+/* ── Legend in words (HTML, above the plot) ───────────────────────────────── */
+.mcp__legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin: 0 0 12px; }
+.mcp__legend[hidden] { display: none; }
+.mcp-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0; padding: 0; list-style: none; }
+.mcp-legend__i { display: inline-flex; align-items: center; gap: 7px; font: 500 12px/16px var(--font-sans); color: var(--ink-2); cursor: default; }
+.mcp-legend__t { font: 600 12px/16px var(--font-sans); color: var(--ink-3); }
+.mcp-legend__note { flex-basis: 100%; font: 400 12px/16px var(--font-sans); color: var(--ink-3); }
+
+/* Swatches: legend, donut list, status bar legend */
+.mcp-sw { flex: 0 0 auto; display: inline-block; }
+.mcp-sw--box { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--rule); }
+.mcp-sw--dot { width: 11px; height: 11px; border-radius: 50%; }
+.mcp-sw--svg { width: 22px; height: 12px; overflow: visible; }
+.mcp-sw__dot { stroke: var(--mcp-bg); stroke-width: 1.5; }
+.mcp-sw--nodata { box-shadow: inset 0 0 0 1px var(--status-none); }
+
+/* ── SVG text ─────────────────────────────────────────────────────────────── */
+.mcp-t { font-family: var(--font-sans); font-size: 12px; fill: var(--ink-3); }
+.mcp-t--axis { font: 400 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink-3); }
+.mcp-t--cap { font: 600 12px var(--font-sans); fill: var(--ink-3); }
+.mcp-t--cat { font: 500 12px var(--font-sans); fill: var(--ink-2); transition: fill var(--dur-hover) var(--ease-standard); }
+.mcp-t--cat.is-on { fill: var(--ink); font-weight: 600; }
+.mcp-t--val { font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink-2); }
+.mcp-t--strong { font-weight: 600; fill: var(--ink); }
+.mcp-t--hl { font: 600 12px var(--font-sans); fill: var(--gold); }
+.mcp-t--tag { font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums; }
+.mcp-t--halo { paint-order: stroke; stroke: var(--mcp-bg); stroke-width: 3.5px; stroke-linejoin: round; }
+.mcp-t--center { font-family: var(--font-serif); font-weight: 500; fill: var(--ink); }
+.mcp-t--center-l { font: 600 12px var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; fill: var(--ink-3); }
+.mcp-t--dl { font: 600 12px var(--font-sans); fill: var(--ink); }
+.mcp-t--dl2 { font: 400 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink-2); }
+.mcp-t--colh { font: 600 12px var(--font-sans); fill: var(--ink-2); }
+.mcp-t--rowh { font: 500 12px var(--font-sans); fill: var(--ink-2); }
+.mcp-t--rows { font: 400 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink-3); }
+.mcp-t--colh.is-on, .mcp-t--rowh.is-on { fill: var(--ink); font-weight: 600; }
+.mcp-t--cell { font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink); pointer-events: none; }
+.mcp-t--cell-na { font-weight: 400; fill: var(--ink-3); }
+.mcp-t--cellsub { font: 400 12px var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--ink-2); opacity: 0.9; pointer-events: none; }
+
+/* ── Axes, grid, target ───────────────────────────────────────────────────── */
+.mcp-grid line { stroke: var(--rule); stroke-width: 1; shape-rendering: crispEdges; }
+.mcp-base { stroke: var(--rule-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.mcp-target { stroke: var(--chart-hl); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; pointer-events: none; }
+.mcp-band { fill: var(--rule); pointer-events: none; transition: opacity var(--dur-hover) var(--ease-standard); }
+
+/* ── Marks ────────────────────────────────────────────────────────────────── */
+.mcp-mark { transition: opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-dim { opacity: 0.25; }
+.mcp-mute { opacity: 0.42; }
+.mcp-bar { shape-rendering: geometricPrecision; }
+.mcp-line { fill: none; stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.mcp-dot { stroke: var(--mcp-bg); stroke-width: 2; pointer-events: none; transition: stroke var(--dur-hover) var(--ease-standard), stroke-width var(--dur-hover) var(--ease-standard), opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-dot.is-on { stroke: var(--ink); stroke-width: 2.5; }
+.mcp-hit { fill: transparent; pointer-events: all; }
+.mcp.is-clickable .mcp-hit,
+.mcp.is-clickable .mcp-arc,
+.mcp.is-clickable .mcp-hm-cell,
+.mcp.is-clickable .mcp-sb__seg,
+.mcp.is-clickable .mcp-dl__i { cursor: pointer; }
+
+/* Donut and pie */
+.mcp-arc { stroke: var(--rule-strong); stroke-width: 1; transition: opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-arc--pie { stroke: var(--mcp-bg); stroke-width: 1.5; stroke-linejoin: round; }
+.mcp-slice { transition: transform var(--dur-xhl) var(--ease-standard), opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-leader { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+.mcp-leader-dot { fill: var(--ink-3); }
+.mcp-ring-empty { stroke: var(--status-none-a20); }
+
+/* Donut list under the chart (narrow boxes or labels: 'legend') */
+.mcp__below { margin: 12px 0 0; }
+.mcp__below[hidden] { display: none; }
+.mcp-dl { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.mcp-dl__i {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: var(--r-ctl);
+  transition: background-color var(--dur-hover) var(--ease-standard), opacity var(--dur-xhl) var(--ease-standard);
+}
+.mcp-dl__i.is-on { background: var(--rule); }
+.mcp-dl__i.is-sel .mcp-dl__l { color: var(--ink); font-weight: 600; }
+.mcp-dl__i.is-mute { opacity: 0.5; }
+.mcp-dl__l { min-width: 0; overflow-wrap: anywhere; font: 500 13px/18px var(--font-sans); color: var(--ink-2); }   /* A-16: never cut a slice name */
+.mcp-dl__p { font: 600 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink); text-align: right; }
+.mcp-dl__v { min-width: 56px; font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink-3); text-align: right; }
+
+/* Heatmap */
+.mcp-hm-cell rect { transition: opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-hm-nodata { stroke: var(--status-none); stroke-width: 1; stroke-dasharray: 3 3; }
+.mcp-hm-focus { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+
+/* ── Data table toggle and table ──────────────────────────────────────────── */
+.mcp__foot { display: flex; justify-content: flex-end; margin: 8px 0 0; }
+.mcp__foot[hidden] { display: none; }
+.mcp__foot.is-focus-only:not(:focus-within) {
+  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.mcp__tt {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--ink-2);
+  font: 500 12px/16px var(--font-sans);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
+}
+.mcp__tt:hover { background: var(--surface-hover); color: var(--ink); }
+.mcp__tt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.mcp__tt[aria-expanded="true"] { color: var(--ink); border-color: var(--ink-3); }
+
+.mcp__dt { margin: 8px 0 0; max-height: 320px; overflow: auto; border: 1px solid var(--rule); border-radius: var(--r-ctl); }
+.mcp__dt[hidden] { display: none; }
+.mcp__dt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.mcp__dt table { width: 100%; border-collapse: collapse; font: 400 12px/18px var(--font-sans); color: var(--ink-2); }
+.mcp__dt th, .mcp__dt td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.mcp__dt thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-solid);
+  font: 600 12px/16px var(--font-sans); color: var(--ink-3);
+}
+.mcp__dt tbody th { font-weight: 500; color: var(--ink); }
+.mcp__dt .is-num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mcp__dt tbody tr:last-child th, .mcp__dt tbody tr:last-child td { border-bottom: 0; }
+
+/* ── statusBar: one 100 % bar in the bold status colours ──────────────────── */
+.mcp--statusBar .mcp__plot { padding: 2px 0; }
+.mcp-sb__bar {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 30px;
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  background: var(--status-none-a20);
+}
+.mcp-sb__bar.is-lg { height: 42px; }
+.mcp-sb__seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--status-ink);
+  /* item 38: the share is the flex-grow, set at once; the segment moves with transform only (FLIP from the script) */
+  transform-origin: 0 50%;
+  transition: transform var(--dur-slow, 500ms) var(--ease-out, var(--ease-enter)), opacity var(--dur-xhl) var(--ease-standard), filter var(--dur-hover) var(--ease-standard);
+}
+.mcp-sb__seg.is-set { transition: opacity var(--dur-xhl) var(--ease-standard), filter var(--dur-hover) var(--ease-standard); }
+.mcp-sb__seg.is-zero { display: none; }
+/* the words inside a moving segment fade in once it has nearly arrived (ease-out: 97% of the way at 45% of the time) */
+.mcp-sb__seg .mcp-sb__in { transition: opacity var(--dur-fast, 180ms) var(--ease-out, var(--ease-enter)) calc(var(--dur-slow, 500ms) * 0.45); }
+.mcp-sb__seg.is-hide .mcp-sb__in { opacity: 0; transition: none; }
+.mcp-sb__seg:hover { filter: saturate(1.15) brightness(1.06); }
+.mcp-sb__seg--ok { background: var(--status-ok); }
+.mcp-sb__seg--mid { background: var(--status-mid); }
+.mcp-sb__seg--bad { background: var(--status-bad); }
+.mcp-sb__seg--none { background: var(--status-none); }
+.mcp-sb__seg--potential { background: var(--status-potential); }
+.mcp-sb__in { padding: 0 6px; overflow: hidden; white-space: nowrap; font: 600 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; pointer-events: none; }
+.mcp-sb__bar.is-lg .mcp-sb__in { font-size: 13px; }
+.mcp-sb__legend { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 22px; margin: 12px 0 0; padding: 0; list-style: none; }
+.mcp-sb__li { display: inline-flex; align-items: flex-start; gap: 8px; min-width: 0; transition: opacity var(--dur-xhl) var(--ease-standard); }
+.mcp-sb__li .mcp-sw--box { margin-top: 3px; }
+.mcp-sb__lt { display: grid; gap: 1px; min-width: 0; }
+.mcp-sb__ll { font: 500 13px/18px var(--font-sans); color: var(--ink-2); }
+.mcp-sb__lv { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.mcp-sb__lv b { font-weight: 600; color: var(--ink); }
+.mcp-sb__li--total { margin-left: auto; padding-left: 16px; border-left: 1px solid var(--rule); }
+.mcp-sb__li--empty { font: 400 13px/18px var(--font-sans); color: var(--ink-3); }
+
+/* ── bigNumber: KPI card ─────────────────────────────────────────────────── */
+.mcp-bn {
+  --mcp-bn-rule: var(--grad-accent);
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  background: var(--grad-card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-panel);
+  color: var(--ink);
+  transition: border-color var(--dur-hover) var(--ease-standard), box-shadow var(--dur-hover) var(--ease-standard);
+}
+.mcp-bn::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--brand-rule, 3px);
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  background: var(--mcp-bn-rule);
+}
+.mcp-bn--ok { --mcp-bn-rule: var(--status-ok); }
+.mcp-bn--mid { --mcp-bn-rule: var(--status-mid); }
+.mcp-bn--bad { --mcp-bn-rule: var(--status-bad); }
+.mcp-bn--none { --mcp-bn-rule: var(--status-none); }
+.mcp-bn--potential { --mcp-bn-rule: var(--status-potential); }
+.mcp-bn.is-flat { padding: 14px 0 0; background: none; border: 0; border-radius: 0; }
+.mcp-bn.is-flat::before { border-radius: 0; }
+.mcp-bn.is-clickable { cursor: pointer; }
+.mcp-bn.is-clickable:hover { border-color: var(--rule-strong); }
+.mcp-bn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* wraps only when the label and the "?" do not fit beside the corner DEMO tag (narrow phone cards) */
+.mcp-bn__head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; min-width: 0; }
+.mcp-bn.has-demo-tag--corner .mcp-bn__head { padding-right: 46px; }
+.mcp-bn__label { margin: 0; font: 600 13px/18px var(--font-sans); color: var(--ink-2); text-wrap: balance; }
+/* "?" tip beside the label: a visible button, never hover-only */
+.mcp-bn__help {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: -3px 0 0;
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+  font: 600 12px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
+}
+.mcp-bn__help[hidden] { display: none; }
+.mcp-bn__help:hover, .mcp-bn__help.is-on { background: var(--surface-hover); color: var(--ink); }
+.mcp-bn__help:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+/* a bigger touch target without a bigger circle */
+.mcp-bn__help { position: relative; }
+.mcp-bn__help::after { content: ""; position: absolute; inset: -9px; }
+.mcp-bn__helptext {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--rule-strong);
+  border-radius: 0 6px 6px 0;
+  background: var(--surface-hover);
+  font: 400 12px/17px var(--font-sans);
+  color: var(--ink-2);
+}
+.mcp-bn__helptext[hidden] { display: none; }
+.mcp-bn__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  margin: 2px 0 0;
+  font: 400 40px/46px var(--font-serif);
+  color: var(--ink);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.01em;
+}
+.mcp-bn.is-sm .mcp-bn__value { font-size: 30px; line-height: 36px; }
+.mcp-bn__cur { font: 500 16px/1 var(--font-sans); color: var(--ink-2); margin-right: 2px; }
+.mcp-bn__mag { font: 500 18px/1 var(--font-sans); color: var(--ink-2); }
+.mcp-bn__mag.is-pct { font: 400 26px/1 var(--font-serif); color: var(--ink); margin-left: -2px; }
+.mcp-bn.is-sm .mcp-bn__mag.is-pct { font-size: 20px; }
+.mcp-bn__unit { margin-left: 4px; font: 500 14px/1 var(--font-sans); color: var(--ink-3); }
+.mcp-bn__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; }
+.mcp-bn__meta[hidden] { display: none; }
+.mcp-bn__delta { font: 500 12px/16px var(--font-mono); white-space: nowrap; }
+.mcp-bn__delta.is-up { color: var(--pos); }
+.mcp-bn__delta.is-down { color: var(--neg); }
+.mcp-bn__delta.is-flat { color: var(--ink-3); }
+.mcp-bn__dl { font: 400 12px/16px var(--font-sans); color: var(--ink-3); }
+.mcp-bn__note { margin: 6px 0 0; font: 400 13px/19px var(--font-sans); color: var(--ink-2); }
+.mcp-bn__note[hidden] { display: none; }
+
+/* Status chip: solid, bold, with words (never colour alone) */
+.mcp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font: 600 12px/16px var(--font-sans);
+  white-space: nowrap;
+  color: var(--status-ink);
+  background: var(--status-none);
+}
+.mcp-chip--ok { background: var(--status-ok); }
+.mcp-chip--mid { background: var(--status-mid); }
+.mcp-chip--bad { background: var(--status-bad); }
+.mcp-chip--none { background: var(--status-none); }
+.mcp-chip--potential { background: var(--status-potential); }
+/* neutral chip: words only, no status colour (a figure that is ranked on the map, not judged by a fixed band) */
+.mcp-chip--neutral { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--rule-strong); font-weight: 500; white-space: normal; height: auto; min-height: 24px; padding: 3px 10px; }
+
+/* ── Local tooltip (only when charts.js is not loaded) ────────────────────── */
+.mcp-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-tip, 80);
+  min-width: 160px;
+  max-width: 300px;
+  padding: 10px 12px;
+  background: var(--surface-solid);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-tip);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink);
+  font: 400 12px/17px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-hover) var(--ease-standard);
+}
+.mcp-tip.is-on { opacity: 1; }
+.mcp-tip p { margin: 0; }
+.mcp-tip__eyebrow { font: 600 12px/16px var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.mcp-tip__head { margin: 0 0 6px !important; font: 600 13px/18px var(--font-sans); color: var(--ink); }
+.mcp-tip__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.mcp-tip__row.is-strong .mcp-tip__v { font-weight: 600; color: var(--ink); }
+.mcp-tip__row.is-muted { color: var(--ink-3); }
+.mcp-tip__sw { width: 9px; height: 9px; border-radius: 2px; }
+.mcp-tip__l { color: var(--ink-2); }
+.mcp-tip__v { font-family: var(--font-mono); text-align: right; color: var(--ink-2); }
+.mcp-tip__foot { margin: 6px 0 0 !important; padding-top: 6px; border-top: 1px solid var(--rule); color: var(--ink-3); }
+
+/* ── Preferences ──────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mcp { --mcp-dur: 0ms; }
+  .mcp-mark, .mcp-dot, .mcp-slice, .mcp-arc, .mcp-band, .mcp-sb__seg, .mcp-sb__seg .mcp-sb__in, .mcp-sb__li, .mcp-dl__i, .mcp-hm-cell rect, .mcp-bn, .mcp-tip { transition: none; }
+}
+@media (prefers-contrast: more) {
+  .mcp-dim { opacity: 0.4; }
+  .mcp-sw--box, .mcp-sw--dot, .mcp-chip { box-shadow: inset 0 0 0 1px var(--ink); }
+  .mcp-sb__bar { box-shadow: inset 0 0 0 1px var(--ink-3); }
+}
+@media (forced-colors: active) {
+  .mcp-sw, .mcp-sb__seg, .mcp-chip, .mcp-bn::before { forced-color-adjust: none; }
+  .mcp__plot:focus-visible, .mcp__tt:focus-visible, .mcp-bn:focus-visible { outline-color: Highlight; }
+}
+@media (max-width: 599px) {
+  .mcp-bn__value { font-size: 34px; line-height: 40px; }
+  .mcp-sb__legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+  .mcp-sb__li--total { grid-column: 1 / -1; margin-left: 0; padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+}
+
+/* ── CONTOH mark row above the plot (A-16): never inside a plot ──────────────── */
+.mcp__tagrow { display: flex; justify-content: flex-end; margin: 0 0 6px; }
+.mcp__tagrow:empty { display: none; }
+.mcp-bn__head .demo-tag { margin-left: auto; }
+
+/* ── rankBars (A-16): sorted horizontal bars, full names left, value at the bar end, dot column ── */
+.mcp-rb { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.mcp-rb__row, .mcp-rb__head {
+  display: grid; grid-template-columns: minmax(96px, 34%) minmax(0, 1fr); align-items: center; column-gap: 12px;
+  min-height: 32px; padding: 2px 4px; border-radius: var(--r-ctl);
+}
+.mcp-rb.has-dot .mcp-rb__row, .mcp-rb.has-dot .mcp-rb__head { grid-template-columns: minmax(96px, 32%) minmax(0, 1fr) 72px; }
+.mcp-rb__head { min-height: 20px; font: 600 12px/16px var(--font-sans); color: var(--ink-3); }
+.mcp-rb__hv { text-align: left; }
+.mcp-rb__hd { text-align: right; }
+.mcp-rb__name { display: grid; gap: 0; min-width: 0; }
+.mcp-rb__l { font: 500 13px/18px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.mcp-rb__sub { font: 400 12px/16px var(--font-sans); color: var(--ink-3); }
+.mcp-rb__row.is-hl .mcp-rb__l { color: var(--gold-soft); font-weight: 600; }
+.mcp-rb__track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mcp-rb__bar { flex: none; width: calc((100% - 72px) * var(--w, 0)); height: 14px; min-width: 2px; border-radius: 0 3px 3px 0; }
+.mcp-rb__v { flex: none; font: 600 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.mcp-rb__dot { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font: 500 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.mcp-rb__sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.mcp-rb__row.is-clickable { cursor: pointer; }
+.mcp-rb__row.is-clickable:hover { background: var(--surface-hover); }
+
+/* ── Glass layer for the kit (COPY_STYLE_EN items 15 and 31) ─────────────────
+ * The same quiet depth everywhere: a soft inner highlight on fills, a gentle
+ * shadow under marks, rounded ends. Decoration only: lengths, angles and colours
+ * still carry the data. No 3D, no perspective. Tokens only. */
+.mcp-bn {
+  border-color: var(--glass-border-card);
+  border-radius: var(--r-card, var(--r-panel));
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+}
+.mcp-bn::before { border-radius: var(--r-card, var(--r-panel)) var(--r-card, var(--r-panel)) 0 0; }
+.mcp-bn--ok { --mcp-bn-rule: var(--grad-status-ok, var(--status-ok)); }
+.mcp-bn--mid { --mcp-bn-rule: var(--grad-status-mid, var(--status-mid)); }
+.mcp-bn--bad { --mcp-bn-rule: var(--grad-status-bad, var(--status-bad)); }
+.mcp-bn--potential { --mcp-bn-rule: var(--grad-status-potential, var(--status-potential)); }
+.mcp-bn--none { --mcp-bn-rule: var(--grad-status-none, var(--status-none)); }
+.mcp-bn.is-clickable:hover { background: var(--glass-card-hover); }
+.mcp-bn.is-flat { box-shadow: none; }
+
+.mcp-sb__bar { box-shadow: inset 0 1px 2px var(--depth-shade); }
+.mcp-sb__seg { box-shadow: inset 0 1px 0 var(--depth-light); }
+.mcp-bar { filter: drop-shadow(0 1px 1px var(--depth-shadow)); }
+.mcp-arc { filter: drop-shadow(0 1px 1.5px var(--depth-shadow)); }
+.mcp-rb__bar { border-radius: 0 7px 7px 0; box-shadow: inset 0 1px 0 var(--depth-light), 0 1px 2px var(--depth-shadow); }
+.mcp-chip { box-shadow: inset 0 1px 0 var(--depth-light); }
+.mcp-chip--neutral { box-shadow: inset 0 0 0 1px var(--rule-strong); }
+
+/* ── rankedBars (§13): named rankings in glass, every row a button ───────────── */
+/* Motion (item 38): transform and opacity only. One easing family: --ease-out (entrances, bars) and
+   --ease-in-out (rows that leave), with the older tokens as fallbacks while the shell's motion tokens land. */
+.mcp--rankedBars .mcp__plot { border-radius: 0; }
+.mcp-rk {
+  --rk-fill: var(--grad-status-potential, var(--status-potential));
+  --rk-dur: var(--dur-base, 300ms);
+  --rk-out: calc(var(--dur-fast, 180ms) / 2);
+  --rk-ease: var(--ease-out, var(--ease-enter));
+  --rk-step: 35ms;
+  --rk-lag: 40ms;
+  --rk-dot: var(--chart-3);
+  position: relative;
+  display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; counter-reset: none;
+}
+/* while rows cross-fade out, nothing they cover below the list shows through */
+.mcp-rk.is-xfade { overflow: clip; }
+.mcp-rk--navy { --rk-fill: linear-gradient(90deg, var(--chart-4) 0%, var(--chart-2) 100%); }
+:root[data-theme="day"] .mcp-rk--navy { --rk-fill: linear-gradient(90deg, var(--chart-2) 0%, var(--chart-3) 100%); }
+.mcp-rk--gold { --rk-fill: var(--grad-gold); }
+.mcp-rk--ok { --rk-fill: var(--grad-status-ok, var(--status-ok)); }
+.mcp-rk--mid { --rk-fill: var(--grad-status-mid, var(--status-mid)); }
+.mcp-rk--bad { --rk-fill: var(--grad-status-bad, var(--status-bad)); }
+.mcp-rk--none { --rk-fill: var(--grad-status-none, var(--status-none)); }
+
+/* Timing on the token scale: a row fades up and slides in --dur-base, 35 ms after the one above; its bar grows in
+   --dur-base, 40 ms (--rk-lag) behind its row; kept rows slide and kept bars morph in --dur-base too, so the list
+   moves at one tempo. A drill-down is a fade-through: the old rows fade out in half of --dur-fast (90 ms, so an old
+   and a new name never show on top of each other) and the new rows start 60 ms in (--rk-lead, set by the script).
+   Five new rows settle in 60 + 4 × 35 + 40 + 300 = 540 ms; the first entrance (no lead) in 480 ms. */
+.mcp-rk__row {
+  position: relative; min-width: 0;
+  transition: opacity var(--rk-dur) var(--rk-ease), transform var(--rk-dur) var(--rk-ease);
+}
+.mcp-rk__row.is-enter { opacity: 0; transform: translateY(6px); transition: none; }
+.mcp-rk__row.is-flip { transition: none; }
+.mcp-rk__row.is-entering { transition-delay: calc(var(--rk-lead, 0ms) + var(--rk-i, 0) * var(--rk-step)); }
+.mcp-rk__row.is-entering .mcp-rk__fill { transition-delay: calc(var(--rk-lead, 0ms) + var(--rk-i, 0) * var(--rk-step) + var(--rk-lag)); }
+/* a row that leaves fades out where it was (placed by the script), above nothing it can be clicked through */
+.mcp-rk__row.is-leaving {
+  position: absolute; z-index: 0; margin: 0; pointer-events: none;
+  transition: opacity var(--rk-out) var(--ease-in-out, var(--ease-exit));
+}
+.mcp-rk__row.is-leaving.is-out { opacity: 0; }
+
+.mcp-rk__btn {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) 14px; align-items: center; column-gap: 12px;
+  width: 100%; min-height: 48px; margin: 0; padding: 8px 10px 8px 8px;
+  border: 1px solid transparent; border-radius: 10px; background: transparent;
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard), box-shadow var(--dur-hover) var(--ease-standard);
+}
+.mcp-rk__btn.is-static { grid-template-columns: 28px minmax(0, 1fr); cursor: default; }
+button.mcp-rk__btn:hover { background: var(--glass-card-hover); border-color: var(--glass-border-card); box-shadow: var(--glass-hl-card); }
+button.mcp-rk__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+.mcp-rk__row.is-sel .mcp-rk__btn { background: var(--glass-card-hover); border-color: var(--rule-strong); box-shadow: var(--glass-hl-card), var(--glass-shadow-card); }
+
+.mcp-rk__badge {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(160deg, var(--chart-3) 0%, var(--brand-navy) 100%);
+  color: var(--band-ink); font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 var(--depth-light), 0 2px 6px -2px var(--depth-shadow);
+}
+.mcp-rk__row.is-sel .mcp-rk__badge { box-shadow: inset 0 1px 0 var(--depth-light), 0 0 0 2px var(--mcp-bg), 0 0 0 4px var(--chart-3); }
+
+.mcp-rk__main { display: grid; gap: 5px; min-width: 0; }
+.mcp-rk__top { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; min-width: 0; }
+.mcp-rk__name { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; }
+.mcp-rk__symw { flex: none; display: inline-flex; align-self: center; }
+.mcp-rk__symw[hidden] { display: none; }
+.mcp-rk__l { min-width: 0; font: 600 14px/19px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.mcp-rk__val { flex: none; display: inline-flex; align-items: baseline; gap: 8px; text-align: right; white-space: nowrap; }
+.mcp-rk__v { font: 600 14px/19px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+.mcp-rk__v[hidden] { display: none; }
+.mcp-rk__vn { font: 400 12px/16px var(--font-sans); color: var(--ink-3); white-space: nowrap; }
+.mcp-rk__vn[hidden] { display: none; }
+
+.mcp-rk__track {
+  position: relative; display: block; height: 10px; border-radius: 999px;
+  background: var(--surface-well); box-shadow: inset 0 1px 2px var(--depth-shade);
+}
+/* the bar keeps its own width; it grows and morphs with scaleX from the left edge (no width animation) */
+.mcp-rk__fill {
+  position: relative; display: block; width: 0; height: 100%; min-width: 0; border-radius: 999px;
+  background: var(--rk-fill);
+  box-shadow: 0 1px 2px var(--depth-shadow), 0 4px 10px -6px var(--depth-shadow);
+  transform-origin: 0 50%;
+  transition: transform var(--rk-dur) var(--rk-ease);
+}
+.mcp-rk__fill.is-set { transition: none; }
+.mcp-rk__fill::after {
+  content: ""; position: absolute; left: 3px; right: 3px; top: 1px; height: 45%;
+  border-radius: 999px; background: linear-gradient(180deg, var(--depth-light) 0%, transparent 100%); pointer-events: none;
+}
+/* a bar in two shades (parts): e.g. siswa 17+ (strong) and di bawah 17 (lighter); both >= 3:1 on the card */
+.mcp-rk__fill.is-split { display: flex; overflow: hidden; background: var(--surface-well); }
+.mcp-rk__part { display: block; flex: none; height: 100%; min-width: 0; }
+.mcp-rk__part--a { background: var(--chart-1); }
+.mcp-rk__part--b { background: var(--chart-3); }
+.mcp-rk__part + .mcp-rk__part { box-shadow: inset 2px 0 0 var(--mcp-bg, var(--surface-solid)); }
+/* a named list without bars (bars: false) */
+.mcp-rk.is-nobar .mcp-rk__track { display: none; }
+.mcp-rk.is-nobar .mcp-rk__main { gap: 3px; }
+button.mcp-rk__btn:hover .mcp-rk__fill { filter: saturate(1.08) brightness(1.06); }
+
+.mcp-rk__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.mcp-rk__meta[hidden] { display: none; }
+.mcp-rk__sub { min-width: 0; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.mcp-rk__subp { white-space: nowrap; }
+.mcp-rk__sub[hidden], .mcp-rk__chip[hidden] { display: none; }
+.mcp-rk__chip {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px;
+  font: 600 12px/16px var(--font-sans); white-space: nowrap; color: var(--ink-2);
+  background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+/* the tier chips use Merchant's colours (item 35): Sasaran EDC gold, Naik ke EDC green ring, Sasaran LVM neutral */
+.mcp-rk__chip--edc, .mcp-rk__chip--edclvm { color: var(--gold-soft); background: var(--gold-a10); box-shadow: inset 0 0 0 1px var(--rule-gold); }
+.mcp-rk__chip--up, .mcp-rk__chip--upsell { color: var(--ink); background: var(--status-ok-a20); box-shadow: inset 0 0 0 1px var(--status-ok); }
+.mcp-rk__chip--lvm { color: var(--ink-2); background: transparent; box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.mcp-rk__go { font: 400 20px/1 var(--font-sans); color: var(--ink-3); transition: transform var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard); }
+button.mcp-rk__btn:hover .mcp-rk__go { color: var(--ink); transform: translateX(2px); }
+
+/* item 37: three level dots at the right of a name (nilai belanja, keramaian, daya beli area). The level is in
+   the shape: a ring = rendah or kecil, half = sedang, full = tinggi or besar; a faint dashed ring = no data. */
+.mcp-rk__lv { display: inline-flex; align-items: center; align-self: center; gap: 4px; padding: 2px 0; }
+.mcp-rk__lv[hidden] { display: none; }
+.mcp-rk__dot {
+  display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%;
+  background: transparent; box-shadow: inset 0 0 0 1.5px var(--rk-dot, var(--chart-3));
+}
+.mcp-rk__dot.is-2 { background: linear-gradient(90deg, var(--rk-dot, var(--chart-3)) 50%, transparent 50%); }
+.mcp-rk__dot.is-3 { background: var(--rk-dot, var(--chart-3)); }
+.mcp-rk__dot.is-0 { box-shadow: none; border: 1px dashed var(--rule-strong); }
+/* their words: a small solid card under the row, on hover (after a short pause) or keyboard focus */
+.mcp-rk__pop {
+  position: absolute; z-index: 6; left: 44px; right: 6px; top: calc(100% - 4px);
+  display: grid; gap: 4px; padding: 8px 10px; border-radius: 10px;
+  background: var(--surface-solid); border: 1px solid var(--glass-border-card); box-shadow: var(--glass-shadow-card);
+  font: 400 12px/16px var(--font-sans); color: var(--ink-2);
+  opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none;
+  transition: opacity var(--dur-fast, 180ms) var(--rk-ease), transform var(--dur-fast, 180ms) var(--rk-ease), visibility 0s linear var(--dur-fast, 180ms);
+}
+.mcp-rk__pop[hidden] { display: none; }
+.mcp-rk__btn:focus-visible + .mcp-rk__pop { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+@media (hover: hover) {
+  .mcp-rk__row.has-lv:hover > .mcp-rk__pop { opacity: 1; visibility: visible; transform: none; transition-delay: 160ms; }
+}
+.mcp-rk__row.is-leaving > .mcp-rk__pop, .mcp-rk__row.is-enter > .mcp-rk__pop { display: none; }
+.mcp-rk__popl { display: grid; grid-template-columns: 10px minmax(0, 1fr); align-items: start; gap: 8px; }
+.mcp-rk__popl > .mcp-rk__dot { margin-top: 3px; }
+.mcp-rk__popk { font-weight: 600; color: var(--ink); }
+/* v5 (V4 open item 7): with a layout (.is-float) the words show in one floating card BESIDE the row, outside the list,
+   so the row below stays readable. The card lives in the overlay layer and is placed by the script
+   (MCD.windows.place, else rkPlace). The in-row card above stays the fallback without a layout. */
+.mcp-rk.is-float .mcp-rk__pop { display: none; }
+.mcp-rk-card {
+  position: fixed; left: 0; top: 0; z-index: var(--z-tip, 80);
+  display: grid; gap: 5px; width: min(300px, calc(100vw - 16px)); padding: 10px 12px; border-radius: 12px;
+  background: var(--surface-solid); border: 1px solid var(--glass-border-card); box-shadow: var(--glass-shadow-card);
+  font: 400 12px/16px var(--font-sans); color: var(--ink-2);
+  pointer-events: none; opacity: 0; translate: 0 4px;
+  transition: opacity var(--dur-fast, 180ms) var(--ease-out, ease-out), translate var(--dur-fast, 180ms) var(--ease-out, ease-out);
+}
+.mcp-rk-card[hidden] { display: none; }
+.mcp-rk-card[data-side="left"] { translate: 4px 0; }
+.mcp-rk-card[data-side="right"] { translate: -4px 0; }
+.mcp-rk-card[data-side="top"] { translate: 0 -4px; }
+.mcp-rk-card.is-in { opacity: 1; translate: 0 0; }
+.mcp-rk-card__t { margin: 0 0 2px; font: 600 13px/17px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .mcp-rk-card { transition: none; translate: none; }
+}
+@media (forced-colors: active) {
+  .mcp-rk-card { border-color: CanvasText; }
+}
+
+/* item 34 symbols: shape = jenis, colour = status (negeri blue, swasta amber, TNI foundation amber + navy star) */
+.mcp-rk__sym { display: block; overflow: visible; }
+.mcp-rk__symf { fill: var(--chart-3); stroke: var(--mcp-bg); stroke-width: 1.2; }
+.mcp-rk__sym--swasta .mcp-rk__symf, .mcp-rk__sym--tni .mcp-rk__symf, .mcp-rk__sym--mid .mcp-rk__symf { fill: var(--status-mid); }
+.mcp-rk__sym--ok .mcp-rk__symf { fill: var(--status-ok); }
+.mcp-rk__sym--bad .mcp-rk__symf { fill: var(--status-bad); }
+.mcp-rk__sym--none .mcp-rk__symf { fill: var(--status-none); }
+.mcp-rk__sym--potential .mcp-rk__symf { fill: var(--status-potential); }
+.mcp-rk__star { fill: var(--brand-navy); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-rk__row, .mcp-rk__fill, .mcp-rk__btn, .mcp-rk__go, .mcp-rk__pop { transition: none; }
+  .mcp-rk__row.is-enter { opacity: 1; transform: none; }
+  .mcp-rk__row.is-leaving { display: none; }
+}
+@media (forced-colors: active) {
+  .mcp-rk__fill, .mcp-rk__badge, .mcp-rk__symf, .mcp-rk__dot { forced-color-adjust: none; }
+  button.mcp-rk__btn:focus-visible { outline-color: Highlight; }
+}
+@media (max-width: 599px) {
+  .mcp-rk__btn { column-gap: 10px; padding: 8px 6px; }
+  /* the value stays on the right of every row; a long name takes at most two lines */
+  .mcp-rk__top { flex-wrap: nowrap; }
+  .mcp-rk__name { min-width: 0; flex: 1 1 auto; }
+  .mcp-rk__l { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: break-word; }
+  .mcp-rk__pop { left: 38px; }
+}

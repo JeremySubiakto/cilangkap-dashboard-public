@@ -1,0 +1,1158 @@
+/* ==========================================================================
+ * MCD gate — sign-in section (#gate) shown before the dashboard.
+ *
+ * Look (16 Oct 2026, "top tier" revamp, second pass; COPY_STYLE_EN items 5,
+ * 17, 19, 23, 24, 25):
+ *   - Wide screens (>= 1200 px): a split page. Left, a navy brand panel
+ *     (gradient mesh, slow ambient light, large serif product name, one plain
+ *     line on what the dashboard is for, the Danantara lockup, place and
+ *     clock). Right, a flat view of Cilangkap with the frosted-glass card.
+ *   - Tablets and phones: one centred glass panel over the same view.
+ *   - Two themes, the dashboard's own (mcd.ui.theme, else the system):
+ *     Gelap: navy glass over a greyscale satellite in navy duotone.
+ *     Terang: white glass over a light greyscale satellite; the brand panel
+ *     (or the top band of the phone panel) stays navy; the primary button is
+ *     Mandiri navy, as on the dashboard by day (UX plan D13). The unlock
+ *     fades over the dashboard's own canvas colour, so there is no flash.
+ *   - Offline, blocked or still loading: a quiet line plan of the area
+ *     (assets/img/gate-plan.svg: kecamatan and kelurahan borders, business
+ *     points; tools/build-gate-plan.mjs) in the same frame as the satellite.
+ *   - One fixed slot under the field (two lines) holds the help line, an
+ *     error or the lockout countdown, so the card never changes size.
+ *   - States: hover, pressed, focus ring, error, lockout (dashed field with
+ *     "Tunggu sebentar" and a draining line), busy (spinner face), success
+ *     (check face, then the card lifts away while the map pushes in).
+ *   - Fallbacks: solid panels without backdrop-filter, with reduced
+ *     transparency or more contrast; no movement with reduced motion;
+ *     system colours in forced-colours mode (logos on a navy plate).
+ *     No text below 12 px.
+ *
+ * Tokens: every colour lives in a token block below; component rules use
+ * var(--g-*) only. WCAG contrast, measured on rendered pixels (16 Oct 2026;
+ * the 99th-percentile worst background pixel behind each line, text hidden,
+ * satellite loaded; 1440 x 900, 1366 x 768 and 390 x 844):
+ *   Gelap  brand >= 8.7:1, card title 12.4, label 13.0, help 6.9, fine print
+ *          7.2, error 7.4, Caps Lock 6.3, countdown 8.7, "Tunggu sebentar"
+ *          8.3, notice banner 10.0, "Masuk" on gold 9.4, disabled 5.8,
+ *          footer 8.0, map credit 6.5.
+ *   Terang brand on navy >= 8.7:1, card title 15.3, label 15.2, help 6.8,
+ *          fine print 6.5, error 5.6, Caps Lock 5.2, countdown 6.1, "Tunggu
+ *          sebentar" 6.3, notice banner 13.9, "Masuk" on navy 8.8, disabled
+ *          6.3, footer 7.1, map credit 6.2.
+ *   Offline plan: every line >= 7.3:1. Field edge 3.5:1 (Gelap) and 4.1:1
+ *   (Terang) against the card; the button 8.5:1 and 8.7:1.
+ * Load after tokens.css and brand.css when they are present.
+ * ========================================================================== */
+
+.mcd-gate,
+.mcd-idle {
+  /* Type and motion (shared with the dashboard when its tokens are loaded) */
+  --g-serif:        var(--font-serif, "Source Serif 4", "Iowan Old Style", Georgia, serif);
+  --g-sans:         var(--font-sans, "Inter Tight", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --g-mono:         var(--font-mono, "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  --g-ease:         cubic-bezier(.2, 0, 0, 1);
+  --g-ease-enter:   cubic-bezier(.16, 1, .3, 1);
+  --g-ease-exit:    cubic-bezier(.4, 0, 1, 1);
+  --g-ease-camera:  cubic-bezier(.65, 0, .35, 1);
+  --g-dur-hover:    140ms;
+  --g-dur-enter:    600ms;
+
+  /* Ink on navy: the brand panel in both themes, and the night glass */
+  --g-nv-1:         #F5F8FD;
+  --g-nv-2:         #CFD9EA;
+  --g-nv-3:         #B0BDD2;
+  --g-gold:         #FFB700;              /* Mandiri gold: eyebrow rule, night button, key icon */
+
+  /* Ink on the glass (Gelap) */
+  --g-ink-1:        #F5F8FD;
+  --g-ink-2:        #CFD9EA;
+  --g-ink-3:        #B0BDD2;
+  --g-accent:       #FFB700;
+  --g-neg:          #FFAA9E;
+  --g-neg-a:        rgba(255, 170, 158, .22);
+  --g-warn:         #FFC670;
+  --g-warn-a:       rgba(255, 198, 112, .14);
+  --g-warn-track:   rgba(255, 198, 112, .20);
+  --g-focus:        #8CC2FF;
+  --g-focus-a:      rgba(140, 194, 255, .30);
+  --g-info-bg:      rgba(140, 194, 255, .10);
+  --g-info-edge:    rgba(140, 194, 255, .32);
+  --g-credit:       #B0BDD2;              /* map credit, straight on the shaded map */
+
+  /* Canvas and background */
+  --g-canvas:       #020B1C;
+  --g-base:
+    radial-gradient(70% 60% at 0% 0%, rgba(31, 111, 224, .38) 0%, transparent 70%),
+    radial-gradient(60% 50% at 100% 100%, rgba(0, 61, 121, .70) 0%, transparent 72%),
+    radial-gradient(40% 40% at 85% 10%, rgba(25, 120, 200, .22) 0%, transparent 70%),
+    linear-gradient(160deg, #031633 0%, #04122A 55%, #020B1C 100%);
+  --g-aside-bg:
+    radial-gradient(90% 55% at 0% 0%, rgba(31, 111, 224, .34) 0%, transparent 72%),
+    radial-gradient(70% 45% at 100% 100%, rgba(0, 61, 121, .55) 0%, transparent 72%),
+    linear-gradient(170deg, #062152 0%, #04173A 48%, #020E26 100%);
+  --g-aside-edge:   rgba(255, 255, 255, .10);
+  --g-aside-rule:   rgba(255, 255, 255, .12);
+  --g-plan-op:      .72;
+  --g-plan-ink:     none;                 /* the plan SVG has one blue-grey ink; by day it is darkened */
+  --g-tone:         #0E3A78;              /* navy duotone over the greyscale imagery */
+  --g-tone-op:      .6;
+  --g-shade:
+    linear-gradient(0deg, rgba(2, 11, 28, .62) 0%, transparent 22%),
+    radial-gradient(85% 80% at 50% 46%, rgba(2, 11, 28, .40) 0%, rgba(2, 11, 28, .66) 100%);
+  --g-shade-split:
+    linear-gradient(0deg, rgba(2, 11, 28, .58) 0%, transparent 14%),
+    linear-gradient(90deg, rgba(2, 11, 28, .50) 0%, transparent 16%),
+    radial-gradient(60% 62% at 52% 48%, rgba(2, 11, 28, .38) 0%, rgba(2, 11, 28, .62) 100%);
+  --g-light:
+    radial-gradient(38% 34% at 24% 22%, rgba(70, 140, 255, .20) 0%, transparent 70%),
+    radial-gradient(30% 28% at 80% 84%, rgba(255, 183, 0, .08) 0%, transparent 70%);
+  --g-light-split:
+    radial-gradient(60% 40% at 18% 20%, rgba(56, 128, 240, .30) 0%, transparent 70%),
+    radial-gradient(48% 34% at 72% 94%, rgba(255, 183, 0, .09) 0%, transparent 72%);
+  --g-grain:        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --g-grain-op:     .05;
+  --g-plate:        #04122A;              /* behind the logos in forced-colours mode */
+
+  /* Frosted glass */
+  --g-blur:         blur(24px) saturate(140%);
+  --g-blur-chip:    blur(14px) saturate(130%);
+  --g-glass:        linear-gradient(180deg, rgba(255, 255, 255, .10) 0%, rgba(255, 255, 255, .05) 100%), rgba(6, 20, 46, .60);
+  --g-glass-solid:  linear-gradient(180deg, #10264A 0%, #0A1B38 100%);
+  --g-glass-edge:   linear-gradient(160deg, rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 30%, rgba(255, 255, 255, .05) 62%, rgba(255, 255, 255, .16) 100%);
+  --g-glass-edge-hi: rgba(255, 255, 255, .64);
+  --g-glass-hl:     inset 0 1px 0 rgba(255, 255, 255, .12);
+  --g-glass-shadow: 0 1px 1px rgba(0, 6, 20, .20), 0 8px 16px -6px rgba(0, 6, 20, .36), 0 32px 72px -20px rgba(0, 6, 20, .74);
+  --g-glass-ok:     0 0 0 1px rgba(255, 183, 0, .38), 0 0 48px -8px rgba(255, 183, 0, .26);
+  --g-sheen:        linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, .07) 46%, transparent 60%);
+  --g-chip:         linear-gradient(180deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .04) 100%), rgba(4, 15, 36, .58);
+  --g-chip-solid:   #0A1A38;
+  --g-chip-edge:    rgba(255, 255, 255, .14);
+  --g-hairline:     rgba(255, 255, 255, .12);
+
+  /* Field */
+  --g-field:        rgba(2, 12, 30, .56);
+  --g-field-edge:   rgba(255, 255, 255, .44);
+  --g-field-hover:  rgba(255, 255, 255, .62);
+  --g-field-inset:  inset 0 1px 2px rgba(0, 4, 14, .30);
+  --g-field-off:    rgba(2, 12, 30, .30);
+  --g-field-off-edge: rgba(255, 255, 255, .34);
+  --g-ghost:        rgba(255, 255, 255, .06);
+  --g-ghost-hover:  rgba(255, 255, 255, .10);
+
+  /* Primary button (Gelap): Mandiri gold with navy ink, neutral shadow */
+  --g-btn:          linear-gradient(180deg, #FFCB3A 0%, #FFB700 100%);
+  --g-btn-hover:    linear-gradient(180deg, #FFD45C 0%, #FFC01A 100%);
+  --g-btn-active:   linear-gradient(180deg, #F2AE00 0%, #E9A700 100%);
+  --g-btn-ink:      #04224A;
+  --g-btn-hl:       inset 0 1px 0 rgba(255, 255, 255, .50), inset 0 -1px 0 rgba(120, 80, 0, .22);
+  --g-btn-shadow:   0 1px 2px rgba(0, 8, 24, .30), 0 10px 22px -12px rgba(0, 8, 24, .70);
+  --g-btn-lift:     0 16px 28px -14px rgba(0, 8, 24, .80);
+  --g-btn-off:      rgba(255, 255, 255, .06);
+  --g-btn-off-ink:  #B0BDD2;
+  --g-btn-off-edge: rgba(255, 255, 255, .30);
+
+  /* Idle warning over the unlocked app: the dashboard's own glass and ink, both themes */
+  --g-pop:          var(--glass-bg-pop, rgba(12, 25, 48, .60));
+  --g-pop-solid:    var(--glass-solid, #0E1626);
+  --g-pop-blur:     var(--glass-blur, blur(18px) saturate(140%));
+  --g-pop-edge:     var(--glass-border, rgba(214, 228, 255, .16));
+  --g-pop-hl:       var(--glass-hl, inset 0 1px 0 rgba(255, 255, 255, .14));
+  --g-pop-shadow:   var(--glass-shadow, 0 12px 28px -10px rgba(0, 6, 18, .55));
+  --g-pop-r:        var(--r-glass, 14px);
+  --g-pop-ink-1:    var(--text-1, #EDEFF3);
+  --g-pop-ink-2:    var(--text-2, #A7B0C0);
+  --g-pop-warn:     var(--status-mid-text, #F0A92E);
+  --g-pop-warn-a:   var(--warn-a10, rgba(232, 161, 58, .10));
+  --g-pop-track:    var(--rule-strong, rgba(214, 224, 240, .14));
+  --g-pop-btn:      var(--btn-primary-bg, #FFB700);
+  --g-pop-btn-ink:  var(--btn-primary-ink, #1A1405);
+  --g-pop-btn-hover: var(--btn-primary-hover, #FFC633);
+  --g-pop-focus:    var(--signal, #38D6E8);
+
+  /* Shape */
+  --g-r-panel:      22px;
+  --g-r-field:      12px;
+  --g-aside:        clamp(480px, 42vw, 620px);
+}
+
+/* ---- Terang: white glass over a light greyscale view; the brand stays navy ---- */
+
+.mcd-gate.is-day {
+  --g-ink-1:        #0E1E36;
+  --g-ink-2:        #33425A;
+  --g-ink-3:        #4A566A;
+  --g-accent:       #003D79;
+  --g-neg:          #B0352A;
+  --g-neg-a:        rgba(176, 53, 42, .16);
+  --g-warn:         #8A4E00;
+  --g-warn-a:       rgba(152, 87, 0, .10);
+  --g-warn-track:   rgba(152, 87, 0, .18);
+  --g-focus:        #1F5FD1;
+  --g-focus-a:      rgba(31, 95, 209, .22);
+  --g-info-bg:      rgba(31, 95, 209, .07);
+  --g-info-edge:    rgba(31, 95, 209, .30);
+  --g-credit:       #33425A;
+
+  --g-canvas:       #F4F1EA;
+  --g-base:
+    radial-gradient(70% 60% at 100% 0%, rgba(214, 222, 236, .70) 0%, transparent 70%),
+    linear-gradient(160deg, #F7F5F0 0%, #F1EEE7 60%, #EAE6DD 100%);
+  --g-plan-op:      .7;
+  --g-plan-ink:     brightness(.5) saturate(.9);
+  --g-tone:         #3E5C88;
+  --g-tone-op:      .28;
+  --g-shade:
+    linear-gradient(0deg, rgba(244, 241, 234, .80) 0%, transparent 22%),
+    radial-gradient(85% 80% at 50% 46%, rgba(244, 241, 234, .55) 0%, rgba(244, 241, 234, .30) 100%);
+  --g-shade-split:
+    linear-gradient(0deg, rgba(244, 241, 234, .78) 0%, transparent 14%),
+    linear-gradient(90deg, rgba(14, 30, 54, .18) 0%, transparent 5%),
+    radial-gradient(60% 62% at 52% 48%, rgba(244, 241, 234, .56) 0%, rgba(244, 241, 234, .28) 100%);
+  --g-light:
+    radial-gradient(40% 36% at 24% 18%, rgba(255, 255, 255, .55) 0%, transparent 70%),
+    radial-gradient(30% 28% at 82% 86%, rgba(255, 183, 0, .07) 0%, transparent 70%);
+  --g-grain-op:     .035;
+
+  --g-blur:         blur(24px) saturate(130%) brightness(1.16);
+  --g-blur-chip:    blur(14px) saturate(120%) brightness(1.12);
+  --g-glass:        linear-gradient(180deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .72) 100%);
+  --g-glass-solid:  linear-gradient(180deg, #FFFFFF 0%, #FAF8F3 100%);
+  --g-glass-edge:   linear-gradient(160deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, .55) 34%, rgba(14, 30, 54, .08) 70%, rgba(14, 30, 54, .14) 100%);
+  --g-glass-edge-hi: rgba(14, 30, 54, .55);
+  --g-glass-hl:     inset 0 1px 0 rgba(255, 255, 255, .90);
+  --g-glass-shadow: 0 1px 1px rgba(14, 30, 54, .06), 0 8px 18px -8px rgba(14, 30, 54, .16), 0 36px 80px -24px rgba(14, 30, 54, .36);
+  --g-glass-ok:     0 0 0 1px rgba(0, 61, 121, .36), 0 0 44px -10px rgba(0, 61, 121, .30);
+  --g-sheen:        linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, .55) 46%, transparent 60%);
+  --g-chip:         linear-gradient(180deg, rgba(255, 255, 255, .80) 0%, rgba(255, 255, 255, .68) 100%);
+  --g-chip-solid:   #FFFFFF;
+  --g-chip-edge:    rgba(14, 30, 54, .12);
+  --g-hairline:     rgba(14, 30, 54, .12);
+
+  --g-field:        rgba(255, 255, 255, .92);
+  --g-field-edge:   #6E7889;
+  --g-field-hover:  #4A566A;
+  --g-field-inset:  inset 0 1px 2px rgba(14, 30, 54, .08);
+  --g-field-off:    rgba(14, 30, 54, .04);
+  --g-field-off-edge: #8B94A3;
+  --g-ghost:        rgba(14, 30, 54, .05);
+  --g-ghost-hover:  rgba(14, 30, 54, .09);
+
+  /* Mandiri navy with white ink, as the dashboard's primary button by day (D13) */
+  --g-btn:          linear-gradient(180deg, #0B4F96 0%, #003D79 100%);
+  --g-btn-hover:    linear-gradient(180deg, #145CA8 0%, #0B4F96 100%);
+  --g-btn-active:   linear-gradient(180deg, #00305F 0%, #002A55 100%);
+  --g-btn-ink:      #FFFFFF;
+  --g-btn-hl:       inset 0 1px 0 rgba(255, 255, 255, .18), inset 0 -1px 0 rgba(0, 10, 30, .28);
+  --g-btn-shadow:   0 1px 2px rgba(14, 30, 54, .20), 0 10px 22px -12px rgba(14, 30, 54, .55);
+  --g-btn-lift:     0 16px 28px -14px rgba(14, 30, 54, .55);
+  --g-btn-off:      rgba(14, 30, 54, .05);
+  --g-btn-off-ink:  #4A566A;
+  --g-btn-off-edge: #8B94A3;
+
+  color-scheme: light;
+}
+
+/* ---- Locked page: only #gate is rendered until onUnlock ------------------ */
+
+/* The exit fades over the dashboard's own canvas colour (no navy flash by day). */
+html.mcd-gate-day { --g-exit-canvas: #F4F1EA; }
+html.mcd-locked,
+html.mcd-locked body { background: var(--g-exit-canvas, var(--canvas, #020B1C)); overflow: hidden; }
+html.mcd-locked body > :not(#gate):not(script):not(style):not(link):not(noscript) { display: none !important; }
+
+/* Locking: hide everything immediately while the page reloads. */
+html.mcd-locking { background: var(--canvas, #020B1C); }
+html.mcd-locking body { visibility: hidden !important; }
+
+/* Entering: the app shell fades in after the gate (gate.js sets html.mcd-entering
+   for 400 ms; never under reduced motion). Opacity only, so fixed app chrome is
+   not re-anchored mid-animation. */
+html.mcd-entering body > :not(#gate):not(script):not(style):not(link):not(noscript):not(.mcd-idle) {
+  animation: gate-enter 320ms var(--ease-enter, cubic-bezier(.16, 1, .3, 1)) both;
+}
+
+/* ---- Section ------------------------------------------------------------- */
+
+.mcd-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--g-ink-1);
+  background: var(--g-canvas);
+  font-family: var(--g-sans);
+  font-size: 14px;
+  line-height: 22px;
+  font-variant-numeric: lining-nums tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: dark;
+}
+.mcd-gate.is-day { color-scheme: light; }
+.mcd-gate *, .mcd-gate *::before, .mcd-gate *::after { box-sizing: border-box; }
+.mcd-gate[hidden] { display: none; }
+
+/* The sign-in draws its own focus rings; drop the dashboard's generic halo (base.css). */
+.gate-reveal:focus-visible, .gate-secondary:focus-visible, .gate-copy:focus-visible, .gate-admin__summary:focus-visible,
+.gate-code:focus-visible, .gate-notice__title:focus, .gate-notice__title:focus-visible { box-shadow: none; }
+
+.gate-icon {
+  width: 1em; height: 1em; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.gate-sr {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---- Background (decorative, flat, north-up) ----------------------------- */
+
+.gate-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; isolation: isolate; transform-origin: 50% 50%; }
+.gate-bg > div { position: absolute; inset: 0; }
+.gate-bg__base { background: var(--g-base); }
+/* Offline plan: same centre and scale as the satellite (Web Mercator, zoom 15). */
+.gate-bg__plan {
+  /* url() written here, not in a token: relative to this stylesheet in every browser. */
+  background: url("../img/gate-plan.svg") 50% 50% / 3200px 2000px no-repeat;
+  opacity: var(--g-plan-op);
+  filter: var(--g-plan-ink);
+  transition: opacity 900ms var(--g-ease);
+}
+.gate-bg__map { opacity: 0; transition: opacity 900ms var(--g-ease); }
+.gate-bg__map .maplibregl-canvas { outline: none; }
+/* Greyscale imagery takes the navy hue here (item 25: no green, no colour fills). */
+.gate-bg__tone { opacity: 0; background: var(--g-tone); mix-blend-mode: color; transition: opacity 900ms var(--g-ease); }
+.has-map .gate-bg__plan { opacity: 0; }
+.has-map .gate-bg__map { opacity: 1; }
+.has-map .gate-bg__tone { opacity: var(--g-tone-op); }
+/* Calms the view behind the glass and darkens (or, by day, lightens) the edges
+   and the bottom, so the glass and the credit always sit on quiet pixels. */
+.gate-bg__shade { background: var(--g-shade); }
+/* Slow ambient light (48 s drift; still under reduced motion). */
+.gate-bg > .gate-bg__light { inset: -12%; background: var(--g-light); animation: gate-drift 48s ease-in-out infinite alternate; }
+.gate-bg__grain { opacity: var(--g-grain-op); mix-blend-mode: overlay; background-image: var(--g-grain); }
+
+/* ---- Stage --------------------------------------------------------------- */
+
+.gate-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 56px 16px 32px;
+}
+
+/* One glass panel (below 1200 px): brand on top, form below. */
+.gate-panel {
+  position: relative;
+  width: 100%;
+  max-width: 448px;
+  padding: 40px 40px 32px;
+  border-radius: var(--g-r-panel);
+  background: var(--g-glass);
+  -webkit-backdrop-filter: var(--g-blur);
+          backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-glass-shadow), var(--g-glass-hl);
+}
+
+/* 1 px gradient edge: light catches the top-left corner. */
+.gate-panel::before,
+.gate-card::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 1;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--g-glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+.gate-card::before { display: none; }
+
+/* A single soft sheen passes over the glass once, after the entrance. */
+.gate-panel::after,
+.gate-card::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--g-sheen) no-repeat;
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  opacity: 0;
+}
+.is-ready .gate-panel::after { animation: gate-sheen 2.4s var(--g-ease) 700ms both; }
+.gate-card::after { display: none; }
+
+.gate-card { position: relative; margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--g-hairline); }
+.gate-panel > * { position: relative; }
+
+/* ---- Brand (always on navy: the night glass, the day band or the aside) --- */
+
+.gate-brand { display: flex; flex-direction: column; margin: 0; color: var(--g-nv-1); }
+/* Terang, one panel: the brand sits on a navy band across the top of the white glass. */
+.is-day .gate-brand {
+  margin: -40px -40px 0;
+  padding: 40px 40px 30px;
+  border-radius: var(--g-r-panel) var(--g-r-panel) 0 0;
+  background: var(--g-aside-bg);
+}
+.is-day .gate-card { margin-top: 0; padding-top: 28px; border-top: 0; }
+.gate-logo {
+  display: block; align-self: flex-start;
+  height: 32px; width: auto;
+  user-select: none; -webkit-user-drag: none;
+}
+.gate-eyebrow {
+  display: flex; align-items: center; gap: 10px;
+  margin: 28px 0 0;
+  font-size: 12px; line-height: 16px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--g-nv-2);
+}
+.gate-eyebrow__rule { flex: none; width: 20px; height: 2px; border-radius: 1px; background: var(--g-gold); }
+.gate-title {
+  margin: 14px 0 0;
+  font-family: var(--g-serif);
+  font-weight: 400;
+  font-size: 40px; line-height: 44px;
+  letter-spacing: -.02em;
+  font-variation-settings: "opsz" 60;
+  color: var(--g-nv-1);
+  text-wrap: balance;
+}
+.gate-lede { margin: 12px 0 0; font-size: 15px; line-height: 24px; color: var(--g-nv-2); text-wrap: pretty; }
+
+/* ---- Card head (wide screens only; the panel has the brand title) --------- */
+
+.gate-card__head { display: none; margin: 0 0 26px; }
+.gate-card__title {
+  margin: 0;
+  font-family: var(--g-serif); font-weight: 400;
+  font-size: 32px; line-height: 38px; letter-spacing: -.015em;
+  font-variation-settings: "opsz" 48;
+  color: var(--g-ink-1);
+}
+
+/* ---- Field (52 px targets) ----------------------------------------------- */
+
+.gate-form { margin: 0; }
+.gate-field__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; margin-bottom: 8px; }
+.gate-label { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--g-ink-1); }
+.gate-caps {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0; padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  background: var(--g-warn-a);
+  font-size: 12px; line-height: 20px; font-weight: 500;
+  color: var(--g-warn);
+  animation: gate-msg 200ms var(--g-ease-enter) both;
+}
+.gate-caps[hidden] { display: none; }
+.gate-caps .gate-icon { font-size: 14px; }
+
+.gate-input-wrap { position: relative; }
+.gate-input {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding: 0 56px 0 16px;
+  border-radius: var(--g-r-field);
+  border: 1px solid var(--g-field-edge);
+  background: var(--g-field);
+  box-shadow: var(--g-field-inset);
+  color: var(--g-ink-1);
+  caret-color: var(--g-focus);
+  font-family: var(--g-sans);
+  font-size: 17px; /* >= 16 px: no iOS zoom on focus */
+  letter-spacing: .02em;
+  outline: none;
+  -webkit-appearance: none;
+          appearance: none;
+  transition: border-color var(--g-dur-hover) var(--g-ease), box-shadow var(--g-dur-hover) var(--g-ease), background-color var(--g-dur-hover) var(--g-ease);
+}
+.gate-input[type="password"] { letter-spacing: .2em; }
+/* A shown password in mono, so l / I / 1 and O / 0 are easy to tell apart. */
+.is-revealed .gate-input { font-family: var(--g-mono); font-size: 16px; letter-spacing: .04em; }
+.gate-input:hover { border-color: var(--g-field-hover); }
+/* Focused at first paint: a light-cobalt border with a soft 4 px halo. */
+.gate-input:focus { border-color: var(--g-focus); box-shadow: var(--g-field-inset), 0 0 0 4px var(--g-focus-a); }
+/* Error: red only (never red border plus blue ring). */
+.gate-input[aria-invalid="true"] { border-color: var(--g-neg); }
+.gate-input[aria-invalid="true"]:focus { border-color: var(--g-neg); box-shadow: var(--g-field-inset), 0 0 0 4px var(--g-neg-a); }
+.gate-input:read-only { cursor: progress; }
+/* While checking, the field rests (no ring): the button carries the state. */
+.is-busy .gate-input:focus, .is-success .gate-input:focus { border-color: var(--g-field-edge); box-shadow: var(--g-field-inset); }
+/* Lockout: a dashed, quiet field that clearly cannot be used right now. */
+.gate-input:disabled,
+.gate-input:disabled:hover,
+.gate-input[aria-invalid="true"]:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: var(--g-field-off-edge);
+  background: var(--g-field-off);
+  box-shadow: none;
+}
+.gate-input::-ms-reveal, .gate-input::-ms-clear { display: none; }
+.gate-input::-webkit-credentials-auto-fill-button { margin-right: 44px; }
+.gate-input:-webkit-autofill,
+.gate-input:-webkit-autofill:hover,
+.gate-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--g-ink-1);
+  caret-color: var(--g-focus);
+  -webkit-box-shadow: 0 0 0 40px var(--g-chip-solid) inset;
+  transition: background-color 9999s 0s;
+}
+
+/* Fixed-length dots shown over the (already cleared) field while verifying. */
+.gate-input-mask {
+  position: absolute; left: 17px; top: 0; bottom: 0;
+  display: none; align-items: center;
+  pointer-events: none;
+  font-size: 17px; letter-spacing: .2em;
+  color: var(--g-ink-3);
+}
+.is-busy .gate-input-mask, .is-success .gate-input-mask { display: flex; }
+/* "Tunggu sebentar" inside the field during a lockout. */
+.gate-input-wait {
+  position: absolute; left: 16px; top: 0; bottom: 0;
+  display: none; align-items: center; gap: 8px;
+  pointer-events: none;
+  font-size: 15px; line-height: 20px;
+  color: var(--g-ink-3);
+}
+.gate-input-wait .gate-icon { font-size: 16px; }
+.is-throttled .gate-input-wait { display: flex; }
+/* A thin line on the field's lower edge empties during the wait. */
+.gate-wait-bar {
+  position: absolute; left: 14px; right: 14px; bottom: -1px;
+  display: none; height: 2px; border-radius: 1px;
+  overflow: hidden;
+  background: var(--g-warn-track);
+}
+.gate-wait-bar__fill {
+  display: block; height: 100%;
+  border-radius: inherit;
+  background: var(--g-warn);
+  transform-origin: 0 50%;
+  transition: transform 250ms linear;
+}
+.is-throttled .gate-wait-bar { display: block; }
+
+.gate-reveal {
+  position: absolute; top: 4px; right: 4px;
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  padding: 0; border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--g-ink-3);
+  font-size: 20px;
+  cursor: pointer;
+  transition: color var(--g-dur-hover) var(--g-ease), background-color var(--g-dur-hover) var(--g-ease);
+}
+.gate-reveal:hover { color: var(--g-ink-1); background: var(--g-ghost); }
+.gate-reveal:active { background: var(--g-ghost-hover); }
+.gate-reveal:focus-visible { outline: 2px solid var(--g-focus); outline-offset: -2px; color: var(--g-ink-1); }
+.gate-reveal[aria-pressed="true"] { color: var(--g-ink-1); }
+.gate-reveal:disabled { opacity: .4; cursor: default; background: transparent; }
+.gate-reveal__hide { display: none; }
+/* Nothing to show during a lockout (the field is empty and disabled). */
+.is-throttled .gate-reveal { visibility: hidden; }
+.gate-reveal[aria-pressed="true"] .gate-reveal__show { display: none; }
+.gate-reveal[aria-pressed="true"] .gate-reveal__hide { display: block; }
+
+/* One fixed slot under the field, two lines high: help, error or countdown.
+   The card keeps its size whichever one shows (no jump while it shakes). */
+.gate-msg { min-height: 48px; padding-top: 8px; }
+.gate-help,
+.gate-error,
+.gate-countdown {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0;
+  font-size: 14px; line-height: 20px;
+}
+.gate-help > span, .gate-error > span, .gate-countdown > span { text-wrap: balance; }
+.gate-help { font-size: 13px; color: var(--g-ink-3); text-wrap: balance; }
+.gate-error, .gate-countdown { font-weight: 500; animation: gate-msg 200ms var(--g-ease-enter) both; }
+.gate-error { color: var(--g-neg); }
+.gate-countdown { color: var(--g-warn); }
+/* Focus rests here during a lockout (not in the tab order, nothing to operate): no ring. */
+.gate-countdown:focus, .gate-countdown:focus-visible { outline: none; box-shadow: none; }
+.gate-help[hidden], .gate-error[hidden], .gate-countdown[hidden], .is-throttled .gate-error { display: none; }
+.gate-error .gate-icon, .gate-countdown .gate-icon { font-size: 16px; margin-top: 2px; }
+
+/* Status: read aloud only, except a lock notice from the last session (banner). */
+.gate-status {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.has-notice .gate-status {
+  position: relative;
+  width: auto; height: auto;
+  margin: 0 0 20px;
+  padding: 12px 14px 12px 42px;
+  overflow: visible; clip: auto; clip-path: none; white-space: pre-line; text-wrap: pretty;
+  border-radius: var(--g-r-field);
+  border: 1px solid var(--g-info-edge);
+  background: var(--g-info-bg);
+  font-size: 14px; line-height: 20px;
+  color: var(--g-ink-1);
+  animation: gate-msg 240ms var(--g-ease-enter) both;
+}
+.has-notice .gate-status::before {
+  content: "";
+  position: absolute; left: 14px; top: 14px;
+  width: 16px; height: 16px;
+  background: var(--g-focus);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2.2'/%3E%3Cpath d='M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2.2'/%3E%3Cpath d='M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---- Primary button: the one obvious action ------------------------------- */
+
+.gate-submit {
+  position: relative;
+  display: grid; place-items: center;
+  width: 100%; height: 52px;
+  margin-top: 12px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--g-r-field);
+  background: var(--g-btn);
+  color: var(--g-btn-ink);
+  box-shadow: var(--g-btn-hl), var(--g-btn-shadow);
+  font-family: var(--g-sans);
+  font-size: 16px; line-height: 20px; font-weight: 600; letter-spacing: .005em;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform var(--g-dur-hover) var(--g-ease), box-shadow var(--g-dur-hover) var(--g-ease), background var(--g-dur-hover) var(--g-ease);
+}
+/* Three faces share one cell: "Masuk →", "◌ Memeriksa…", "✓ Berhasil". */
+.gate-submit > * {
+  grid-area: 1 / 1;
+  display: inline-flex; align-items: center; gap: 10px;
+  transition: opacity 180ms var(--g-ease), transform 240ms var(--g-ease-enter);
+}
+.gate-submit__state { opacity: 0; transform: translateY(8px); }
+.gate-submit:hover { background: var(--g-btn-hover); transform: translateY(-1px); box-shadow: var(--g-btn-hl), var(--g-btn-lift); }
+.gate-submit:active { background: var(--g-btn-active); transform: translateY(0); box-shadow: var(--g-btn-hl); }
+.gate-submit:focus-visible { outline: 2px solid var(--g-focus); outline-offset: 3px; }
+.gate-submit__arrow { font-size: 18px; stroke-width: 2; transition: transform var(--g-dur-hover) var(--g-ease); }
+.gate-submit:hover .gate-submit__arrow { transform: translateX(3px); }
+/* Disabled during a lockout: a quiet outlined button, clearly not available. */
+.gate-submit:disabled {
+  cursor: not-allowed;
+  transform: none;
+  background: var(--g-btn-off);
+  color: var(--g-btn-off-ink);
+  box-shadow: inset 0 0 0 1px var(--g-btn-off-edge);
+}
+.gate-submit:disabled .gate-submit__arrow { transform: none; }
+/* Busy and success keep the button's colour so the press is visibly taken. */
+.is-busy .gate-submit:disabled,
+.is-success .gate-submit:disabled {
+  cursor: progress;
+  background: var(--g-btn);
+  color: var(--g-btn-ink);
+  box-shadow: var(--g-btn-hl);
+}
+.is-busy .gate-submit__face,
+.is-success .gate-submit__face { opacity: 0; transform: translateY(-8px); }
+.is-busy .gate-submit__state--busy,
+.is-success .gate-submit__state--done { opacity: 1; transform: none; }
+.gate-spin { font-size: 18px; stroke-width: 2.2; animation: gate-spin 800ms linear infinite; }
+.gate-spin .gate-spin__track { opacity: .22; }
+.gate-submit__state--done .gate-icon { font-size: 18px; stroke-width: 2.4; stroke-dasharray: 20; stroke-dashoffset: 20; }
+.is-success .gate-submit__state--done .gate-icon { animation: gate-draw 260ms var(--g-ease-enter) 40ms forwards; }
+
+/* Fine print under the button: who may enter, where data opens, auto-lock. */
+.gate-fine {
+  display: grid; gap: 8px;
+  margin: 24px 0 0; padding: 20px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--g-hairline);
+}
+.gate-fine__item {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; line-height: 18px;
+  color: var(--g-ink-3);
+}
+.gate-fine__item[hidden] { display: none; }
+.gate-fine__item .gate-icon { font-size: 15px; margin-top: 1.5px; }
+.gate-fine__item--key .gate-icon { color: var(--g-accent); }
+
+/* ---- Notices (no Web Crypto / no vault / bad format) ---------------------- */
+
+.gate-card--notice .gate-notice { display: grid; gap: 14px; }
+.gate-notice__icon {
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--g-warn-a);
+  color: var(--g-warn);
+  font-size: 22px; line-height: 0;
+}
+.gate-notice__title {
+  margin: 4px 0 0;
+  font-family: var(--g-serif); font-size: 26px; line-height: 32px; font-weight: 400;
+  color: var(--g-ink-1);
+  outline: none;
+}
+.gate-notice__body { margin: 0; font-size: 15px; line-height: 22px; color: var(--g-ink-2); }
+.gate-secondary {
+  justify-self: start;
+  height: 44px; margin-top: 2px; padding: 0 18px;
+  border-radius: var(--g-r-field); border: 1px solid var(--g-field-edge);
+  background: var(--g-ghost); color: var(--g-ink-1);
+  font: 500 14px/20px var(--g-sans);
+  cursor: pointer;
+  transition: background-color var(--g-dur-hover) var(--g-ease), border-color var(--g-dur-hover) var(--g-ease);
+}
+.gate-secondary:hover { background: var(--g-ghost-hover); border-color: var(--g-field-hover); }
+.gate-secondary:focus-visible { outline: 2px solid var(--g-focus); outline-offset: 3px; }
+
+/* The technical step, folded away for the dashboard administrator. */
+.gate-admin { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--g-hairline); }
+.gate-admin__summary {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px;
+  list-style: none;
+  border-radius: 8px;
+  font-size: 14px; line-height: 20px; font-weight: 500;
+  color: var(--g-ink-2);
+  cursor: pointer;
+}
+.gate-admin__summary::-webkit-details-marker { display: none; }
+.gate-admin__summary:hover { color: var(--g-ink-1); }
+.gate-admin__summary:focus-visible { outline: 2px solid var(--g-focus); outline-offset: 2px; }
+.gate-admin__chevron { font-size: 16px; transition: transform var(--g-dur-hover) var(--g-ease); }
+.gate-admin[open] .gate-admin__chevron { transform: rotate(90deg); }
+.gate-admin__body { display: grid; gap: 10px; padding: 2px 0 6px; }
+.gate-admin__text { margin: 0; font-size: 13px; line-height: 20px; color: var(--g-ink-2); }
+.gate-code {
+  margin: 0; padding: 12px 14px;
+  border-radius: 10px; border: 1px solid var(--g-field-edge);
+  background: var(--g-field);
+  font-family: var(--g-mono); font-size: 12px; line-height: 18px;
+  color: var(--g-ink-1);
+  white-space: pre; overflow-x: auto;
+  scrollbar-width: thin;
+}
+.gate-code:focus-visible { outline: 2px solid var(--g-focus); outline-offset: 2px; }
+.gate-copy {
+  justify-self: start;
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 14px 0 12px;
+  border-radius: 10px; border: 1px solid var(--g-field-edge);
+  background: var(--g-ghost); color: var(--g-ink-1);
+  font: 500 14px/20px var(--g-sans);
+  cursor: pointer;
+  transition: background-color var(--g-dur-hover) var(--g-ease), border-color var(--g-dur-hover) var(--g-ease);
+}
+.gate-copy:hover { background: var(--g-ghost-hover); border-color: var(--g-field-hover); }
+.gate-copy:focus-visible { outline: 2px solid var(--g-focus); outline-offset: 3px; }
+.gate-copy .gate-icon { font-size: 16px; }
+.gate-admin__note { margin: 0; font-size: 13px; line-height: 20px; color: var(--g-ink-2); }
+.gate-admin__note:empty { display: none; }
+
+/* ---- "Bagian dari Danantara Indonesia" ------------------------------------ */
+
+.gate-partof {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin: 20px 0 0;
+  padding: 6px 14px 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--g-chip-edge);
+  background: var(--g-chip);
+  -webkit-backdrop-filter: var(--g-blur-chip);
+          backdrop-filter: var(--g-blur-chip);
+  font-size: 12px; line-height: 16px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--g-ink-2);
+}
+.gate-partof__logo { display: block; height: 20px; width: auto; }
+.gate-partof__logo--color { display: none; }
+.is-day .gate-partof__logo--rev { display: none; }
+.is-day .gate-partof__logo--color { display: block; }
+
+/* ---- Footer: place and clock, and the map credit -------------------------- */
+
+.gate-foot {
+  position: relative;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 4px 24px;
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--g-hairline);
+  background: var(--g-chip);
+  -webkit-backdrop-filter: var(--g-blur-chip);
+          backdrop-filter: var(--g-blur-chip);
+  font-size: 12px; line-height: 18px;
+  color: var(--g-ink-3);
+}
+.gate-foot__where { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; margin: 0; color: var(--g-ink-2); }
+.gate-foot__place { display: inline-flex; align-items: center; gap: 6px; }
+.gate-foot__time { color: var(--g-ink-3); white-space: nowrap; }
+.gate-foot__attr { margin: 0; color: var(--g-ink-3); }
+.gate-foot .gate-icon { font-size: 14px; }
+
+/* ---- Entrance, error shake, success and exit ----------------------------- */
+
+.gate-panel, .gate-brand, .gate-card, .gate-partof, .gate-foot {
+  transition: opacity var(--g-dur-enter) var(--g-ease-enter), transform var(--g-dur-enter) var(--g-ease-enter), box-shadow 220ms var(--g-ease);
+}
+.gate-panel { opacity: 0; transform: translateY(12px); }
+.gate-partof, .gate-foot { opacity: 0; transition-delay: 200ms; }
+.is-ready .gate-panel,
+.is-ready .gate-partof,
+.is-ready .gate-foot { opacity: 1; transform: none; }
+
+.is-shaking { animation: gate-shake 380ms var(--g-ease); }
+
+/* Success (220 ms): the button turns into a check and the glass gets a bright edge. */
+.is-success .gate-panel { box-shadow: var(--g-glass-shadow), var(--g-glass-hl), var(--g-glass-ok); }
+
+/* Exit (600 ms): the glass lifts away, the map pushes in, the page fades. */
+.is-unlocking .gate-panel,
+.is-unlocking .gate-brand,
+.is-unlocking .gate-card,
+.is-unlocking .gate-partof,
+.is-unlocking .gate-foot {
+  opacity: 0;
+  transform: translateY(-8px) scale(.985);
+  transition: opacity 260ms var(--g-ease-exit), transform 320ms var(--g-ease-exit);
+  transition-delay: 0s;
+}
+.mcd-gate:not(.has-map).is-unlocking .gate-bg { transform: scale(1.05); transition: transform 600ms var(--g-ease-camera); }
+.mcd-gate.is-unlocking { opacity: 0; transition: opacity 280ms var(--g-ease-exit) 320ms; }
+
+/* ---- Wide screens: split page -------------------------------------------- */
+
+@media (min-width: 1200px) {
+  .gate-bg { transform-origin: 71% 50%; }
+  .gate-bg > .gate-bg__plan, .gate-bg > .gate-bg__map, .gate-bg > .gate-bg__tone, .gate-bg > .gate-bg__shade { left: var(--g-aside); }
+  .gate-bg__base::after {
+    content: "";
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: var(--g-aside);
+    background: var(--g-aside-bg);
+    box-shadow: 1px 0 0 var(--g-aside-edge);
+  }
+  .gate-bg__shade { background: var(--g-shade-split); }
+  /* The ambient light stays on the navy brand side in both themes. */
+  .gate-bg > .gate-bg__light { right: auto; width: calc(var(--g-aside) * 1.3); background: var(--g-light-split); }
+  .is-day .gate-bg > .gate-bg__light { width: var(--g-aside); inset: 0 auto 0 0; }
+
+  .gate-stage {
+    display: grid;
+    grid-template-columns: var(--g-aside) minmax(0, 1fr);
+    align-items: stretch;
+    padding: 0;
+  }
+  .gate-panel { display: contents; }
+  .gate-panel::before, .gate-panel::after { display: none; }
+
+  .gate-brand,
+  .is-day .gate-brand {
+    grid-column: 1; grid-row: 1;
+    margin: 0;
+    padding: 48px 64px 132px;
+    border-radius: 0;
+    background: none;
+    opacity: 0; transform: translateY(12px);
+  }
+  .gate-brand__body { margin: auto 0; padding: 32px 0 24px; }
+  .gate-logo { height: 34px; }
+  .gate-eyebrow { margin-top: 0; }
+  .gate-title {
+    margin-top: 20px;
+    font-size: clamp(44px, 3.9vw, 60px); line-height: 1.04;
+    letter-spacing: -.025em;
+    text-wrap: nowrap;
+  }
+  .gate-lede { max-width: 24em; margin-top: 20px; font-size: 18px; line-height: 28px; text-wrap: balance; }
+
+  .gate-card,
+  .is-day .gate-card {
+    grid-column: 2; grid-row: 1;
+    align-self: center; justify-self: center;
+    width: min(432px, calc(100% - 64px));
+    margin: 40px 0 64px;
+    padding: 40px 40px 32px;
+    border-top: 0;
+    border-radius: var(--g-r-panel);
+    background: var(--g-glass);
+    -webkit-backdrop-filter: var(--g-blur);
+            backdrop-filter: var(--g-blur);
+    box-shadow: var(--g-glass-shadow), var(--g-glass-hl);
+    opacity: 0; transform: translateY(12px);
+    transition-delay: 90ms;
+  }
+  /* Error screens: wide enough for the setup command on one line. */
+  .gate-card--notice, .is-day .gate-card--notice { width: min(480px, calc(100% - 64px)); }
+  .gate-card::before, .gate-card::after { display: block; }
+  .is-ready .gate-card::after { animation: gate-sheen 2.4s var(--g-ease) 800ms both; }
+  .gate-card__head { display: block; }
+  .is-ready .gate-brand, .is-ready .gate-card { opacity: 1; transform: none; }
+  .is-success .gate-card { box-shadow: var(--g-glass-shadow), var(--g-glass-hl), var(--g-glass-ok); }
+
+  /* On the navy brand side in both themes: white mark, light ink, no chip. */
+  .gate-partof {
+    grid-column: 1; grid-row: 1;
+    align-self: end; justify-self: start;
+    margin: 0 0 44px 64px;
+    padding: 0;
+    border: 0; background: none;
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+    color: var(--g-nv-2);
+  }
+  .is-day .gate-partof__logo--rev { display: block; }
+  .is-day .gate-partof__logo--color { display: none; }
+
+  .gate-foot {
+    display: grid;
+    grid-template-columns: var(--g-aside) minmax(0, 1fr);
+    align-items: end;
+    padding: 0;
+    border-top: 0; background: none;
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+  }
+  .gate-foot__where {
+    padding: 15px 64px calc(15px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--g-aside-rule);
+    color: var(--g-nv-2);
+  }
+  .gate-foot__time { color: var(--g-nv-3); }
+  /* The credit sits straight on the map's shaded lower edge: plain text, no pill. */
+  .gate-foot__attr {
+    justify-self: end;
+    padding: 0 28px calc(15px + env(safe-area-inset-bottom, 0px)) 24px;
+    color: var(--g-credit);
+  }
+}
+/* Short laptop screens (e.g. 1366 x 657, 1280 x 720): tighter, still centred. */
+@media (min-width: 1200px) and (max-height: 760px) {
+  .gate-brand, .is-day .gate-brand { padding-top: 40px; padding-bottom: 112px; }
+  .gate-brand__body { padding: 16px 0; }
+  .gate-partof { margin-bottom: 30px; }
+  .gate-card, .is-day .gate-card { margin: 24px 0 32px; padding-top: 32px; padding-bottom: 28px; }
+  .gate-card__head { margin-bottom: 20px; }
+  .gate-fine { margin-top: 20px; padding-top: 16px; gap: 6px; }
+}
+
+/* ---- Tablets with short screens (e.g. iPad landscape 1024 x 768) ---------- */
+
+@media (min-width: 641px) and (max-width: 1199.98px) and (max-height: 880px) {
+  .gate-stage { padding: 28px 16px 20px; }
+  .gate-panel { padding-top: 36px; padding-bottom: 28px; }
+  .is-day .gate-brand { margin-top: -36px; padding-top: 36px; }
+  .gate-card { margin-top: 24px; padding-top: 24px; }
+  .is-day .gate-card { margin-top: 0; }
+  .gate-partof { margin-top: 16px; }
+}
+
+/* ---- Phones -------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  /* Sit high so the on-screen keyboard does not cover the field. */
+  .gate-stage { justify-content: flex-start; padding: max(5vh, 20px) 16px 16px; }
+  .gate-panel { padding: 32px 24px 24px; border-radius: 20px; }
+  .is-day .gate-brand { margin: -32px -24px 0; padding: 32px 24px 26px; border-radius: 20px 20px 0 0; }
+  .gate-logo { height: 30px; }
+  .gate-eyebrow { margin-top: 24px; }
+  .gate-title { font-size: 34px; line-height: 38px; }
+  .gate-lede { font-size: 15px; line-height: 22px; }
+  .gate-card { margin-top: 24px; padding-top: 24px; }
+  .is-day .gate-card { margin-top: 0; padding-top: 24px; }
+  .gate-fine { margin-top: 20px; padding-top: 16px; }
+  .gate-foot { justify-content: center; text-align: center; padding-left: 16px; padding-right: 16px; }
+  .gate-foot__where { justify-content: center; }
+}
+/* Landscape phones (e.g. 844 x 390): fit without the lede and the fine print. */
+@media (max-height: 480px) and (max-width: 1199.98px) {
+  .gate-stage { padding-top: 16px; padding-bottom: 16px; }
+  .gate-panel { padding-top: 24px; padding-bottom: 20px; }
+  .is-day .gate-brand { margin-top: -24px; padding-top: 24px; padding-bottom: 18px; }
+  .gate-lede, .gate-fine { display: none; }
+  .gate-title { font-size: 28px; line-height: 32px; margin-top: 8px; }
+  .gate-eyebrow { margin-top: 16px; }
+  .gate-card { margin-top: 16px; padding-top: 16px; }
+  .is-day .gate-card { margin-top: 0; padding-top: 16px; }
+  .gate-partof { margin-top: 12px; }
+}
+
+/* ---- Preferences --------------------------------------------------------- */
+
+/* Solid glass: no backdrop-filter support. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .gate-panel { background: var(--g-glass-solid); }
+  .gate-partof, .gate-foot { background: var(--g-chip-solid); }
+  .mcd-idle { background: var(--g-pop-solid); }
+}
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  @media (min-width: 1200px) {
+    .gate-panel { background: none; }
+    .gate-card, .is-day .gate-card { background: var(--g-glass-solid); }
+    .gate-partof, .gate-foot { background: none; }
+  }
+}
+/* Reduced transparency: solid panels, same layout and edges. */
+@media (prefers-reduced-transparency: reduce) {
+  .gate-panel, .gate-card, .gate-partof, .gate-foot, .mcd-idle { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .gate-panel { background: var(--g-glass-solid); }
+  .gate-partof, .gate-foot { background: var(--g-chip-solid); }
+  .gate-panel::after, .gate-card::after { display: none; }
+  .mcd-idle { background: var(--g-pop-solid); }
+}
+@media (prefers-reduced-transparency: reduce) and (min-width: 1200px) {
+  .gate-panel, .gate-partof, .gate-foot { background: none; }
+  .gate-card, .is-day .gate-card { background: var(--g-glass-solid); }
+}
+
+/* Reduced motion: no drift, sheen, shake, slide or spin; states change at once. */
+@media (prefers-reduced-motion: reduce) {
+  .mcd-gate *, .mcd-gate *::before, .mcd-gate *::after, .mcd-idle, .mcd-idle * {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    transition-delay: 0s !important;
+  }
+  .gate-bg__light { animation: none !important; transform: none; }
+  .gate-panel::after, .gate-card::after { animation: none !important; opacity: 0; }
+  .is-shaking { animation: none !important; }
+  .gate-submit:hover, .gate-submit:hover .gate-submit__arrow { transform: none; }
+  .gate-submit__state, .is-busy .gate-submit__face, .is-success .gate-submit__face { transform: none; }
+  /* A still busy cue: the ring with its quarter arc, no rotation. */
+  .gate-spin { animation: none !important; }
+  .is-success .gate-submit__state--done .gate-icon { stroke-dashoffset: 0; }
+  html.mcd-entering body > * { animation: none !important; }
+}
+.mcd-gate.is-static .gate-panel,
+.mcd-gate.is-static .gate-brand,
+.mcd-gate.is-static .gate-card,
+.mcd-gate.is-static .gate-partof,
+.mcd-gate.is-static .gate-foot { transition: none; }
+
+@media (prefers-contrast: more) {
+  .mcd-gate {
+    --g-ink-3: var(--g-ink-2);
+    --g-nv-3: var(--g-nv-2);
+    --g-hairline: rgba(255, 255, 255, .28);
+    --g-field-edge: var(--g-glass-edge-hi);
+    --g-chip-edge: var(--g-glass-edge-hi);
+    --g-glass-edge: var(--g-glass-edge-hi);
+  }
+  .mcd-gate.is-day { --g-ink-3: var(--g-ink-2); --g-hairline: rgba(14, 30, 54, .30); --g-field-edge: #4A566A; }
+  .gate-panel { background: var(--g-glass-solid); }
+  .gate-partof, .gate-foot { background: var(--g-chip-solid); }
+  .gate-panel::after, .gate-card::after { display: none; }
+  .mcd-idle { background: var(--g-pop-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-contrast: more) and (min-width: 1200px) {
+  .gate-panel, .gate-partof, .gate-foot { background: none; }
+  .gate-card, .is-day .gate-card { background: var(--g-glass-solid); }
+}
+
+@media (forced-colors: active) {
+  .gate-panel, .gate-input, .gate-submit, .gate-secondary, .gate-copy, .mcd-idle, .mcd-idle__btn { border: 1px solid CanvasText; }
+  .gate-card { border-top: 1px solid CanvasText; }
+  .gate-partof { border: 1px solid CanvasText; }
+  .gate-eyebrow__rule { background: CanvasText; }
+  .gate-bg, .gate-panel::before, .gate-panel::after, .gate-card::before, .gate-card::after, .gate-wait-bar, .mcd-idle__bar { display: none; }
+  .gate-submit { background: ButtonFace; color: ButtonText; box-shadow: none; }
+  .gate-input:focus, .gate-submit:focus-visible, .gate-reveal:focus-visible, .gate-secondary:focus-visible, .gate-copy:focus-visible, .gate-admin__summary:focus-visible { outline: 2px solid Highlight; }
+  .gate-input[aria-invalid="true"] { border-width: 2px; }
+  .gate-input:disabled { border-style: dashed; }
+  .has-notice .gate-status::before { forced-color-adjust: none; background: CanvasText; }
+  /* The white logos would vanish on a light system canvas: keep them on a navy plate. */
+  .gate-logo,
+  .gate-partof__logo--rev { forced-color-adjust: none; display: block; padding: 6px 10px; border-radius: 8px; background: var(--g-plate); }
+  .gate-logo { height: 46px; }
+  .gate-partof__logo--rev { height: 32px; }
+  .is-day .gate-partof__logo--rev { display: block; }
+  .gate-partof__logo--color, .is-day .gate-partof__logo--color { display: none; }
+}
+@media (forced-colors: active) and (min-width: 1200px) {
+  .gate-card, .is-day .gate-card { border: 1px solid CanvasText; }
+  .gate-partof { border: 0; }
+}
+
+/* ---- Idle warning over the unlocked app (popover, dashboard glass) ------- */
+
+.mcd-idle, .mcd-idle *, .mcd-idle *::before, .mcd-idle *::after { box-sizing: border-box; }
+.mcd-idle {
+  position: fixed; z-index: 2147483001;
+  right: 16px; bottom: 16px;
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: start; gap: 4px 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px 16px 19px;
+  border-radius: var(--g-pop-r);
+  border: 1px solid var(--g-pop-edge);
+  background: var(--g-pop);
+  -webkit-backdrop-filter: var(--g-pop-blur);
+          backdrop-filter: var(--g-pop-blur);
+  box-shadow: var(--g-pop-hl), var(--g-pop-shadow);
+  color: var(--g-pop-ink-1);
+  font: 13px/20px var(--g-sans);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  animation: gate-rise 280ms var(--g-ease-enter) both;
+}
+.mcd-idle .gate-icon { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mcd-idle__icon {
+  display: grid; place-items: center; flex: none;
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: var(--g-pop-warn-a);
+  color: var(--g-pop-warn);
+  font-size: 18px;
+}
+.mcd-idle__text { flex: 1; min-width: 0; padding-top: 1px; }
+.mcd-idle__title { margin: 0; font-weight: 600; font-size: 14px; line-height: 20px; color: var(--g-pop-ink-1); }
+.mcd-idle__body { margin: 2px 0 0; color: var(--g-pop-ink-2); }
+.mcd-idle__actions { display: flex; grid-column: 2; margin-top: 8px; }
+.mcd-idle__btn {
+  height: 36px; padding: 0 14px;
+  border-radius: 8px; border: 0;
+  background: var(--g-pop-btn); color: var(--g-pop-btn-ink);
+  font: 600 13px/20px var(--g-sans); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--g-dur-hover) var(--g-ease);
+}
+.mcd-idle__btn:hover { background: var(--g-pop-btn-hover); }
+.mcd-idle__btn:focus-visible { outline: 2px solid var(--g-pop-focus); outline-offset: 2px; }
+/* The time left drains along the lower edge. */
+.mcd-idle__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--g-pop-track); }
+.mcd-idle__fill {
+  display: block; height: 100%;
+  background: var(--g-pop-warn);
+  transform-origin: 0 50%;
+  transition: transform 1s linear;
+}
+
+/* ---- Keyframes ----------------------------------------------------------- */
+
+@keyframes gate-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes gate-spin { to { transform: rotate(360deg); } }
+@keyframes gate-draw { to { stroke-dashoffset: 0; } }
+@keyframes gate-msg { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes gate-drift { from { transform: translate3d(-3%, -2%, 0) scale(1.02); } to { transform: translate3d(3%, 2.5%, 0) scale(1.06); } }
+@keyframes gate-sheen { 0% { opacity: 1; background-position: 120% 0; } 100% { opacity: 1; background-position: -40% 0; } }
+@keyframes gate-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes gate-enter { from { opacity: 0; } to { opacity: 1; } }

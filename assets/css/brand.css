@@ -1,0 +1,304 @@
+/* Brand layer v2: consulting-grade look with Bank Mandiri / Danantara assets.
+   Loaded after tokens.css. Night is the default token set; Day overrides follow.
+   See docs/DESIGN_DIRECTION_V2.md for usage rules. */
+
+:root {
+  /* Gradients carry the brand, never the data */
+  --grad-band:   linear-gradient(115deg, #021A3A 0%, #003D79 52%, #0B5FB0 100%);
+  --grad-accent: linear-gradient(90deg, #2B6FD6 0%, #19B5E8 100%);
+  --grad-gold:   linear-gradient(90deg, #F2B705 0%, #FFD45C 100%);
+  --grad-canvas: radial-gradient(1200px 700px at 82% -12%, rgba(11, 95, 176, 0.30), transparent 62%),
+                 linear-gradient(180deg, #06142A 0%, #030A16 100%);
+  --grad-card:   var(--glass-card);   /* cards are glass (see the glass layer below) */
+
+  --ink:   #EEF2F8;
+  --ink-2: #AEB9CB;
+  --ink-3: #7E8BA0;
+
+  /* Data colours: calm sequential blues + one gold highlight */
+  --chart-1: #9CC4F0;
+  --chart-2: #5B9BE0;
+  --chart-3: #2F72C0;
+  --chart-4: #1A4F8B;
+  --chart-5: #0B2E59;
+  --chart-hl: #F2B705;
+  --chart-pos: #34C08A;
+  --chart-neg: #F0686A;
+
+  --brand-band-h: 64px;
+  --brand-rule: 3px;
+
+  /* Ink and controls on the navy top band (the band is navy in both themes) */
+  --band-ink:        #FFFFFF;
+  --band-ink-2:      rgba(255, 255, 255, 0.82);
+  --band-ink-3:      rgba(255, 255, 255, 0.66);
+  --band-rule:       rgba(255, 255, 255, 0.22);
+  --band-ctl:        rgba(255, 255, 255, 0.08);
+  --band-ctl-hover:  rgba(255, 255, 255, 0.16);
+  --band-on:         #FFFFFF;          /* selected segment */
+  --band-on-ink:     #003D79;          /* Mandiri navy on the selected segment (11.0:1) */
+  --band-focus:      #FFD45C;
+  --band-shadow:     0 1px 2px rgba(0, 18, 46, 0.40);
+
+  /* Gradient accent rules per status tone (UX fix plan §4.2): KPI cards on Ringkasan, 90° and single-hue,
+     so the colour still means one thing (green, amber, red or blue) */
+  --grad-status-ok:        linear-gradient(90deg, #1E9A62 0%, #4FD39A 100%);
+  --grad-status-mid:       linear-gradient(90deg, #D48A12 0%, #FFC453 100%);
+  --grad-status-bad:       linear-gradient(90deg, #D64438 0%, #FF8A7E 100%);
+  --grad-status-potential: linear-gradient(90deg, #2F6FE0 0%, #7DB0FF 100%);
+  --grad-status-none:      linear-gradient(90deg, #5C677B 0%, #8F99AB 100%);
+}
+
+:root[data-theme="day"] {
+  --grad-accent: linear-gradient(90deg, #003D79 0%, #1F6FE0 55%, #19B5E8 100%);
+  --grad-canvas: linear-gradient(180deg, #F6F8FB 0%, #EDF1F6 100%);
+  --grad-card:   var(--glass-card);
+
+  --ink:   #0B1F33;
+  --ink-2: #44546A;
+  --ink-3: #66758A;
+
+  --chart-1: #0B2E59;
+  --chart-2: #1A4F8B;
+  --chart-3: #2F72C0;
+  --chart-4: #5B9BE0;
+  --chart-5: #9CC4F0;
+  --chart-hl: #D99A00;
+  --chart-pos: #1E8A5C;
+  --chart-neg: #C93C3C;
+
+  --grad-status-ok:        linear-gradient(90deg, #0E6A42 0%, #23A36A 100%);
+  --grad-status-mid:       linear-gradient(90deg, #9A6000 0%, #D99A1F 100%);
+  --grad-status-bad:       linear-gradient(90deg, #A9302A 0%, #E0584C 100%);
+  --grad-status-potential: linear-gradient(90deg, #1A4FB5 0%, #4C8DF6 100%);
+  --grad-status-none:      linear-gradient(90deg, #4E596B 0%, #7D8798 100%);
+}
+
+/* ---- Glass layer (COPY_STYLE_EN item 15, 15 Oct 2026) ------------------------------------------
+   Every floating panel, sheet, card, KPI tile, legend, map control, drawer, popover and the section
+   row is frosted glass over the map and a gradient-mesh canvas. Components read these tokens only
+   (shell.css §10 applies them); raw colours stay in this file.
+     --glass-bg*      translucent tints (Night: navy 50–60 % · Day: white 62–72 %)
+     --glass-blur     backdrop blur 16–20 px + saturate; brightness() pulls busy imagery towards the
+                      tint so text keeps WCAG AA (measured on rendered pixels, see shell.css §10)
+     --glass-border   1 px light inner border · --glass-hl top highlight · --glass-shadow layered shadow
+     --glass-card*    cards and KPI tiles inside a glass panel (tint only, no second blur)
+     --glass-sticky   sticky headers inside a scrolling glass sheet
+     --glass-solid    the solid fallback (no backdrop-filter, reduced transparency, more contrast)
+   Blur is only ever on panels, never on full-screen layers. While the map is dragged and frames
+   drop below 40 fps, map.js sets html.is-glass-lite: a light 6 px blur and a firmer tint. */
+:root {
+  --r-panel: 12px;                 /* cards and exhibits (tokens.css had 6 px) */
+  --r-tip:   10px;                 /* tooltips, toasts */
+  --r-ctl:   6px;                  /* buttons, chips, inputs inside glass */
+  --r-glass: 14px;                 /* floating glass panels */
+  --r-card:  12px;
+
+  --glass-blur:        blur(18px) saturate(140%) brightness(0.56);
+  --glass-blur-lite:   blur(6px) saturate(120%) brightness(0.50);
+  --glass-bg:          rgba(10, 22, 44, 0.60);   /* guide, sheets, rails, drawer, legend, map controls */
+  --glass-bg-bar:      rgba(9, 20, 40, 0.56);    /* section row, readout */
+  --glass-bg-pop:      rgba(12, 25, 48, 0.60);   /* popovers, menus, tooltips, toasts, dialogs */
+  --glass-bg-chip:     rgba(10, 22, 44, 0.56);   /* legend pill, map callouts, telemetry */
+  --glass-bg-lite:     rgba(10, 22, 44, 0.76);
+  --glass-sticky:      rgba(11, 23, 45, 0.84);
+  --glass-card:        linear-gradient(180deg, rgba(196, 214, 255, 0.070) 0%, rgba(196, 214, 255, 0.030) 100%);
+  --glass-card-flat:   rgba(196, 214, 255, 0.050);
+  --glass-card-hover:  rgba(196, 214, 255, 0.110);
+  --glass-border:      rgba(214, 228, 255, 0.16);
+  --glass-border-card: rgba(214, 228, 255, 0.11);
+  --glass-hl:          inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-hl-card:     inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-sheen:       linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.30) 32%, rgba(255, 212, 92, 0.22) 58%, rgba(255, 255, 255, 0) 100%);
+  --glass-shadow:      0 1px 2px rgba(0, 6, 18, 0.30), 0 12px 28px -10px rgba(0, 6, 18, 0.55), 0 32px 64px -28px rgba(0, 6, 18, 0.55);
+  --glass-shadow-sm:   0 1px 2px rgba(0, 6, 18, 0.28), 0 8px 20px -8px rgba(0, 6, 18, 0.50);
+  --glass-shadow-card: 0 1px 2px rgba(0, 6, 18, 0.20);
+  --glass-solid:       #0E1626;
+  --glass-solid-card:  #142036;
+  --glass-focus:       rgba(56, 214, 232, 0.55);
+
+  /* Gradient-mesh canvas: navy, cobalt and cyan with a faint Mandiri-gold glow (no blur, no motion) */
+  --grad-mesh:
+    radial-gradient(900px 640px at 6% 4%, rgba(0, 61, 121, 0.62), transparent 64%),
+    radial-gradient(760px 560px at 96% 8%, rgba(25, 181, 232, 0.20), transparent 62%),
+    radial-gradient(980px 720px at 84% 104%, rgba(43, 111, 214, 0.34), transparent 64%),
+    radial-gradient(620px 480px at 12% 100%, rgba(242, 183, 5, 0.10), transparent 62%),
+    linear-gradient(162deg, #061630 0%, #040C1C 56%, #020814 100%);
+  /* Faint glow over the map edges (#map-vignette): the glass panels pick it up, the centre stays clear */
+  --mesh-edge:
+    radial-gradient(48% 42% at 0% 0%, rgba(11, 95, 176, 0.22), transparent 72%),
+    radial-gradient(44% 40% at 100% 100%, rgba(25, 181, 232, 0.12), transparent 72%),
+    radial-gradient(34% 30% at 100% 0%, rgba(242, 183, 5, 0.06), transparent 72%);
+
+  /* Glass-safe ink (AA on the rendered glass over map and imagery) */
+  --text-2: #B6BFCE;
+  --text-3: #98A3B5;
+  --ink-2:  #B6BFCE;
+  --ink-3:  #98A3B5;
+
+  /* Translucent fills inside glass (were opaque navy blocks) */
+  --surface-raised: rgba(148, 170, 210, 0.10);
+  --surface-hover:  rgba(148, 170, 210, 0.13);
+  --surface-well:   rgba(2, 8, 20, 0.34);
+
+  /* Older surface names follow the glass layer, so every component built on them is glass too */
+  --surface-glass:    var(--glass-bg);
+  --surface-glass-hi: var(--glass-bg);
+  --surface-glass-fb: var(--glass-solid);
+  --blur-panel:       var(--glass-blur);
+}
+
+:root[data-theme="day"] {
+  --glass-blur:        blur(20px) saturate(150%) brightness(1.32) contrast(0.86);
+  --glass-blur-lite:   blur(6px) saturate(120%) brightness(1.32) contrast(0.86);
+  --glass-bg:          rgba(255, 255, 255, 0.70);
+  --glass-bg-bar:      rgba(255, 255, 255, 0.66);
+  --glass-bg-pop:      rgba(255, 255, 255, 0.72);
+  --glass-bg-chip:     rgba(255, 255, 255, 0.72);
+  --glass-bg-lite:     rgba(255, 255, 255, 0.84);
+  --glass-sticky:      rgba(248, 251, 255, 0.88);
+  --glass-card:        linear-gradient(180deg, rgba(255, 255, 255, 0.66) 0%, rgba(255, 255, 255, 0.44) 100%);
+  --glass-card-flat:   rgba(255, 255, 255, 0.52);
+  --glass-card-hover:  rgba(255, 255, 255, 0.80);
+  --glass-border:      rgba(255, 255, 255, 0.82);
+  --glass-border-card: rgba(255, 255, 255, 0.78);
+  --glass-hl:          inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-hl-card:     inset 0 1px 0 rgba(255, 255, 255, 0.90);
+  --glass-sheen:       linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 1) 34%, rgba(242, 183, 5, 0.30) 60%, rgba(255, 255, 255, 0) 100%);
+  --glass-shadow:      0 0 0 1px rgba(14, 30, 54, 0.07), 0 1px 2px rgba(14, 30, 54, 0.08), 0 12px 28px -12px rgba(14, 30, 54, 0.24), 0 30px 60px -30px rgba(14, 30, 54, 0.22);
+  --glass-shadow-sm:   0 0 0 1px rgba(14, 30, 54, 0.07), 0 6px 18px -8px rgba(14, 30, 54, 0.24);
+  --glass-shadow-card: 0 0 0 1px rgba(14, 30, 54, 0.06), 0 1px 2px rgba(14, 30, 54, 0.06);
+  --glass-solid:       #FBFCFE;
+  --glass-solid-card:  #F2F5FA;
+  --glass-focus:       rgba(0, 114, 127, 0.55);
+
+  --grad-mesh:
+    radial-gradient(900px 640px at 4% 0%, rgba(31, 111, 224, 0.16), transparent 64%),
+    radial-gradient(760px 560px at 98% 6%, rgba(25, 181, 232, 0.14), transparent 62%),
+    radial-gradient(980px 720px at 86% 104%, rgba(0, 61, 121, 0.10), transparent 64%),
+    radial-gradient(620px 480px at 10% 100%, rgba(242, 183, 5, 0.08), transparent 62%),
+    linear-gradient(170deg, #F7FAFE 0%, #EEF3FA 60%, #E8EFF8 100%);
+  --mesh-edge:
+    radial-gradient(48% 42% at 0% 0%, rgba(31, 111, 224, 0.10), transparent 72%),
+    radial-gradient(44% 40% at 100% 100%, rgba(25, 181, 232, 0.08), transparent 72%),
+    radial-gradient(34% 30% at 100% 0%, rgba(242, 183, 5, 0.05), transparent 72%);
+
+  --text-3: #4D596B;
+  --ink-2:  #3B4A62;
+  --ink-3:  #4D596B;
+
+  --surface-raised: rgba(14, 30, 54, 0.055);
+  --surface-hover:  rgba(14, 30, 54, 0.065);
+  --surface-well:   rgba(255, 255, 255, 0.55);
+  --rule:           rgba(14, 30, 54, 0.11);
+  --rule-strong:    rgba(14, 30, 54, 0.20);
+}
+
+/* While the map is dragged and the frame rate drops (map.js): lighter blur, firmer tint */
+:root.is-glass-lite { --glass-blur: var(--glass-blur-lite); --glass-bg: var(--glass-bg-lite); --glass-bg-bar: var(--glass-bg-lite); --glass-bg-chip: var(--glass-bg-lite); }
+:root.is-glass-lite[data-theme="day"] { --glass-blur: var(--glass-blur-lite); --glass-bg: var(--glass-bg-lite); --glass-bg-bar: var(--glass-bg-lite); --glass-bg-chip: var(--glass-bg-lite); }
+
+/* Solid fallbacks: no backdrop-filter, reduced transparency, or more contrast asked for */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root, :root[data-theme="day"] {
+    --glass-bg: var(--glass-solid); --glass-bg-bar: var(--glass-solid); --glass-bg-pop: var(--glass-solid);
+    --glass-bg-chip: var(--glass-solid); --glass-bg-lite: var(--glass-solid); --glass-sticky: var(--glass-solid);
+    --glass-card: var(--glass-solid-card); --glass-card-flat: var(--glass-solid-card);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root, :root[data-theme="day"], :root.is-glass-lite, :root.is-glass-lite[data-theme="day"] {
+    --glass-blur: none; --glass-blur-lite: none;
+    --glass-bg: var(--glass-solid); --glass-bg-bar: var(--glass-solid); --glass-bg-pop: var(--glass-solid);
+    --glass-bg-chip: var(--glass-solid); --glass-bg-lite: var(--glass-solid); --glass-sticky: var(--glass-solid);
+    --glass-card: var(--glass-solid-card); --glass-card-flat: var(--glass-solid-card);
+    --mesh-edge: none;
+  }
+}
+@media (prefers-contrast: more) {
+  :root, :root[data-theme="day"], :root.is-glass-lite, :root.is-glass-lite[data-theme="day"] {
+    --glass-blur: none; --glass-blur-lite: none;
+    --glass-bg: var(--glass-solid); --glass-bg-bar: var(--glass-solid); --glass-bg-pop: var(--glass-solid);
+    --glass-bg-chip: var(--glass-solid); --glass-bg-lite: var(--glass-solid); --glass-sticky: var(--glass-solid);
+    --glass-card: var(--glass-solid-card); --glass-card-flat: var(--glass-solid-card);
+    --mesh-edge: none;
+  }
+  :root { --glass-border: rgba(214, 228, 255, 0.34); --glass-border-card: rgba(214, 228, 255, 0.28); --text-3: var(--text-2); --ink-3: var(--text-2); }
+  :root[data-theme="day"] { --glass-border: rgba(14, 30, 54, 0.34); --glass-border-card: rgba(14, 30, 54, 0.26); --text-3: var(--text-2); --ink-3: var(--text-2);
+    --rule: rgba(14, 30, 54, 0.22); --rule-strong: rgba(14, 30, 54, 0.34); }
+}
+
+/* ---- Brand chrome -------------------------------------------------------- */
+
+.brand-band {
+  background: var(--grad-band);
+  color: #FFFFFF;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 8px 24px -16px rgba(0, 0, 0, 0.55);
+}
+
+.brand-logo {
+  display: block;
+  height: 26px;
+  width: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 12px/16px var(--font-sans, system-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+.brand-lockup img { height: 17px; width: auto; display: block; }
+
+/* ---- Exhibit panels -------------------------------------------------------- */
+
+.exhibit {
+  position: relative;
+  background: var(--grad-card);
+  border: 1px solid var(--glass-border-card);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+  border-radius: var(--r-panel, 12px);
+  padding: 20px 20px 14px;
+  color: var(--ink);
+}
+.exhibit::before,
+.kpi-accent::before {               /* the accent rule follows the rounded glass corners */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--r-panel, 12px) - 1px);
+  background: var(--grad-accent) top / 100% var(--brand-rule) no-repeat;
+  pointer-events: none;
+}
+.exhibit--highlight::before,
+.kpi-accent--highlight::before { background: var(--grad-gold) top / 100% var(--brand-rule) no-repeat; }
+.kpi-accent { position: relative; }
+
+.exhibit__title {
+  margin: 4px 0 2px;
+  font: 500 19px/26px var(--font-serif, Georgia, serif);
+  color: var(--ink);
+  text-wrap: balance;
+}
+.exhibit__sub {
+  margin: 0 0 14px;
+  font: 400 12px/18px var(--font-sans, system-ui);
+  color: var(--ink-3);
+}
+.exhibit__source {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule, rgba(214, 224, 240, 0.08));
+  font: 400 12px/16px var(--font-sans, system-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .exhibit { background: var(--surface-solid, #0E1626); }
+}

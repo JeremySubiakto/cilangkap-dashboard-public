@@ -1,0 +1,200 @@
+/* ==========================================================================
+ * Cilangkap Command · sections (shared)
+ * Building blocks every section reuses: sheet header, blocks (ruled, never
+ * boxed), rail anatomy, ledger and list rows, deadline rail, status cards,
+ * drop zone, the right-rail tab strip, section enter/exit motion (§L.1),
+ * and the placeholder ("sx") anatomy shown while a section is being built.
+ * Per-section specifics live in assets/css/section-<id>.css.
+ * ========================================================================== */
+
+/* ── Section motion (§L.1) ──────────────────────────────────────────────── */
+.section-host .rail, .section-host .kpi-strip, .section-host .dock, .section-host .sheet, .section-host .legend {
+  animation: sec-rise var(--dur-panel-in) var(--ease-enter) backwards;
+}
+.section-host .rail--r   { animation-delay: 40ms; }
+.section-host .kpi-strip { animation-delay: 80ms; }
+.section-host .dock      { animation-delay: 120ms; }
+.section-host .sheet     { animation-name: sec-slide; animation-duration: var(--dur-sheet); }
+.section-host.is-leaving > * { animation: sec-leave var(--dur-panel-out) var(--ease-exit) both; }
+/* `translate` (not `transform`) so collapse and drawer transforms are never overridden */
+@keyframes sec-rise  { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: none; } }
+@keyframes sec-slide { from { opacity: 0; translate: 24px 0; } to { opacity: 1; translate: none; } }
+@keyframes sec-leave { to { opacity: 0; translate: 0 4px; } }
+@media (prefers-reduced-motion: reduce) {
+  .section-host .rail, .section-host .kpi-strip, .section-host .dock, .section-host .sheet, .section-host .legend,
+  .section-host.is-leaving > * { animation: none; }
+}
+
+/* ── Sheet header ───────────────────────────────────────────────────────── */
+.sh { display: grid; gap: 6px; padding-bottom: var(--s-4); }
+.sh__row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); min-height: 22px; }
+.sh__title { margin: 0; }
+.sh__lede { max-width: 68ch; color: var(--text-2); font: 400 var(--fs-body)/var(--lh-body) var(--font-sans); }
+.sh__asof { font: 400 var(--fs-mono)/var(--lh-mono) var(--font-mono); color: var(--text-3); }
+.sh .subtabs { margin-top: var(--s-2); border-bottom: 1px solid var(--rule); }
+
+/* ── Blocks: ruled sections of a sheet, never boxed ─────────────────────── */
+.blk { position: relative; min-width: 0; padding: var(--s-5) 0 0; border-top: 1px solid var(--rule); }
+.blk--r::before {                                         /* vertical rule for the right block of a split row */
+  content: ""; position: absolute; left: -8px; top: var(--s-5); bottom: 0; width: 1px; background: var(--rule);
+}
+.blk__head { display: flex; align-items: flex-start; gap: var(--s-3); margin-bottom: var(--s-3); }
+.blk__titles { flex: 1 1 auto; min-width: 0; }
+.blk__eyebrow { display: block; margin-bottom: 2px; }
+.blk__title { font: 600 var(--fs-panel)/var(--lh-panel) var(--font-sans); color: var(--text-1); }
+.blk__tools { display: flex; align-items: center; gap: 6px; }
+.blk__span { font: 400 12px/16px var(--font-mono); color: var(--text-off); }
+.blk .prov { margin: var(--s-4) 0 0; padding-left: 0; padding-right: 0; }
+.sheet__body > .kpi-row { margin-top: 0; }
+
+/* ── Rail anatomy (Overview, Properti) ──────────────────────────────────── */
+.rail .ph { padding-bottom: var(--s-3); }
+.rail__tabs { display: flex; gap: 0; padding: 0 var(--s-4); border-bottom: 1px solid var(--rule); }
+.rail__tab {
+  position: relative; height: 36px; padding: 0 12px 0 0; margin-right: 12px;
+  font: 500 var(--fs-body)/1 var(--font-sans); color: var(--text-2);
+}
+.rail__tab[aria-selected="true"] { color: var(--text-1); }
+.rail__tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 12px; bottom: -1px; height: 2px; background: var(--metal); }
+.rail__sec { padding: var(--s-3) var(--s-4); }
+.rail__sec + .rail__sec { border-top: 1px solid var(--rule); }
+
+/* Ledger row (Product Ledger, §C.3.3): 40 px, toggles a filter */
+.ledger { display: grid; }
+.ledger__row {
+  position: relative; display: grid; align-items: center; height: 40px;
+  grid-template-columns: 12px 14px minmax(0, 1fr) 48px 56px 64px 48px; column-gap: 8px;
+  padding: 0 var(--s-4); cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard), opacity var(--dur-xhl) var(--ease-standard);
+}
+.ledger__row + .ledger__row { border-top: 1px solid var(--rule); }
+.ledger__row:hover { background: var(--surface-hover); }
+.ledger__row.is-active { background: var(--gold-a10); box-shadow: inset 2px 0 0 var(--gold); }
+.ledger__row.is-dim { opacity: .45; }
+.ledger__check { width: 12px; height: 12px; border: 1px solid currentColor; border-radius: 1px; }
+.ledger__row.is-on .ledger__check { background: currentColor; }
+.ledger__foot { padding: 6px var(--s-4) 0; font: 400 12px/16px var(--font-mono); color: var(--text-3); }
+
+/* List row (prospects, satker compact): 52 px with a 3 px band bar */
+.lrow {
+  position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center;
+  min-height: 52px; padding: 8px var(--s-4) 8px calc(var(--s-4) + 3px);
+  cursor: pointer; transition: background-color var(--dur-hover) var(--ease-standard);
+}
+.lrow + .lrow { border-top: 1px solid var(--rule); }
+.lrow:hover { background: var(--surface-hover); }
+.lrow::before { content: ""; position: absolute; left: var(--s-4); top: 10px; bottom: 10px; width: 3px; background: var(--band, var(--text-off)); border-radius: 1px; }
+.lrow--a { --band: var(--gold); } .lrow--b { --band: var(--gold-soft); } .lrow--c { --band: var(--text-3); }
+
+/* Deadline rail (Tenggat Program, §C.3.6) */
+.trail { position: relative; height: 44px; margin: 8px 0 4px; }
+.trail__axis { position: absolute; left: 0; right: 0; top: 18px; height: 1px; background: var(--rule-strong); }
+.trail__tick { position: absolute; top: 12px; width: 1px; height: 13px; background: var(--text-2); }
+.trail__tick.is-next { background: var(--gold); }
+.trail__now { position: absolute; top: 15px; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%; background: var(--signal); }
+.trail__label { position: absolute; top: 28px; transform: translateX(-50%); font: 400 12px/16px var(--font-mono); color: var(--text-3); white-space: nowrap; }
+
+/* Dataset status cards (Data › Status, §C.6): a ruled row, never boxed */
+.dcards { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.dcard { position: relative; min-width: 0; padding: var(--s-3) var(--s-4) var(--s-3) 0; }
+.dcard + .dcard { padding-left: var(--s-4); }
+.dcard + .dcard::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: var(--rule); }
+
+/* Drop zone (Data › Impor, §C.6): dashed gold rule, 160 px */
+.dropzone {
+  display: grid; place-items: center; gap: 6px; min-height: 160px; padding: var(--s-6);
+  border: 1px dashed var(--rule-gold); border-radius: var(--r-ctl);
+  text-align: center;
+}
+.dropzone__line { font: italic 400 15px/22px var(--font-serif); color: var(--text-2); }
+.dropzone__lock { display: inline-flex; align-items: center; gap: 6px; font: 400 var(--fs-mono)/var(--lh-mono) var(--font-mono); color: var(--text-3); }
+.dropframe {                                           /* window-wide drag-over (§C.6) */
+  position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center;
+  background: var(--scrim-drag); pointer-events: none;
+}
+.dropframe::before { content: ""; position: absolute; inset: 24px; border: 1px dashed var(--rule-gold); border-radius: var(--r-panel); }
+.dropframe__line { font: 400 var(--fs-section)/var(--lh-section) var(--font-serif); color: var(--text-1); }
+
+/* "Peta ⟷ Panel" floating toggle (md and below, §C.4 1024 behaviour) */
+.map-toggle {
+  position: fixed; left: var(--inset); bottom: var(--inset); z-index: var(--z-pop);
+  align-items: center; gap: 8px; height: 32px; padding: 0 12px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 var(--fs-chip)/1 var(--font-sans); color: var(--text-1);
+}
+
+/* Bottom tab bar items (< 1024 px) */
+.tabbar__item {
+  display: grid; justify-items: center; align-content: center; gap: 4px; min-width: 0; min-height: 44px;
+  color: var(--text-3); font: 500 12px/16px var(--font-sans);
+}
+.tabbar__item .icon { width: 18px; height: 18px; }
+.tabbar__item[aria-current="page"], .tabbar__item[aria-selected="true"] { color: var(--text-1); box-shadow: inset 0 2px 0 var(--metal); }
+.tabbar__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ==========================================================================
+ * Placeholder anatomy ("sx"): eyebrow, serif title, one line on what is
+ * coming, and shimmering hairline skeletons in the section's real geometry.
+ * Rendered by the section stubs; disappears as each section is built.
+ * ========================================================================== */
+.sx-status { display: inline-flex; align-items: center; gap: 8px; }
+.sx-lede { max-width: 64ch; color: var(--text-2); }
+.sx-blocks { row-gap: var(--s-6); padding-top: 0; }
+.sx-blk .blk__title { color: var(--text-2); }
+.sx-blk .prov { color: var(--text-off); }
+
+/* Generic skeleton marks */
+.sx-hbars { display: grid; gap: 10px; padding: 4px 0; }
+.sx-hbars > i { display: block; height: 6px; width: var(--w, 60%); background: var(--rule); border-radius: 1px; }
+.sx-matrix { display: grid; grid-template-columns: repeat(var(--c, 6), minmax(0, 1fr)); gap: 2px; }
+.sx-matrix > i { display: block; height: 30px; background: var(--rule); border-radius: 1px; opacity: var(--o, .6); }
+.sx-list > i { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; height: 44px; border-bottom: 1px solid var(--rule); }
+.sx-list > i::before { content: ""; width: 24px; height: 1px; background: var(--rule-strong); }
+.sx-list > i::after  { content: ""; width: var(--w, 64%); height: 1px; background: var(--rule-strong); }
+.sx-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.sx-form > i { display: grid; gap: 8px; }
+.sx-form > i::before { content: ""; width: 40%; height: 1px; background: var(--rule-strong); margin-top: 6px; }
+.sx-form > i::after  { content: ""; height: 32px; background: var(--surface-well); border: 1px solid var(--rule); border-radius: var(--r-ctl); }
+.sx-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 12px; height: 160px; }
+.sx-podium > i { display: block; height: var(--h, 60%); border-top: 1px solid var(--rule-strong); background: var(--rule); opacity: .5; }
+.sx-podium > i:nth-child(1) { border-top-color: var(--platinum); }
+.sx-podium > i:nth-child(2) { border-top-color: var(--gold); }
+.sx-podium > i:nth-child(3) { border-top-color: var(--lb-bronze); }
+.sx-text > i { display: block; height: 1px; margin: 9px 0; width: var(--w, 90%); background: var(--rule-strong); }
+
+/* Rail skeleton pieces */
+.sx-mix { display: flex; gap: 2px; height: 12px; margin: 0 var(--s-4) var(--s-3); }
+.sx-mix > i { display: block; height: 100%; flex: var(--f, 1) 1 0; background: var(--rule-strong); border-radius: 1px; opacity: var(--o, .7); }
+.sx-ledger > i {
+  display: grid; grid-template-columns: 12px 1fr 48px 56px; gap: 10px; align-items: center;
+  height: 40px; padding: 0 var(--s-4); border-top: 1px solid var(--rule);
+}
+.sx-ledger > i::before { content: ""; width: 12px; height: 12px; border: 1px solid var(--rule-strong); border-radius: 1px; }
+.sx-ledger > i::after  { content: ""; grid-column: 2 / 5; height: 1px; width: var(--w, 80%); background: var(--rule-strong); }
+.sx-dock { display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+.sx-dock__btn { height: 28px; padding: 0 8px; display: inline-flex; align-items: center; font: 500 var(--fs-chip)/1 var(--font-sans); color: var(--text-3); white-space: nowrap; }
+.sx-dock__sep { width: 1px; height: 20px; margin: 0 4px; background: var(--rule); }
+
+/* Rail placeholder pieces */
+.sx-rail-lede { display: grid; justify-items: start; gap: 8px; padding: 0 var(--s-4) var(--s-3); border-bottom: 1px solid var(--rule); }
+.sx-rail-lede .sx-lede { font-size: var(--fs-chip); line-height: 18px; }
+.sx-lrow {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) 56px 64px; column-gap: 10px; align-items: center;
+  height: 36px; border-top: 1px solid var(--rule);
+}
+.sx-lrow:first-child { border-top: 0; margin-top: 4px; }
+.sx-lrow .glyph { justify-self: center; }
+.sx-lrow__label { font: 500 var(--fs-chip)/16px var(--font-sans); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-lrow__a, .sx-lrow__b { justify-self: end; display: block; height: 1px; width: var(--w, 60%); background: var(--rule-strong); }
+.sx-split__labels { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font: 400 var(--fs-mono)/var(--lh-mono) var(--font-mono); color: var(--text-3); }
+.sx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sx-figs { display: grid; gap: 14px; margin-top: 10px; }
+.sx-figs > i { display: grid; gap: 10px; }
+.sx-figs > i::before { content: ""; width: 34%; height: 1px; background: var(--rule-strong); }
+.sx-figs > i::after  { content: ""; width: 58%; height: 1px; margin-top: 18px; background: var(--rule-strong); }
+.sx-list--rail > i { height: 52px; padding: 0 var(--s-4); grid-template-columns: 32px 1fr; }
+.sx-list--rail > i::before { width: 22px; height: 18px; background: var(--rule); border-left: 3px solid var(--rule-strong); }
+.rail .rail__sec .sx-form { margin-top: 8px; }
+.rail .trail { margin-bottom: 0; }

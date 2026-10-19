@@ -1,0 +1,383 @@
+/* ==========================================================================
+ * Cilangkap Command · map
+ * Map container and MapLibre overrides (§E.1), vignette and navy-grid
+ * fallback (§E.3, §E.12), HTML markers and label plates (§E.4, §E.5.6),
+ * legend, telemetry, scale and north tick (§E.11), dock (§C.3), fallback
+ * notices, and the pre-map stage shown while the map module is not loaded.
+ * Text over imagery always sits on a plate (§L.5).
+ * ========================================================================== */
+
+/* ── MapLibre surface ───────────────────────────────────────────────────── */
+#map .maplibregl-map, #map.maplibregl-map { font: inherit; background: var(--grad-mesh); }
+#map .maplibregl-canvas { outline: none; }
+#map .maplibregl-canvas:focus-visible { box-shadow: inset 0 0 0 1px var(--signal), inset 0 0 0 4px var(--signal-a20); }
+body.is-map-offline #map, body.is-map-offline #map .maplibregl-map { background: transparent; }
+body.is-map-dim #map { filter: none; }
+
+/* Attribution: console idiom, mono 10, text-3, transparent, above the KPI strip */
+#map .maplibregl-ctrl-bottom-right { right: calc(var(--free-r) - 8px); bottom: calc(var(--rail-b) - 4px); }
+#map .maplibregl-ctrl-attrib,
+#map .maplibregl-ctrl-attrib.maplibregl-compact {
+  margin: 0; padding: 2px 6px; min-height: 20px;
+  background: transparent; border-radius: var(--r-ctl);
+  font: 400 12px/16px var(--font-sans); color: var(--text-3);
+}
+#map .maplibregl-ctrl-attrib a { color: var(--text-3); }
+#map .maplibregl-ctrl-attrib a:hover { color: var(--text-1); text-decoration: none; }
+#map .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: var(--r-tip);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+#map .maplibregl-ctrl-attrib-button { filter: invert(1) opacity(.45); }
+#map .maplibregl-ctrl-attrib-button:focus-visible { outline: 1px solid var(--signal); }
+#map .maplibregl-ctrl-logo { display: none; }
+
+/* ── Navy grid fallback (§E.12) ─────────────────────────────────────────── */
+body.is-map-offline #map-grid, body.no-map #map-grid {
+  display: block;
+  background-color: var(--canvas);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: -1px -1px;
+}
+
+/* Basemap unavailable (offline or the tile server did not answer): one plain plate with Try again */
+.map-notice {
+  position: absolute; left: calc((var(--free-l) + 100vw - var(--free-r)) / 2); top: calc(var(--free-t) + 12px); transform: translateX(-50%);
+  z-index: 4; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; align-items: center;
+  width: max-content; max-width: min(460px, calc(100vw - var(--free-l) - var(--free-r) - 24px));
+  padding: 10px 10px 10px 14px;
+  background: var(--glass-bg-pop); border: 1px solid var(--glass-border); border-left: 3px solid var(--warn); border-radius: var(--r-tip);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+}
+.map-notice[hidden] { display: none; }
+.map-notice__t { grid-column: 1; margin: 0; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.map-notice__sub { grid-column: 1; margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.map-notice__retry { grid-column: 2; grid-row: 1 / span 2; height: 36px; padding: 0 14px; font: 600 13px/1 var(--font-sans); }
+
+/* Loading state: a calm street-grid skeleton until the basemap has drawn, then the canvas fades in */
+body.is-map-loading #map .maplibregl-canvas { opacity: 0; }
+body.is-map-loading .mk { visibility: hidden !important; }
+#map .maplibregl-canvas { transition: opacity 600ms var(--ease-standard); }
+.map-loading {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: var(--grad-mesh);
+  transition: opacity 600ms var(--ease-standard), visibility 0s linear 600ms;
+}
+.map-loading.is-done { opacity: 0; visibility: hidden; }
+.map-loading__sheen {
+  position: absolute; inset: 0; overflow: hidden;
+  background-image:
+    linear-gradient(var(--map-skeleton) 2px, transparent 2px),
+    linear-gradient(90deg, var(--map-skeleton) 2px, transparent 2px),
+    linear-gradient(28deg, transparent 49.6%, var(--map-skeleton) 49.6%, var(--map-skeleton) 50.4%, transparent 50.4%);
+  background-size: 168px 120px, 136px 168px, 420px 300px;
+  background-position: -20px -14px, -40px 0, 0 0;
+}
+.map-loading__sheen::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, var(--shimmer) 50%, transparent 65%);
+  background-size: 220% 100%;
+  animation: map-sheen 1.8s var(--ease-standard) infinite;
+}
+@keyframes map-sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.map-loading__plate {
+  position: absolute; left: calc((var(--free-l) + 100% - var(--free-r)) / 2); top: calc((var(--free-t) + 100% - var(--free-b)) / 2);
+  transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 14px/20px var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.map-loading__spin {
+  width: 14px; height: 14px; flex: none; border-radius: 50%;
+  border: 1.5px solid var(--rule-strong); border-top-color: var(--metal);
+  animation: map-spin 900ms linear infinite;
+}
+@keyframes map-spin { to { transform: rotate(360deg); } }
+/* After a theme or view change: no skeleton, a small note at the top of the free map area */
+.map-loading.is-pill { inset: auto; background: transparent; left: 0; right: 0; top: 0; height: 0; }
+.map-loading.is-pill .map-loading__sheen { display: none; }
+.map-loading.is-pill .map-loading__plate {
+  position: fixed; top: calc(var(--free-t) + 12px); left: calc((var(--free-l) + 100vw - var(--free-r)) / 2);
+  transform: translateX(-50%); padding: 6px 12px; font-size: 13px; line-height: 18px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-loading__sheen::after { animation: none; opacity: 0; }
+  .map-loading__spin { animation-duration: 2.4s; }
+  #map .maplibregl-canvas, .map-loading { transition: none; }
+}
+@media (max-width: 599px) {
+  .map-loading__plate { left: 50%; top: 50%; }
+  .map-loading.is-pill .map-loading__plate { position: absolute; top: 8px; left: 50%; }
+  .map-notice { left: 50%; top: 8px; max-width: calc(100vw - 24px); }
+}
+.map-unavailable {
+  position: absolute; left: var(--free-l); right: var(--free-r); top: 50%;
+  transform: translateY(-50%); text-align: center;
+  font: italic 400 15px/22px var(--font-serif); color: var(--text-2);
+}
+
+/* ── HTML callouts (§E.4, §E.5.6): glass plates with a leader line ─────────
+ * map.js layoutLabels() places each plate (translate) and its leader (width + rotate) around the
+ * point; the marker element itself is a 0 × 0 anchor on the map point. Priority: our branch,
+ * Mabes TNI, kecamatan labels, other places (see map.js). */
+.mk { position: absolute; width: 0; height: 0; pointer-events: none; }
+/* MapLibre fades its markers with "opacity .2s" (plain ease); ours fade in the item 38 family, and never with less motion */
+.maplibregl-marker.mk { transition: opacity var(--dur-fast, 180ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)); }
+.mk-plate {
+  position: absolute; left: 0; top: 0;
+  display: inline-grid; gap: 1px; padding: 5px 10px 6px;
+  background: var(--glass-bg-chip);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  white-space: nowrap; pointer-events: auto; cursor: pointer;
+}
+.mk-plate:hover { border-color: var(--metal-rule); }
+.mk-leader {
+  position: absolute; left: 0; top: 0; height: 1.5px; margin-top: -0.75px; transform-origin: 0 50%;
+  border-radius: 1px; background: var(--text-2); box-shadow: 0 0 0 0.5px var(--keyline);
+}
+.mk-site.is-home .mk-plate { border-color: var(--rule-gold); box-shadow: inset 0 2px 0 var(--gold), var(--glass-shadow-sm); }
+.mk-site.is-home .mk-leader { background: var(--gold); }
+.mk-mabes .mk-plate { padding: 5px 12px 6px; text-align: center; pointer-events: auto; cursor: pointer; }
+.mk-mabes .mk-leader { background: var(--gold); }
+.mk-mabes .mk-dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; display: none; background: var(--gold); box-shadow: 0 0 0 1.5px var(--keyline); }
+.mk-mabes.is-offset .mk-dot { display: block; }
+.mk-mabes__name {
+  font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--gold-soft);
+}
+.mk-mabes__meta { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.mk-site__kind { font: 600 12px/16px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); }
+.mk-site__name { font: 500 var(--fs-chip)/16px var(--font-sans); color: var(--text-1); }
+.mk-site.is-approx .mk-site__name::before { content: "≈ "; color: var(--text-3); }
+.mk.is-hidden .mk-plate { pointer-events: none; }
+
+/* ── Legend (§E.11) ─────────────────────────────────────────────────────── */
+.legend .ph { padding-bottom: var(--s-2); }
+.lg { padding: 0 var(--s-4) var(--s-3); display: grid; gap: 6px; }
+.lg__row { display: flex; align-items: center; gap: 8px; font: 400 var(--fs-chip)/16px var(--font-sans); color: var(--text-2); }
+.lg__row .chip__count { margin-left: auto; }
+.lg__ramp { display: grid; grid-template-columns: repeat(6, 1fr); height: 12px; margin-top: 4px; }
+.lg__ramp > i:nth-child(1) { background: var(--heat-1); } .lg__ramp > i:nth-child(2) { background: var(--heat-2); }
+.lg__ramp > i:nth-child(3) { background: var(--heat-3); } .lg__ramp > i:nth-child(4) { background: var(--heat-4); }
+.lg__ramp > i:nth-child(5) { background: var(--heat-5); } .lg__ramp > i:nth-child(6) { background: var(--heat-6); }
+.lg__minmax { display: flex; justify-content: space-between; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.lg__foot { padding: 8px var(--s-4); border-top: 1px solid var(--rule); font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+/* Calm map key (COPY_STYLE_EN item 23): a kecamatan label chip, a visit badge, a plain hint line. No fill swatches. */
+.lg__chip {
+  display: block; width: 16px; height: 10px; box-sizing: border-box; border-radius: 5px;
+  background: var(--surface-raised); border: 1px solid var(--rule-strong);
+}
+.lg__badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--band-on-ink); color: var(--band-ink); font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+}
+.lg__hint { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* Status dot for map keys beside the map (the same dot as on the kecamatan chips) */
+.map-dot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--status-none); }
+.map-dot--ok { background: var(--status-ok); }
+.map-dot--mid { background: var(--status-mid); }
+.map-dot--bad { background: var(--status-bad); }
+.map-dot--none { background: var(--status-none); }
+.map-dot--potential { background: var(--status-potential); }
+
+/* ── "Warna asli" switch (satellite in Detail only, item 25) ─────────────────
+ * The satellite is greyscale by default; this small glass switch at the top-right of the free map
+ * area restores natural colour. map.js shows it only in Detail with imagery on, and remembers it. */
+.map-colour { position: absolute; z-index: 4; top: calc(var(--free-t) + 12px); right: calc(var(--free-r) + 12px); }
+.map-colour[hidden] { display: none; }
+.map-colour__btn {
+  display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px 0 14px; margin: 0;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 13px/1 var(--font-sans); color: var(--text-1); cursor: pointer; white-space: nowrap;
+  transition: border-color var(--dur-hover) var(--ease-standard);
+}
+.map-colour__btn:hover { border-color: var(--rule-strong); }
+.map-colour__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.map-colour__track {
+  position: relative; flex: none; width: 30px; height: 18px; border-radius: 9px; background: var(--rule-strong);
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+.map-colour__knob {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--band-ink); box-shadow: var(--glass-shadow-sm);
+  transition: transform var(--dur-hover) var(--ease-standard);
+}
+.map-colour__btn[aria-checked="true"] .map-colour__track { background: var(--btn-primary-bg); }
+.map-colour__btn[aria-checked="true"] .map-colour__knob { transform: translateX(12px); }
+@media (prefers-reduced-motion: reduce) { .map-colour__track, .map-colour__knob { transition: none; } }
+@media (max-width: 599px) { .map-colour { top: 8px; right: 8px; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .map-colour__btn { background: var(--glass-solid); } }
+
+/* ── Telemetry, scale bar, north tick (§E.11) ───────────────────────────── */
+.telemetry {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 10px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2);
+  white-space: nowrap;
+}
+.telemetry__sep { color: var(--text-off); }
+.scalebar { display: inline-flex; align-items: flex-end; gap: 6px; }
+.scalebar__bar { height: 4px; border: 1px solid var(--text-2); border-top: 0; }
+
+/* ── Dock (§C.3): presets and layers (the map is always flat) ──────────── */
+.dock { padding: 0 6px; gap: 2px; }
+.dock__group { display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+.dock__group + .dock__group { border-left: 1px solid var(--rule); }
+.dock__btn {
+  height: 28px; padding: 0 7px; border-radius: var(--r-ctl);
+  font: 500 var(--fs-chip)/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
+}
+.dock__btn:hover { color: var(--text-1); background: var(--surface-hover); }
+.dock__btn--icon { width: 28px; padding: 0; justify-content: center; }
+.dock__btn[aria-pressed="true"], .dock__btn[aria-checked="true"] { color: var(--text-1); background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+
+
+/* Telemetry stays inside the free map area (never under a sheet or rail) */
+#section-root .telemetry { max-width: calc(100vw - var(--free-l) - var(--free-r) - var(--mapctl-w, 0px) - 20px); overflow: hidden; }
+
+/* ── Legend rows for the zones and the pangkalan TNI badges (items 30, 34) ─
+ * map.js renders .lg__img (the same badge sprite as the map, copied from its canvas) and .lg__area (a tiny street
+ * sample under the zone shade; the shade colour and strength come from map.js, inline).
+ * The sample is a mid-grey block crossed by two light streets (fix 16 Oct 2026: a near-white sample under a
+ * light veil looked the same at 0, 0,5 and 0,8). Light streets on mid grey fade visibly under either veil:
+ * the light one (Terang street map) washes the grey out, the dark one (Gelap, satellite) darkens the streets.
+ * 16 px wide: the legend's glyph column (map.js .lg__glyph). */
+.lg__img { display: block; width: 18px; height: 18px; flex: none; }
+.lg__area {
+  position: relative; display: block; flex: none; width: 16px; height: 14px; overflow: hidden; box-sizing: border-box;
+  border-radius: 3px; border: 1px solid var(--rule-strong); background-color: var(--text-3);
+  background-image: linear-gradient(90deg, transparent 7px, var(--text-1) 7px, var(--text-1) 9px, transparent 9px),
+    linear-gradient(transparent 5px, var(--text-1) 5px, var(--text-1) 7px, transparent 7px);
+}
+/* Terang: --text-1 is dark ink, so the streets take the light, opaque surface instead */
+:root[data-theme="day"] .lg__area {
+  background-image: linear-gradient(90deg, transparent 7px, var(--surface-solid) 7px, var(--surface-solid) 9px, transparent 9px),
+    linear-gradient(transparent 5px, var(--surface-solid) 5px, var(--surface-solid) 7px, transparent 7px);
+}
+.lg__area > i { position: absolute; inset: 0; }
+.lg__chip--muted { opacity: .55; border-color: var(--rule); }
+
+/* ── Kecamatan focus mode (COPY_STYLE_EN item 38) ──────────────────────────
+ * map.js puts .map-focus inside MapLibre's canvas container, right above the map canvas and below the HTML plates.
+ * The veil frosts everything outside the kecamatan: backdrop blur + desaturate + dim, plus a tint, clipped by an
+ * inverse mask of the kecamatan (clip-path: path(evenodd, …), rewritten by map.js on every map frame). Its opacity is
+ * driven by map.js together with the deck fade (one timeline). The outline draws in with a stroke reveal (pathLength 1).
+ * Colours come from map.js as custom properties (the map's own palette: the satellite stays dark in Terang). */
+.map-focus { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
+.map-focus.is-live { visibility: visible; }
+.map-focus__veil {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+  background: var(--mf-veil, transparent);
+  will-change: opacity;
+}
+.map-focus.is-live .map-focus__veil {
+  -webkit-backdrop-filter: var(--mf-filter, blur(7px));
+  backdrop-filter: var(--mf-filter, blur(7px));
+}
+/* no backdrop-filter, or it ran slowly: a firmer veil without blur */
+.map-focus.is-lite .map-focus__veil, .map-focus.is-live.is-lite .map-focus__veil {
+  -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--mf-veil-strong, transparent);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .map-focus__veil { background: var(--mf-veil-strong, transparent); }
+}
+.map-focus__line { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.map-focus__line path {
+  fill: none; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 1 1; stroke-dashoffset: 1;
+}
+.map-focus__casing { stroke: var(--mf-casing, transparent); stroke-width: 6px; }
+.map-focus__stroke { stroke: var(--mf-line, currentColor); stroke-width: 2.5px; }
+.map-focus.is-drawn .map-focus__line path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--mf-reveal-ms, var(--dur-slow, 500ms)) var(--ease-out, cubic-bezier(.22, 1, .36, 1)) var(--mf-reveal-delay, 0ms);
+}
+.map-focus__line { transition: opacity var(--dur-fast, 180ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)); }
+.map-focus.is-out .map-focus__line { opacity: 0; }
+/* COPY_STYLE_EN item 43 (§4.2.3): the route of a trail (an SMA opened inside the focused kecamatan, from KCP outside it)
+   runs above the frosted layer at full colour, with the branch marker. It lives inside the veil, so the veil's inverse
+   mask clips it to the outside of the kecamatan (inside, the map's own line shows under the points). Same widths as the
+   map line (casing 9 px, line 5 px, dashed last stretch 2 px); colours from map.js (the route palette). */
+.map-focus__route { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.map-focus__route path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.map-focus__rcasing { stroke: var(--mf-route-casing, transparent); stroke-width: 9px; }
+.map-focus__rline { stroke: var(--mf-route, currentColor); stroke-width: 5px; }
+.map-focus__rlink { stroke: var(--mf-route-link, currentColor); stroke-width: 2px; stroke-dasharray: 4 4; stroke-linecap: butt; }
+.map-focus__rorigin { fill: var(--mf-route-fill, transparent); stroke: var(--mf-route, currentColor); stroke-width: 2.5px; }
+.map-focus__rdest { fill: var(--mf-route-fill, transparent); stroke: var(--mf-route, currentColor); stroke-width: 3px; }
+/* HTML plates (KCP, Mabes TNI, places) outside the kecamatan recede with the points */
+/* (on the plate, leader and dot: MapLibre writes its own inline opacity on the marker element) */
+.mk > .mk-plate, .mk > .mk-leader, .mk > .mk-dot { transition: opacity var(--dur-base, 300ms) var(--ease-in-out, cubic-bezier(.65, 0, .35, 1)); }
+.mk.is-fx-out > .mk-plate, .mk.is-fx-out > .mk-leader, .mk.is-fx-out > .mk-dot { opacity: .15; }
+.mk.is-fx-out .mk-plate { pointer-events: none; }
+
+/* The focused kecamatan's own chip sits above the frosted layer (map.js fxChipPlace), so the border never slices it;
+   the same glass pill as the map's kecamatan chips, name in semibold and the count quieter */
+.map-focus-chip__card {
+  position: absolute; left: 0; top: 0;
+  display: inline-flex; align-items: center; padding: 4px 12px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity var(--dur-base, 300ms) var(--ease-out, cubic-bezier(.22, 1, .36, 1));
+}
+.map-focus-chip.is-in .map-focus-chip__card { opacity: 1; }
+/* v5: no free spot inside the kecamatan, and the chip would cover the selected point or the route's end (chipKeepOut):
+   it fades so the point stays readable; the card and the callout name the place */
+.map-focus-chip.is-in.is-under .map-focus-chip__card { opacity: .3; }
+.map-focus-chip__name { font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.map-focus-chip__rest { font: 500 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); white-space: pre; }
+.map-focus-chip__rest[hidden] { display: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .map-focus-chip__card { background: var(--glass-solid); } }
+
+/* ── Route chip at the destination (COPY_STYLE_EN item 36) ─────────────────
+ * "6,2 km · ± 18 menit" (and "Jam sibuk · tanpa tol" when on) beside the selected point; map.js places it (translate)
+ * clear of the panels and of the other labels. --mf-route is the route's own blue (map.js palette). */
+.map-route__chip {
+  position: absolute; left: 0; top: 0;
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 10px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); border-radius: 999px;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  white-space: nowrap; pointer-events: none; cursor: default;
+  opacity: 0; scale: .96;
+  transition: opacity var(--dur-fast, 180ms) var(--ease-out, cubic-bezier(.22, 1, .36, 1)), scale var(--dur-fast, 180ms) var(--ease-out, cubic-bezier(.22, 1, .36, 1));
+}
+.map-route.is-in .map-route__chip { opacity: 1; scale: 1; pointer-events: auto; }
+/* item 43 (§4.3): while the callout of this point is open it says the time itself; the chip waits */
+.map-route.is-hushed .map-route__chip, .map-route.is-in.is-hushed .map-route__chip { opacity: 0; scale: .96; pointer-events: none; }
+.map-route__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--mf-route, currentColor); box-shadow: 0 0 0 2px var(--surface-solid); }
+.map-route__words { display: grid; gap: 0; }
+.map-route__t { font: 600 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.map-route__sub { font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.map-route__sub[hidden] { display: none; }
+/* "Lihat seluruh rute": a quiet text button under the time, while the branch is off screen */
+.map-route__all {
+  justify-self: start; margin: 2px 0 0; padding: 0; border: 0; background: none; cursor: pointer;
+  font: 500 12px/16px var(--font-sans); color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--mf-route, currentColor); text-decoration-thickness: 1.5px; text-underline-offset: 3px;
+}
+.map-route__all:hover { color: var(--text-2); }
+.map-route__all:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
+.map-route__all[hidden] { display: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .map-route__chip { background: var(--glass-solid); } }
+@media (prefers-reduced-motion: reduce) {
+  .map-focus__line, .map-focus__line path, .map-focus.is-drawn .map-focus__line path, .mk > .mk-plate, .mk > .mk-leader, .mk > .mk-dot, .map-route__chip,
+  .maplibregl-marker.mk, .mk, .scalebar__bar, .map-focus-chip__card { transition: none; }
+}

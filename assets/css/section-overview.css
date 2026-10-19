@@ -1,0 +1,482 @@
+/* ==========================================================================
+ * Section 1 · Ringkasan (assets/js/section-overview.js)
+ * The chart-first executive page (COPY_STYLE items 21, 31 and 35, UX_FIX_PLAN §2.6): action title, the
+ * import line, KPI tiles with a gradient accent rule beside the priority card, the named rankings in row 2
+ * (SMA, Sasaran EDC, Sasaran LVM: MCD.charts.rankedBars, styled in charts-plus.css), glass columns beside a
+ * glass donut, the UREG / USAK bars and the shortcuts. No map on this page.
+ * Glass, not 3D: frosted cards, a soft inner highlight on every mark, gentle shadows, rounded ends.
+ * No rotation, tilt or perspective. Gradients on data marks are single-hue (D10, this page only).
+ * Colours only through tokens (tokens.css, brand.css), so a theme switch recolours the charts in place.
+ * Every rule is scoped by an .ov- class or body[data-section="overview"].
+ * v4 (items 37, 38): row 2 from 1200 px is the SMA card across the page, then Sasaran EDC beside Sasaran LVM
+ * (equal heights, their two lists side by side), so no card is taller than the screen; level dots and the "?"
+ * note of the Sasaran panels; motion in one family (--ease-out, 35 ms stagger, transform and opacity only,
+ * none under prefers-reduced-motion); charts below the fold wait (paused) until they are scrolled to.
+ * ========================================================================== */
+
+/* ── Transitional: until the shell's full-width 'page' layout lands (A-03) the guide column grows ── */
+body[data-section="overview"]:not([data-layout="page"]) #section-root .guide {
+  right: var(--inset); width: auto; background: var(--glass-solid, var(--surface-solid));
+}
+@media (max-width: 1023px) {
+  body[data-section="overview"]:not([data-layout="page"]) #section-root .guide { top: var(--stage-t); max-height: none; }
+}
+
+/* ── Page grid ─────────────────────────────────────────────────────────── */
+/* Ringkasan is one page with its own action title: the breadcrumb "Ringkasan" above the page title only
+   repeats it (it has no filter chips here), so the first screen keeps those lines for the rankings. The page
+   asks the shell for no breadcrumb (ctx.page({crumbs: false})); only when the shell does not honour it does the
+   section's script set .ov-crumbcss and this rule hide the row (V3_REPORT §4.5). */
+.ov-crumbcss .pg-crumbrow { display: none; }
+.ov-page {
+  --ov-ease: var(--ease-out, var(--ease-enter));
+  --ov-dur: var(--dur-slow, 500ms); --ov-step: 35ms;
+  display: grid; gap: 14px; width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 0 24px; min-width: 0;
+}
+.ov-page [hidden] { display: none !important; }
+.ov-grid { display: grid; gap: 16px; min-width: 0; align-items: start; }
+/* row 1: the title, the import line and the KPI tiles beside "Prioritas kunjungan" */
+.ov-grid--a { grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); align-items: start; }
+.ov-lead { display: grid; gap: 14px; align-content: start; min-width: 0; }
+/* row 2: the named rankings. The SMA card across the page (its two lists side by side), then Sasaran EDC beside
+   Sasaran LVM with the same height. Three narrow cards side by side were 950–1.390 px tall at 1440 (V3 §4.5). */
+.ov-grid--r { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.ov-grid--r > .ov-x--sma { grid-column: 1 / -1; }
+.ov-grid--r .ov-sma { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
+/* row 3: the columns per kecamatan beside the donut; row 4: UREG / USAK */
+.ov-grid--c { grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); }
+.ov-grid--b { grid-template-columns: minmax(0, 1fr); }
+
+/* ── The import line under the title (before the LVM import) ──────────── */
+.ov-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; padding: 10px 12px 10px 14px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+}
+.ov-banner__ic { flex: none; display: block; width: 28px; height: 28px; border-radius: 7px; box-shadow: 0 1px 2px var(--depth-shadow), 0 0 0 1px var(--glass-border-card); }
+.ov-banner__t { flex: 1 1 360px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; margin: 0; font: 400 14px/20px var(--font-sans); color: var(--text-1); }
+.ov-banner__m { font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ov-banner .ov-btn { flex: none; }
+
+/* ── Action title ─────────────────────────────────────────────────────── */
+.ov-hero { display: grid; gap: 2px; min-width: 0; }
+.ov-hero__t { margin: 0; font: 400 var(--fs-sheet)/var(--lh-sheet) var(--font-serif); color: var(--text-1); text-wrap: balance; }
+.ov-hero__s { margin: 0; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.ov-hero__m { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ov-demo { flex: none; }
+
+/* ── KPI tiles (glass) ────────────────────────────────────────────────── */
+.ov-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: stretch; gap: 12px; min-width: 0; grid-auto-flow: row dense; }
+.ov-kpis > .ov-kpi--sma { grid-column: span 2; }
+/* before the import: one row, Sasaran EDC | Sasaran LVM | Siswa SMA 17+ */
+.ov-kpis.is-before { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ov-kpis.is-before > .ov-kpi--sma { grid-column: auto; }
+.ov-kpi {
+  --ov-glow: var(--status-potential-a20);
+  position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 116px; padding: 14px 14px 12px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card);
+  background: radial-gradient(160px 90px at 100% 0%, var(--ov-glow), transparent 72%), var(--grad-card);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-sm); overflow: hidden;
+}
+.ov-kpi::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--grad-accent); pointer-events: none; }
+.ov-kpi--ok { --ov-glow: var(--status-ok-a20); }
+.ov-kpi--mid { --ov-glow: var(--status-mid-a20); }
+.ov-kpi--bad { --ov-glow: var(--status-bad-a20); }
+.ov-kpi--none { --ov-glow: var(--status-none-a20); }
+.ov-kpi--ok::before { background: var(--grad-status-ok, var(--status-ok)); }
+.ov-kpi--mid::before { background: var(--grad-status-mid, var(--status-mid)); }
+.ov-kpi--bad::before { background: var(--grad-status-bad, var(--status-bad)); }
+.ov-kpi--potential::before { background: var(--grad-status-potential, var(--status-potential)); }
+.ov-kpi--none::before { background: var(--grad-status-none, var(--status-none)); }
+.ov-kpi__h { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 28px; }   /* the same height with or without the app icon, so values line up */
+.ov-kpi__ic { flex: none; display: block; width: 28px; height: 28px; border-radius: 7px; box-shadow: 0 1px 2px var(--depth-shadow), 0 0 0 1px var(--glass-border-card); }
+.ov-kpi__l { margin: 0; font: 600 13px/17px var(--font-sans); color: var(--text-1); }
+.ov-kpi__v { margin: 2px 0 0; font: 400 32px/38px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; }
+.ov-kpi.is-empty .ov-kpi__v { color: var(--text-2); }
+.ov-kpi__m { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: auto 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ov-kpi__src { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--rule); font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* ── Exhibits (frosted glass cards) ───────────────────────────────────── */
+.ov-x { min-width: 0; padding: 18px 20px 12px; border-color: var(--glass-border-card); box-shadow: var(--glass-hl-card), var(--glass-shadow-sm); }
+.ov-x::after {
+  content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 1px;
+  background: var(--glass-sheen); opacity: .55; pointer-events: none;
+}
+.ov-x__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+.ov-x__titles { min-width: 0; flex: 1 1 280px; }
+.ov-x__eyebrow { margin: 0 0 2px; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.ov-x__title { font-size: var(--fs-section); line-height: var(--lh-section); }
+.ov-x__trow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ov-x__trow > .ov-x__title { min-width: 0; }
+.ov-tipbtn { flex: none; width: 32px; height: 32px; font-size: 14px; }
+.ov-x__sub { margin-bottom: 8px; }
+.ov-x__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ov-x__body { display: grid; gap: 12px; min-width: 0; }
+.ov-plot { min-width: 0; }
+.ov-svg { display: block; width: 100%; height: auto; overflow: visible; stroke: none; }
+.ov-x .mcp { --mcp-bg: var(--surface-solid); }
+
+.ov-btn { min-height: 40px; height: auto; padding: 8px 14px; gap: 8px; font: 600 14px/18px var(--font-sans); white-space: nowrap; }
+.ov-btn .icon { width: 16px; height: 16px; flex: none; }
+.ov-link { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; white-space: normal; text-align: left; }
+.ov-page .gm-link { min-height: 40px; height: auto; padding: 8px 12px; gap: 8px; font: 600 14px/18px var(--font-sans); text-decoration: none; white-space: nowrap; }
+.ov-page .gm-link .icon { width: 16px; height: 16px; }
+.ov-tbtn { min-height: 40px; height: auto; padding: 8px 12px; font: 600 14px/18px var(--font-sans); }
+.ov-seg { height: auto; }
+.ov-seg .seg__opt { min-height: 40px; padding: 0 14px; font: 600 14px/1 var(--font-sans); }
+.ov-seg .seg__opt:disabled { opacity: .45; cursor: not-allowed; }
+.ov-note { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+
+/* colour keys in words */
+.ov-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.ov-key li { display: inline-flex; align-items: center; gap: 6px; }
+.ov-key__note { flex-basis: 100%; }
+.ov-sw { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 4px; background: var(--status-none); box-shadow: inset 0 1px 0 var(--depth-light); }
+.ov-sw--ok { background: var(--status-ok); }
+.ov-sw--mid { background: var(--status-mid); }
+.ov-sw--bad { background: var(--status-bad); }
+.ov-sw--none { background: var(--status-none); }
+.ov-sw--potential { background: var(--status-potential); }
+.ov-sw--home { border-radius: 50%; background: var(--surface-solid); box-shadow: inset 0 0 0 2px var(--text-1); }
+.ov-sw--homepill { width: 18px; border-radius: 6px; background: linear-gradient(160deg, var(--chart-3) 0%, var(--brand-navy) 100%); }
+.ov-sw--c1 { background: var(--chart-1); }
+.ov-sw--c2 { background: var(--chart-2); }
+.ov-sw--c3 { background: var(--chart-3); }
+.ov-sw--k17 { background: var(--chart-1); }
+.ov-sw--u17 { background: var(--chart-3); }
+.ov-sw--ok55 { background: var(--status-ok); opacity: .55; }
+
+/* ── Glass marks: gradient fills, a soft highlight, a gentle shadow ───── */
+.ov-stop--ok { stop-color: var(--status-ok); }
+.ov-stop--mid { stop-color: var(--status-mid); }
+.ov-stop--bad { stop-color: var(--status-bad); }
+.ov-stop--none { stop-color: var(--status-none); }
+.ov-stop--potential { stop-color: var(--status-potential); }
+.ov-stop { stop-opacity: 1; }
+.ov-stop.is-lo { stop-opacity: .62; }
+.ov-sheen-stop { stop-color: var(--depth-light); }
+
+.ov-face--ok { fill: var(--status-ok); }
+.ov-face--mid { fill: var(--status-mid); }
+.ov-face--bad { fill: var(--status-bad); }
+.ov-face--none { fill: var(--status-none); }
+.ov-face--potential { fill: var(--status-potential); }
+.ov-face--c1 { fill: var(--chart-1); }
+.ov-face--c2 { fill: var(--chart-2); }
+.ov-face--c3 { fill: var(--chart-3); }
+.ov-face--ok55 { fill: var(--status-ok); fill-opacity: .55; }
+.ov-front { filter: drop-shadow(0 2px 3px var(--depth-shadow)); }
+.ov-sheen { pointer-events: none; }
+.ov-rim { fill: none; stroke: var(--depth-light); stroke-width: 1; pointer-events: none; }
+.ov-track { fill: var(--surface-well); stroke: var(--rule); stroke-width: 1; }
+.ov-shadow { fill: var(--depth-shadow); fill-opacity: .55; filter: blur(2px); }
+.ov-gl { stroke: var(--rule); stroke-width: 1; }
+.ov-gl.is-base { stroke: var(--rule-strong); }
+.ov-tick { font: 400 12px/1 var(--font-sans); fill: var(--text-2); font-variant-numeric: tabular-nums; }
+.ov-val { font: 600 13px/1 var(--font-sans); fill: var(--text-1); font-variant-numeric: tabular-nums; }
+.ov-svg .ov-val { paint-order: stroke; stroke: var(--surface-solid); stroke-width: 3px; stroke-linejoin: round; }
+.ov-lbl { font: 500 12px/1 var(--font-sans); fill: var(--text-2); }
+.ov-lbl.is-home { font-weight: 600; fill: var(--band-ink); }
+.ov-lbl.is-kechome { font-weight: 600; fill: var(--text-1); }
+/* KCP Cilangkap: a navy label and a plain ring, never gold (gold and amber read alike next to "Kuning" bars) */
+.ov-homepill { fill: var(--brand-navy); }
+.ov-homedot { fill: var(--surface-solid); stroke: var(--text-1); stroke-width: 2; }
+.ov-target { stroke: var(--chart-hl); stroke-width: 2; stroke-dasharray: 5 4; }
+.ov-hit { fill: transparent; cursor: pointer; }
+.ov-col .ov-front, .ov-hcol .ov-front { transition: filter var(--dur-hover) var(--ease-standard); }
+.ov-col:hover .ov-front, .ov-hcol:hover .ov-front { filter: drop-shadow(0 3px 5px var(--depth-shadow)) brightness(1.08); }
+.ov-col:hover .ov-lbl, .ov-hcol:hover .ov-lbl { fill: var(--text-1); }
+
+/* item 38: one entrance per visit, none for a data change or under reduced motion. Marks grow from 0 with the
+   ease-out of the motion family, 35 ms apart; value labels follow their mark; the ring fades up from 94%. A chart
+   below the fold waits (paused, .is-wait) until it is scrolled to. Transform and opacity only. Every duration is a
+   token of the motion scale (--dur-fast 180, --dur-base 300, --dur-slow 500 ms); the donut settles in 500 ms. */
+.ov-svg.is-grow .ov-col__body {
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: ov-grow-y var(--ov-dur) var(--ov-ease) both; animation-delay: calc(var(--ov-i, 0) * var(--ov-step));
+}
+.ov-svg.is-grow .ov-hcol__body, .ov-svg.is-grow .ov-hbar__body {
+  transform-box: fill-box; transform-origin: 0 50%;
+  animation: ov-grow-x var(--ov-dur) var(--ov-ease) both; animation-delay: calc(var(--ov-i, 0) * var(--ov-step));
+}
+.ov-svg.is-grow .ov-val { animation: ov-fade var(--dur-base, 300ms) var(--ov-ease) both; animation-delay: calc(var(--ov-i, 0) * var(--ov-step) + var(--dur-fast, 180ms)); }
+.ov-svg.is-grow .ov-dn__face { transform-box: fill-box; transform-origin: 50% 50%; animation: ov-pop var(--ov-dur) var(--ov-ease) both; }
+.ov-svg.is-grow .ov-dn__sheen, .ov-svg.is-grow .ov-dn__rim { animation: ov-fade var(--ov-dur) var(--ov-ease) both; }
+.ov-svg.is-grow.is-wait .ov-col__body, .ov-svg.is-grow.is-wait .ov-hcol__body, .ov-svg.is-grow.is-wait .ov-hbar__body,
+.ov-svg.is-grow.is-wait .ov-val, .ov-svg.is-grow.is-wait .ov-dn__face, .ov-svg.is-grow.is-wait .ov-dn__sheen,
+.ov-svg.is-grow.is-wait .ov-dn__rim { animation-play-state: paused; }
+/* new words in a drill-down heading */
+.ov-swap { animation: ov-swap var(--dur-base, 300ms) var(--ov-ease) both; }
+@keyframes ov-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ov-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ov-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ov-pop { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes ov-swap { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ov-svg.is-grow .ov-col__body, .ov-svg.is-grow .ov-hcol__body, .ov-svg.is-grow .ov-hbar__body,
+  .ov-svg.is-grow .ov-dn__face, .ov-svg.is-grow .ov-val, .ov-svg.is-grow .ov-dn__sheen, .ov-svg.is-grow .ov-dn__rim,
+  .ov-swap, .ov-tipbox { animation: none; }
+  .ov-col .ov-front, .ov-hcol .ov-front, .ov-prio__go, .ov-prio__gm { transition: none; }
+}
+
+/* ── Donut (glass ring) ───────────────────────────────────────────────── */
+.ov-donut { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: center; gap: 16px 24px; min-width: 0; }
+.ov-donut__fig { width: 220px; }
+/* beside the columns (4 of 12 columns): the ring above its list */
+.ov-grid--c .ov-donut { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 14px; }
+.ov-grid--c .ov-dl { width: 100%; }
+.ov-dn__well { fill: none; stroke: var(--surface-well); stroke-width: 30; }
+.ov-dn__face { filter: drop-shadow(0 6px 10px var(--depth-shadow)); }
+.ov-dn__slice { stroke: var(--surface-solid); stroke-width: 2; stroke-linejoin: round; }
+.ov-dn__sheen { pointer-events: none; }
+.ov-dn__rim { fill: none; stroke: var(--depth-light); stroke-width: 1; pointer-events: none; }
+.ov-dn__rim.is-in { stroke: var(--depth-shade); }
+.ov-dn__tot { font: 400 24px/1 var(--font-serif); fill: var(--text-1); font-variant-numeric: tabular-nums; }
+.ov-dn__cap { font: 400 12px/1 var(--font-sans); fill: var(--text-2); }
+.ov-dl { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ov-dl__row { display: grid; grid-template-columns: 12px minmax(0, 1fr); align-items: baseline; gap: 2px 10px; font: 400 14px/20px var(--font-sans); color: var(--text-1); }
+.ov-dl__row > .ov-sw { align-self: center; }
+.ov-dl__n { grid-column: 2; display: flex; flex-wrap: wrap; gap: 0 8px; font-variant-numeric: tabular-nums; }
+.ov-dl__v { font-weight: 600; }
+.ov-dl__p { color: var(--text-2); }
+.ov-dl__note { list-style: none; }
+
+/* ── Priority card: one button per kecamatan, compact so rows 2 and 3 sit above the fold ── */
+.ov-x--prio { container-type: inline-size; }
+.ov-x--prio .ov-x__sub { margin-bottom: 4px; }
+.ov-prio { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ov-prio__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; min-width: 0; }
+.ov-prio__go {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; min-height: 48px; margin: 0; padding: 5px 10px 5px 8px;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+  color: var(--text-1); font: inherit; text-align: left; cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
+}
+.ov-prio__go:hover { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+.ov-prio__go:focus-visible, .ov-prio__gm:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.ov-prio__n {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  font: 600 15px/1 var(--font-sans); color: var(--status-ink); background: var(--status-none);
+  box-shadow: inset 0 1px 0 var(--depth-light), 0 2px 6px -2px var(--depth-shadow);
+}
+.ov-tone--ok { background: var(--status-ok); }
+.ov-tone--mid { background: var(--status-mid); color: var(--status-ink-mid, var(--status-ink)); }
+.ov-tone--bad { background: var(--status-bad); }
+.ov-tone--none { background: var(--status-none); }
+.ov-tone--potential { background: var(--status-potential); }
+.ov-prio__main { display: grid; gap: 1px; min-width: 0; }
+.ov-prio__name { font: 600 15px/20px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.ov-prio__why { font: 400 12px/16px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ov-prio__cta { display: inline-flex; align-items: center; gap: 4px; font: 600 12px/16px var(--font-sans); color: var(--text-2); white-space: nowrap; }
+.ov-prio__cta .icon { width: 16px; height: 16px; transition: transform var(--dur-hover) var(--ease-standard); }
+.ov-prio__go:hover .ov-prio__cta { color: var(--text-1); }
+.ov-prio__go:hover .ov-prio__cta .icon { transform: translateX(2px); }
+.ov-prio__ctat { display: none; }
+@container (min-width: 460px) { .ov-prio__ctat { display: inline; } }
+.ov-prio__gm {
+  display: grid; place-items: center; align-content: center; gap: 2px; min-width: 52px; min-height: 48px; padding: 4px 6px;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+  color: var(--text-2); font: 600 12px/14px var(--font-sans); text-decoration: none;
+  transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
+}
+.ov-prio__gm:hover { background: var(--glass-card-hover); color: var(--text-1); }
+.ov-prio__gm .icon { width: 16px; height: 16px; }
+
+/* ── SMA with the most students (item 31) ─────────────────────────────── */
+.ov-sma { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; min-width: 0; }
+.ov-sma__pane {
+  display: grid; align-content: start; gap: 8px; min-width: 0; padding: 12px 12px 10px;
+  border: 1px solid var(--glass-border-card); border-radius: 12px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+}
+.ov-sma__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; min-height: 40px; padding: 0 2px; }
+.ov-sma__t { margin: 0; font: 600 15px/20px var(--font-sans); color: var(--text-1); outline: none; }
+.ov-sma__hint { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ov-sma__back { min-height: 36px; padding: 6px 12px 6px 8px; }
+/* the drill-down's two actions: "Lihat di peta Sekolah" (item 38) beside "Semua kecamatan" */
+.ov-sma__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.ov-sma__map { min-height: 36px; padding: 6px 12px 6px 10px; }
+.ov-sma__chart { min-width: 0; }
+.ov-key--sym { padding: 4px 2px 0; border-top: 1px solid var(--rule); font-size: 12px; line-height: 16px; }
+.ov-key--sym li { gap: 6px; }
+.ov-x--sma > .ov-x__body > .ov-note { padding: 0 2px; }
+.ov-key--split { padding: 0 2px; font-size: 12px; line-height: 16px; }
+
+/* ── Sasaran EDC / Sasaran LVM (item 35b) ─────────────────────────────── */
+.ov-sas { display: grid; gap: 12px; min-width: 0; }
+.ov-sas__pane {
+  display: grid; align-content: start; gap: 6px; min-width: 0; padding: 12px 12px 10px;
+  border: 1px solid var(--glass-border-card); border-radius: 12px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+}
+.ov-sas__t { margin: 0; font: 600 15px/20px var(--font-sans); color: var(--text-1); }
+.ov-sas__chart { min-width: 0; }
+.ov-sas__naik { display: grid; justify-items: start; gap: 6px; padding: 8px 2px 0; border-top: 1px solid var(--rule); }
+.ov-sas__naikt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.ov-sas__naik .ov-btn { min-height: 36px; padding: 6px 10px; }
+.ov-x--sas .ov-x__sub { max-width: 60ch; }
+/* the two Sasaran cards of one row share a height: the actions sit at the bottom of the taller one's level */
+.ov-grid--r > .ov-x--sas { display: flex; flex-direction: column; }
+.ov-grid--r > .ov-x--sas > .ov-x__body { display: flex; flex: 1 1 auto; flex-direction: column; }
+.ov-grid--r > .ov-x--sas .ov-sas__act { margin-top: auto; }
+/* from 1200 px the cards are wide: the lists lose their own frame (a rule between them instead) and each
+   Sasaran card shows "where" (kecamatan) beside "who" (named merchants) */
+@media (min-width: 1200px) {
+  .ov-grid--r > .ov-x { padding: 16px 18px 10px; }
+  .ov-grid--r .ov-sma__pane, .ov-grid--r .ov-sas__pane {
+    padding: 10px 0 0; border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: none; box-shadow: none;
+  }
+  .ov-grid--r .ov-sas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; }
+  .ov-grid--r .ov-sma__head { min-height: 32px; }
+  .ov-grid--r .mcp-rk__btn { column-gap: 10px; padding: 7px 6px 7px 4px; }
+  /* half a card per list: a slightly smaller badge keeps "Kec. Bekasi Selatan · 535 usaha" on one line */
+  .ov-grid--r .ov-x--sas .mcp-rk__btn { grid-template-columns: 24px minmax(0, 1fr) 12px; column-gap: 8px; }
+  .ov-grid--r .ov-x--sas .mcp-rk__badge { width: 24px; height: 24px; font-size: 12px; }
+  .ov-grid--r .ov-x--sas .mcp-rk__pop { left: 34px; }
+}
+/* item 42 (v5): under the Sasaran EDC number, the national chains left out; the line opens that group in Merchant */
+.ov-sas__nat {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 32px; margin: -2px 0 8px; padding: 4px 8px 4px 0;
+  border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer;
+  font: 400 13px/18px var(--font-sans); text-align: left;
+  text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
+  transition: color var(--dur-hover) var(--ease-standard), text-decoration-color var(--dur-hover) var(--ease-standard);
+}
+.ov-sas__nat[hidden] { display: none; }
+.ov-sas__nat:hover { color: var(--text-1); text-decoration-color: var(--text-2); }
+.ov-sas__nat:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.ov-sas__nat .icon { flex: none; width: 14px; height: 14px; }
+.ov-sas__natt { min-width: 0; }
+
+/* v5 (item 43): the drill-down card above "5 SMA terbesar di Kec. …", in the shared card markup (MCD.windows.card;
+   .ov-card--ws) or the same parts drawn here (.ov-card). It fades up only when the kecamatan changes. */
+.ov-sma__card[hidden] { display: none; }
+.ov-sma__card.is-new > * { animation: ov-swap var(--dur-base, 300ms) var(--ov-ease) both; }
+.ov-card {
+  display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--glass-border-card); background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+}
+.ov-card__eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.ov-card__title { margin: 0; font: 600 15px/20px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.ov-card__nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; margin: 2px 0 0; }
+.ov-card__num { display: grid; gap: 0; min-width: 0; }
+.ov-card__k { order: 2; margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ov-card__v { order: 1; margin: 0; font: 600 15px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.ov-card__num.is-big .ov-card__v { font: 400 24px/30px var(--font-serif); font-variant-numeric: tabular-nums; }
+.ov-card__note { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+@media (prefers-reduced-motion: reduce) {
+  .ov-sma__card.is-new > * { animation: none; }
+  .ov-sas__nat { transition: none; }
+}
+
+/* the Sekolah map's own symbol picture (MCD.schools.map.chip) beside a school name */
+.ov-sym { display: inline-flex; flex: none; width: 16px; height: 16px; }
+.ov-sym img { display: block; width: 16px; height: 16px; }
+.ov-sym i { display: block; width: 12px; height: 12px; margin: 2px; border-radius: 50%; background: var(--chart-3); }
+
+/* ── Item 37: the level dots' key under a named list, and the "?" note of a Sasaran panel ── */
+.ov-lvkey { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; padding: 6px 2px 0; border-top: 1px solid var(--rule);
+  font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ov-lvkey__s { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+.ov-lvkey__i { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ov-tipbox {
+  display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--glass-border-card); border-radius: 12px;
+  background: var(--glass-card-flat); box-shadow: var(--glass-hl-card); font: 400 13px/19px var(--font-sans); color: var(--text-1);
+  animation: ov-swap var(--dur-fast, 180ms) var(--ov-ease) both;
+}
+.ov-tipbox p { margin: 0; }
+.ov-tipbox__list { display: grid; gap: 4px; margin: 0; padding: 0 0 0 18px; }
+.ov-tipbox__k { font-weight: 600; }
+.ov-tipbox__note { font-size: 12px; line-height: 17px; color: var(--text-2); }
+
+/* ── Sasaran EDC actions (item 35) and live Google ratings (item 33) ──── */
+.ov-edc__act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ov-google { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--glass-border-card); border-radius: 12px; background: var(--glass-card-flat); }
+.ov-google__t { margin: 0; font: 600 14px/18px var(--font-sans); color: var(--text-1); }
+.ov-google__list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ov-google__row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 12px; min-height: 40px; padding: 4px 0; border-top: 1px solid var(--rule); }
+.ov-google__row:first-child { border-top: 0; }
+.ov-google__n { min-width: 0; font: 600 13px/18px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.ov-google__r { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-google__a { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.ov-google__a .icon { width: 14px; height: 14px; }
+
+/* ── Empty state of a chart ───────────────────────────────────────────── */
+.ov-empty { display: grid; justify-items: start; gap: 10px; padding: 18px 20px; border: 1px dashed var(--rule-strong); border-radius: 12px; background: var(--glass-card-flat); }
+.ov-empty p { margin: 0; font: 400 14px/20px var(--font-sans); color: var(--text-2); max-width: 52ch; }
+.ov-empty .ov-empty__t { font-weight: 600; color: var(--text-1); }
+
+/* ── Tables behind "Lihat tabel" ──────────────────────────────────────── */
+.ov-table[hidden] { display: none; }
+.ov-tbl { width: 100%; font: 400 13px/18px var(--font-sans); }
+.ov-tbl th, .ov-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--rule); text-align: left; }
+.ov-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ov-tbl .btn { min-height: 36px; font-size: 13px; }
+
+/* ── Shortcuts and programmes ─────────────────────────────────────────── */
+.ov-short { display: grid; gap: 12px; min-width: 0; }
+.ov-short__t { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.ov-doors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ov-door {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 16px; min-width: 0;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card); box-shadow: var(--glass-hl-card), var(--glass-shadow-sm);
+}
+.ov-door__ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--surface-raised); color: var(--text-1); box-shadow: inset 0 1px 0 var(--depth-light); }
+.ov-door__ic .icon { width: 20px; height: 20px; }
+.ov-door__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ov-door__t { margin: 0; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.ov-door__l { margin: 0; font: 400 14px/20px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ov-door__act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; }
+.ov-door__x { margin-left: -12px; }
+.ov-progx { padding: 16px 20px 12px; border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card); box-shadow: var(--glass-hl-card); }
+.ov-progx__t { margin: 0 0 8px; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.ov-prog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.ov-prog__row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; min-width: 0; }
+.ov-prog__d { display: grid; justify-items: center; padding: 6px 4px; border-radius: 10px; background: var(--surface-raised); }
+.ov-prog__d strong { font: 600 18px/22px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.ov-prog__d small { font: 400 12px/14px var(--font-sans); color: var(--text-2); }
+.ov-prog__row.is-urgent .ov-prog__d, .ov-prog__row.is-soon .ov-prog__d { background: var(--status-mid-a20); }
+.ov-prog__t { display: grid; gap: 2px; min-width: 0; }
+.ov-prog__l { font: 600 14px/18px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.ov-prog__m { font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+
+/* ── Solid fallbacks (no translucency asked for) ──────────────────────── */
+@media (prefers-reduced-transparency: reduce) {
+  .ov-x::after { display: none; }
+}
+
+/* ── Widths ───────────────────────────────────────────────────────────── */
+@media (max-width: 1279px) {
+  .ov-grid--a, .ov-grid--c { grid-template-columns: minmax(0, 1fr); }
+  .ov-grid--c .ov-donut { grid-template-columns: 220px minmax(0, 1fr); justify-items: stretch; }
+}
+@media (max-width: 899px) {
+  .ov-kpis.is-before { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-kpis.is-before > .ov-kpi--sma { grid-column: 1 / -1; }
+  .ov-grid--r { grid-template-columns: minmax(0, 1fr); }
+  .ov-grid--r .ov-sma { grid-template-columns: minmax(0, 1fr); }
+  .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-doors, .ov-prog { grid-template-columns: minmax(0, 1fr); }
+  .ov-sma { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 599px) {
+  .ov-page { gap: 12px; }
+  .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .ov-grid--c .ov-donut { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .ov-banner { padding: 10px 12px; }
+  .ov-banner__t { flex: 1 1 0; }      /* the icon stays beside the words; the button goes under them */
+  .ov-banner .ov-btn { width: 100%; justify-content: center; }
+  .ov-kpi { min-height: 108px; padding: 12px 12px 10px; }
+  .ov-kpi__v { font-size: 26px; line-height: 32px; }
+  .ov-x { padding: 16px 14px 12px; }
+  .ov-donut { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .ov-dl { width: 100%; }
+  .ov-hero__t { font-size: 22px; line-height: 28px; }
+  .ov-sma__pane { padding: 10px 6px 8px; }
+  .ov-google__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .ov-google__a { grid-column: 1 / -1; }
+  /* phones: the title and the import line first, then "where to go" before the KPI cards and every chart
+     (field visits start here) */
+  .ov-lead { display: contents; }
+  .ov-grid--a { gap: 12px; }
+  .ov-grid--a .ov-hero { order: -3; }
+  .ov-grid--a .ov-banner { order: -2; }
+  .ov-grid--a > .ov-x--prio { order: -1; }
+}

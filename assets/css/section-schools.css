@@ -1,0 +1,648 @@
+/* ==========================================================================
+ * Section 3 · Sekolah (SMA)  (body[data-section="schools"], .sk-*)
+ * Sederhana (distance switch, four colour-coded cards), the Detail rail (status bar,
+ * key figures, other filters, programme deadlines), the workbench "Daftar & grafik SMA"
+ * (right; a slide-over between 600 and 1279 px) with five tabs, and the drawer parts.
+ * Text is 12 px or larger, weights 400/500/600, mono only for codes and URLs (UX_FIX_PLAN §2.4).
+ * Status colours only through --status-* (green customer, red prospect,
+ * grey no data, blue potential); gold = TNI foundation / the one highlight.
+ * Tokens only (tokens.css, brand.css); Day and Night; 1440 / 1024 / 390.
+ * ========================================================================== */
+
+body[data-section="schools"] {
+  --sk-work-w: clamp(460px, 37vw, 600px);
+  --sk-work-w-wide: min(940px, calc(100vw - var(--rail-l) - 3 * var(--inset) - 200px));
+}
+
+/* ── shared bits ─────────────────────────────────────────────────────────── */
+.sk-link {
+  display: inline; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
+}
+.sk-link:hover { text-decoration-color: var(--text-1); }
+.sk-link:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
+.sk-note { margin: 8px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.sk-warn { margin: 8px 0 0; font: 500 12px/17px var(--font-sans); color: var(--warn); }
+.sk-hint { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-h4 { margin: 18px 0 8px; font: 600 12px/16px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.sk-empty-line { margin: 8px 0; font: italic 400 14px/20px var(--font-serif); color: var(--text-2); }
+.sk-notes { display: grid; gap: 4px; margin-top: 12px; }
+.sk-mono-badge {
+  display: inline-grid; place-items: center; min-width: 26px; height: 20px; padding: 0 5px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-ctl);
+  font: 500 12px/1 var(--font-mono); letter-spacing: .04em; color: var(--text-1); background: var(--surface-raised);
+}
+.sk-mono-badge.is-gold { border-color: var(--gold); color: var(--gold); background: var(--gold-a10); }
+.sk-tag {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 5px; margin-right: 4px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-ctl);
+  font: 600 12px/1 var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2);
+}
+.sk-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.sk-tools > .sk-search { flex: 1 1 180px; min-width: 0; }
+.sk-search .input { width: 100%; height: 40px; }
+.sk-seg .seg__opt { min-height: 0; }
+
+/* status chip: dot + words, bold fill tint (green customer · red prospect · grey no data · blue potential) */
+.sk-st {
+  --sk-c: var(--status-none); --sk-a: var(--status-none-a20);
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 6px; max-width: 100%;
+  border: 1px solid var(--sk-c); border-radius: 11px; background: var(--sk-a);
+  font: 600 12px/1 var(--font-sans); color: var(--text-1); white-space: nowrap;
+}
+.sk-st > span { overflow: hidden; text-overflow: ellipsis; }
+.sk-st__dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--sk-c); }
+.sk-st--ok { --sk-c: var(--status-ok); --sk-a: var(--status-ok-a20); }
+.sk-st--mid { --sk-c: var(--status-mid); --sk-a: var(--status-mid-a20); }
+.sk-st--bad { --sk-c: var(--status-bad); --sk-a: var(--status-bad-a20); }
+.sk-st--none { --sk-c: var(--status-none); --sk-a: var(--status-none-a20); }
+.sk-st--potential { --sk-c: var(--status-potential); --sk-a: var(--status-potential-a20); }
+
+/* text-only stand-in when charts-plus.js is missing */
+.sk-fb { display: grid; gap: 4px; }
+.sk-fb__list { display: grid; gap: 2px; margin: 0; padding-left: 16px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-fb__l { margin: 0; font: 600 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-fb__v { margin: 0; font: 400 30px/36px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.sk-fb__n { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+
+/* loading / error */
+.sk-load { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px; border: 1px dashed var(--rule-strong); border-radius: var(--r-panel); background: var(--surface-well); }
+.sk-load[hidden] { display: none; }
+.sk-load__t { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.sk-load.is-error { border-style: solid; border-color: var(--status-bad); }
+.sk-load.is-error .sk-load__t { color: var(--text-1); }
+.sk-load .btn { justify-self: start; }
+.sk-load__bar { position: relative; display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--rule-strong); }
+.sk-load__bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 34%;
+  background: var(--platinum); animation: sk-load 1.2s var(--ease-standard) infinite;
+}
+@keyframes sk-load { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+
+/* ── Overview guide ──────────────────────────────────────────────────────── */
+.sk-ovwrap { display: grid; gap: 14px; margin: 0 0 14px; }
+.sk-ov { display: grid; gap: 10px; }
+.sk-ov__row { display: grid; gap: 6px; }
+.sk-ov__label { font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.sk-ov .seg { display: flex; width: 100%; }
+.sk-ov .seg__opt { flex: 1 1 0; min-height: 40px; padding: 0 8px; font-weight: 600; }
+.sk-ov .sk-toggle { min-height: 40px; }
+.sk-ov__more { margin: 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+
+.sk-cards { display: grid; gap: 12px; }
+.sk-cards[hidden] { display: none; }
+.sk-cards__src { margin: -4px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-cards__src[hidden] { display: none; }
+.sk-card {
+  --sk-tone: var(--rule-strong); --sk-tint: transparent;
+  position: relative; overflow: hidden;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card);
+  background: var(--grad-card);
+  box-shadow: inset 0 4px 0 var(--sk-tone), var(--glass-shadow-card);
+}
+.sk-card::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 44px; background: linear-gradient(var(--sk-tint), transparent); pointer-events: none; }
+.sk-card.is-ok { --sk-tone: var(--status-ok); --sk-tint: var(--status-ok-a20); }
+.sk-card.is-mid { --sk-tone: var(--status-mid); --sk-tint: var(--status-mid-a20); }
+.sk-card.is-bad { --sk-tone: var(--status-bad); --sk-tint: var(--status-bad-a20); }
+.sk-card.is-none { --sk-tone: var(--status-none); --sk-tint: var(--status-none-a20); }
+.sk-card.is-potential { --sk-tone: var(--status-potential); --sk-tint: var(--status-potential-a20); }
+.sk-card.is-gold { --sk-tone: var(--gold); --sk-tint: var(--gold-a10); }
+.sk-card.is-plain { --sk-tone: var(--plat-2); --sk-tint: transparent; }
+.sk-card__body { position: relative; z-index: 1; display: grid; gap: 8px; padding: 16px 16px 14px; }
+.sk-card__t { margin: 0; display: flex; align-items: center; gap: 6px; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.sk-card__t .demo-tag { margin-left: auto; }
+.sk-card__note { display: grid; gap: 6px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-card__note p { margin: 0; }
+.sk-card__note code { font: 500 12px/1 var(--font-mono); color: var(--text-1); padding: 1px 4px; border-radius: 3px; background: var(--surface-well); }
+.sk-card__src { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-card__foot { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-card .mcp-bn.is-flat { padding: 0; }
+.sk-card .mcp-bn.is-flat::before { display: none; }   /* one accent rule per card: the card's own */
+.sk-card .mcp { --mcp-bg: var(--surface-solid); }
+
+/* private / public split bar */
+.sk-split { display: grid; gap: 8px; }
+.sk-split__bar { display: flex; height: 12px; overflow: hidden; border-radius: 6px; background: var(--rule); }
+.sk-split__bar i { display: block; height: 100%; }
+.sk-split__bar i + i { box-shadow: inset 2px 0 0 var(--surface-solid); }
+/* the map's school colours (item 34): negeri blue, swasta amber, jenis belum diketahui grey */
+.sk-split .is-pub { background: var(--chart-3); }
+.sk-split .is-priv { background: var(--status-mid); }
+.sk-split .is-unk { background: var(--status-none); }
+.sk-split__keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-split__k { display: inline-flex; align-items: center; gap: 6px; }
+.sk-split__k b { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.sk-split__sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.sk-split__p { color: var(--text-3); }
+.sk-split__note { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* short clickable lists (TNI SMA, clusters) */
+.sk-mini { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.sk-mini__row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--rule); border-radius: var(--r-ctl);
+  background: var(--surface-well); cursor: pointer; text-align: left; color: var(--text-1);
+  transition: border-color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
+}
+.sk-mini__row:hover { border-color: var(--rule-strong); background: var(--surface-hover); }
+.sk-mini__row:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+.sk-mini__row.is-far { opacity: .62; }
+.sk-mini__badge {
+  display: inline-grid; place-items: center; min-width: 30px; height: 22px; padding: 0 5px; border-radius: 11px;
+  border: 1.5px solid var(--gold); color: var(--gold); background: var(--gold-a10);
+  font: 600 12px/1 var(--font-sans); letter-spacing: .04em;
+}
+.sk-mini__n {
+  display: inline-grid; place-items: center; min-width: 30px; height: 26px; padding: 0 6px; border-radius: var(--r-ctl);
+  background: var(--chart-3); color: var(--status-ink);
+  font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+}
+html[data-theme="night"] .sk-mini__n { background: var(--chart-2); }
+/* full school names wrap to a second line instead of being cut ("SMAS ANGKASA 2 H PE…") */
+.sk-mini__name { min-width: 0; overflow-wrap: break-word; font: 500 13px/18px var(--font-sans); }
+.sk-mini__meta { font: 500 12px/16px var(--font-sans); color: var(--text-2); white-space: nowrap; }
+.sk-mini__empty { font: 400 12.5px/18px var(--font-sans); color: var(--text-3); }
+
+/* ── Deep dive: left rail ────────────────────────────────────────────────── */
+body[data-section="schools"] .pg-rail .pg-cards { display: none; }
+.sk-rail { display: grid; gap: 14px; margin-bottom: 8px; }
+.sk-ex--rail { padding: 14px 14px 10px; box-shadow: inset 0 3px 0 var(--status-potential); }
+.sk-ex--rail .sk-ex__title { font-size: 16px; line-height: 22px; }
+.sk-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sk-kpi { min-width: 0; }
+.sk-kpi .mcp-bn { height: 100%; }
+.sk-openwork { display: none; width: 100%; justify-content: center; }
+
+.sk-sec { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.sk-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.sk-sec__t { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.sk-fg { display: grid; gap: 6px; }
+.sk-fg__l { margin: 0; font: 600 12.5px/16.5px var(--font-sans); color: var(--text-1); }
+.sk-fg__note { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-fg .seg { display: flex; width: 100%; }
+.sk-fg .seg__opt { flex: 1 1 0; min-height: 32px; padding: 0 6px; }
+.sk-fg--toggles { gap: 8px; padding-top: 2px; }
+.sk-toggle { min-height: 28px; padding: 0; border: 0; background: none; text-align: left; font: 500 13px/18px var(--font-sans); }
+.sk-toggle:disabled { opacity: .45; cursor: not-allowed; }
+/* switches use the shared gold "on" state of components.css (the same Jam sibuk / Motor switches as Merchant and KPR) */
+
+.sk-dl { display: grid; gap: 8px; }
+.sk-dl__row {
+  display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left; cursor: pointer;
+  border: 1px solid var(--rule); border-left: 3px solid var(--status-ok); border-radius: var(--r-ctl); background: var(--surface-well); color: var(--text-1);
+}
+.sk-dl__row:hover { background: var(--surface-hover); }
+.sk-dl__row.is-soon { border-left-color: var(--status-mid); }
+.sk-dl__row.is-ended { border-left-color: var(--status-bad); }
+.sk-dl__name { font: 600 13px/18px var(--font-sans); }
+.sk-dl__when { font: 500 12px/16px var(--font-sans); }
+.sk-dl__what { font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+
+/* ── Deep dive: the SMA workbench (right) ────────────────────────────────── */
+.sk-work {
+  position: absolute; top: var(--stage-t); right: var(--inset); bottom: var(--inset);
+  width: var(--sk-work-w); z-index: var(--z-sheet);
+  display: flex; flex-direction: column;
+  /* transform only: "Lebarkan panel" changes the width at once and section-schools.js wideFade fades the content up
+     (a width transition laid out the panel and its virtual SMA table on every frame) */
+  transition: transform var(--dur-sheet) var(--ease-enter);
+}
+.sk-work.is-wide { width: var(--sk-work-w-wide); }
+body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))); }
+.sk-work__head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 10px; }
+.sk-work__titles { flex: 1 1 auto; min-width: 0; }
+.sk-work__eyebrow { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.sk-work__lede { margin: 4px 0 0; font: 400 13px/18px var(--font-sans); color: var(--text-3); }
+.sk-work__tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.sk-work__close { display: none; }
+.sk-tabs {
+  display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--rule); flex: none;
+  overflow-x: auto; scrollbar-width: none;
+}
+.sk-tabs::-webkit-scrollbar { display: none; }
+.sk-tab {
+  position: relative; flex: none; height: 40px; padding: 0 10px; border: 0; background: none; cursor: pointer;
+  font: 600 13px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.sk-tab:hover { color: var(--text-1); }
+.sk-tab[aria-selected="true"] { color: var(--text-1); }
+.sk-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--grad-accent); }
+.sk-tab:focus-visible { outline: 1px solid var(--signal); outline-offset: -4px; }
+.sk-work__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px 16px; display: grid; align-content: start; gap: 14px; }
+.sk-work__body.is-fill { display: flex; flex-direction: column; overflow-y: auto; }
+
+/* exhibits inside the workbench */
+.sk-ex { padding: 16px 16px 12px; min-width: 0; }
+.sk-ex__eyebrow { margin: 4px 0 0; font: 600 12px/16px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
+.sk-ex__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 18px; line-height: 24px; }
+.sk-ex__sub { margin-bottom: 12px; }
+.sk-ex__src { white-space: normal; }
+.sk-ex--fill { flex: none; display: flex; flex-direction: column; }
+.sk-ex--fill .sk-ex__body { display: flex; flex-direction: column; }
+/* the virtual tables need a definite height: what the workbench leaves after the exhibit's header, notes and source */
+.sk-ex--fill .sk-table { flex: none; height: max(280px, calc(100vh - 640px)); min-height: 0; }
+.sk-chart { min-width: 0; }
+.sk-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.sk-work.is-wide .sk-pair { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
+.sk-table { min-width: 0; }
+.sk-ex--fill .sk-note { flex: none; }
+.sk-table .mc-table th { background: var(--glass-sticky); }
+.sk-ent { display: grid; gap: 1px; min-width: 0; line-height: 17px; }
+.sk-ent__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/17px var(--font-sans); color: var(--text-1); }
+.sk-ent__sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-ent__sub.is-gold { color: var(--gold); }
+
+/* programmes */
+.sk-progs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.sk-work.is-wide .sk-progs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sk-prog {
+  display: grid; align-content: start; gap: 8px; padding: 14px 14px 12px;
+  border: 1px solid var(--rule); border-radius: var(--r-panel); background: var(--surface-well);
+  box-shadow: inset 0 3px 0 var(--chart-3);
+}
+.sk-prog--rb { box-shadow: inset 0 3px 0 var(--gold); }
+.sk-prog__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.sk-prog__name { margin: 0; font: 600 15px/20px var(--font-sans); color: var(--text-1); }
+.sk-prog__fee { margin: 0; font: 400 17px/23px var(--font-serif); color: var(--text-1); }
+.sk-prog__dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 12px; margin: 4px 0 0; }
+.sk-prog__dl dt { font: 600 12px/16px var(--font-sans); letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.sk-prog__dl dd { margin: 0; font: 400 12.5px/17px var(--font-sans); color: var(--text-2); }
+.sk-prog__src { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-comp { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-comp li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 10px; border-left: 2px solid var(--status-mid); background: var(--surface-well); }
+
+/* calculator */
+.sk-calc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.sk-calc__out { order: -1; }
+.sk-work.is-wide .sk-calc { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: start; }
+.sk-work.is-wide .sk-calc__out { order: 0; }
+.sk-calc__tl { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-calc__target { flex: 1 1 auto; min-width: 0; height: 32px; }
+.sk-calc__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.sk-calc__field { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.sk-calc__label { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font: 500 12.5px/16.5px var(--font-sans); color: var(--text-1); }
+.sk-calc__tag {
+  flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 5px;
+  border: 1px dashed var(--rule-strong); border-radius: var(--r-ctl);
+  font: 500 12px/1 var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);
+}
+.sk-calc__tag--source { border-style: solid; }
+.sk-calc__tag--rm-rate { border-color: var(--rule-gold); color: var(--gold-soft); }
+.sk-calc__ctl { display: flex; align-items: center; gap: 6px; }
+.sk-calc__in { width: 100%; min-width: 0; height: 32px; }
+.sk-calc__in.is-invalid { border-color: var(--status-bad); }
+.sk-calc__unit { flex: none; font: 400 12px/16px var(--font-sans); color: var(--text-3); white-space: nowrap; }
+.sk-calc__hint { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-calc__hint:empty { display: none; }
+.sk-calc__err { font: 500 12px/16px var(--font-sans); color: var(--status-bad); }
+.sk-calc__err:empty { display: none; }
+.sk-calc__heroes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.sk-calc__hero { position: relative; display: grid; align-content: start; gap: 2px; padding: 12px; border: 1px solid var(--rule); border-radius: var(--r-panel); background: var(--surface-well); box-shadow: inset 0 3px 0 var(--chart-3); }
+.sk-calc__hero.is-ref { box-shadow: inset 0 3px 0 var(--gold); }
+.sk-calc__hl { font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.sk-calc__hv { font: 400 24px/30px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.sk-calc__hs { font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-calc__tbl { display: grid; }
+.sk-calc__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 32px; border-bottom: 1px solid var(--rule); }
+.sk-calc__k { font: 400 12.5px/17px var(--font-sans); color: var(--text-2); }
+.sk-calc__v { font: 500 12.5px/17px var(--font-sans); color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
+.sk-calc__need { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* pipeline: stages carry the status colour (red not contacted · amber in progress · green active · grey on hold / lost) */
+.sk-steps { display: grid; gap: 4px; }
+.sk-step {
+  --sk-c: var(--status-none);
+  display: grid; grid-template-columns: 136px minmax(0, 1fr) 36px; align-items: center; gap: 10px;
+  min-height: 32px; padding: 0 8px; border: 1px solid transparent; border-left: 3px solid var(--sk-c); border-radius: var(--r-ctl);
+  background: none; cursor: pointer; text-align: left;
+}
+.sk-step--ok { --sk-c: var(--status-ok); }
+.sk-step--mid { --sk-c: var(--status-mid); }
+.sk-step--bad { --sk-c: var(--status-bad); }
+.sk-step:hover { background: var(--surface-hover); }
+.sk-step.is-on { border-color: var(--rule-platinum); border-left-color: var(--sk-c); background: var(--platinum-a10); }
+.sk-step__l { font: 500 12.5px/16.5px var(--font-sans); color: var(--text-1); }
+.sk-step.is-side .sk-step__l { color: var(--text-3); }
+.sk-step__bar { height: 8px; border-radius: 1px; background: var(--rule); }
+.sk-step__bar i { display: block; height: 100%; border-radius: 1px; background: var(--sk-c); }
+.sk-step__n { font: 500 12px/1 var(--font-sans); color: var(--text-1); text-align: right; }
+.sk-next { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.sk-next__row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 2px 10px; padding: 6px 8px; border-left: 2px solid var(--rule-strong); }
+.sk-next__row.is-late { border-left-color: var(--status-bad); }
+.sk-next__date { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-next__row.is-late .sk-next__date { color: var(--status-bad); }
+.sk-next__name { justify-self: start; font: 500 13px/17px var(--font-sans); text-align: left; }
+.sk-next__step { grid-column: 2; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-plist { display: grid; gap: 4px; }
+.sk-plist__g { margin: 10px 0 2px; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.sk-plist__row {
+  --sk-c: var(--status-none);
+  display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-left: 3px solid var(--sk-c); border-radius: var(--r-ctl);
+  background: none; cursor: pointer; text-align: left;
+}
+.sk-plist__row--ok { --sk-c: var(--status-ok); }
+.sk-plist__row--mid { --sk-c: var(--status-mid); }
+.sk-plist__row--bad { --sk-c: var(--status-bad); }
+.sk-plist__row:hover { background: var(--surface-hover); border-color: var(--rule-strong); border-left-color: var(--sk-c); }
+.sk-plist__name { font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.sk-plist__meta, .sk-plist__next { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-plist__next:empty { display: none; }
+
+/* sources */
+.sk-srcs, .sk-bul { display: grid; gap: 6px; margin: 0; padding-left: 18px; list-style: disc; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-srcs li { word-break: break-word; }
+
+/* ── drawer parts ────────────────────────────────────────────────────────── */
+.sk-dd .dd-kv { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 10px; padding: 3px 0; }
+.sk-dd .dd-kv__k { font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.sk-dd .dd-kv__v { font: 500 12.5px/17px var(--font-sans); color: var(--text-1); }
+.sk-dd .dd-blk__t { display: flex; align-items: center; gap: 8px; }
+.sk-dd .sk-link { font: 600 14px/20px var(--font-sans); }
+.sk-dd-status { margin: 0 0 6px; }
+.sk-dd-status .sk-st { height: 28px; padding: 0 12px 0 9px; border-radius: 14px; font-size: 13px; }
+.sk-dd-status .sk-st__dot { width: 11px; height: 11px; }
+.sk-sig { display: flex; align-items: baseline; gap: 6px; margin: 4px 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-fitlist { display: grid; gap: 2px; }
+.sk-fitlist__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; min-height: 30px; border-bottom: 1px solid var(--rule); }
+.sk-fitlist__k { font: 400 12.5px/17px var(--font-sans); color: var(--text-1); }
+.sk-fitlist__v { font: 500 12px/1 var(--font-sans); color: var(--text-2); }
+.sk-fitlist__v.is-held { color: var(--status-ok); font-weight: 600; }
+.sk-fitlist__pre { grid-column: 1 / -1; margin-top: -4px; padding-bottom: 4px; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-pgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
+.sk-pf { display: grid; gap: 4px; min-width: 0; margin-top: 6px; }
+.sk-pf__l { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.sk-pf .input, .sk-pf .select { width: 100%; min-width: 0; height: 32px; }
+.sk-ta { height: auto !important; min-height: 64px; padding-top: 6px; padding-bottom: 6px; resize: vertical; }
+.sk-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.sk-check { display: inline-flex; align-items: center; gap: 6px; font: 500 12.5px/18px var(--font-sans); color: var(--text-1); cursor: pointer; }
+.sk-check input { accent-color: var(--platinum); width: 15px; height: 15px; }
+.sk-pmsg { margin: 6px 0 0; font: 500 12px/16px var(--font-sans); color: var(--status-ok); }
+.sk-pmsg.is-warn { color: var(--warn); }
+.sk-pmsg:empty { display: none; }
+.sk-dd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sk-dd-list { display: grid; gap: 4px; }
+.sk-dd-row.has-st { grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.sk-dd-row.has-st > .sk-st { grid-column: 1; grid-row: 1 / span 2; }
+.sk-dd-row.has-st > .dd-list__name, .sk-dd-row.has-st > .dd-list__meta { grid-column: 2; min-width: 0; }
+.sk-url { margin: 0; font: 400 12px/16px var(--font-mono); color: var(--text-2); word-break: break-all; }
+
+/* ── responsive ──────────────────────────────────────────────────────────── */
+@media (min-width: 1680px) {
+  body[data-section="schools"] { --sk-work-w: clamp(560px, 36vw, 680px); }
+}
+/* md: the workbench slides over from the right with a large Close */
+@media (max-width: 1279px) {
+  .sk-work {
+    position: fixed; top: var(--stage-t); right: 0; bottom: 0; width: min(600px, calc(100vw - 24px)); border-radius: 0;
+    transform: translateX(calc(100% + 24px)); z-index: var(--z-drawer);
+  }
+  .sk-work.is-wide { width: min(600px, calc(100vw - 24px)); }
+  .sk-work.is-open { transform: none; }
+  .sk-work__close { display: inline-flex; }
+  .sk-wide { display: none; }
+  .sk-openwork { display: inline-flex; }
+  .sk-calc__form { grid-template-columns: minmax(0, 1fr); }
+}
+/* sm: keep the Deep dive rail in view (the shared rule folds it into a drawer) */
+@media (min-width: 600px) and (max-width: 1023px) {
+  body[data-section="schools"] .rail--l.pg-rail { transform: none; top: var(--stage-t); width: min(360px, 60vw); }
+}
+/* xs (390): the page flows under the map; the workbench follows the rail */
+@media (max-width: 599px) {
+  .sk-work, .sk-work.is-wide {
+    position: relative; inset: auto; top: auto; right: auto; bottom: auto; width: auto; transform: none;
+    z-index: auto; border-radius: var(--r-panel);
+  }
+  .sk-work__close, .sk-openwork { display: none; }
+  .sk-work__body, .sk-work__body.is-fill { overflow: visible; display: block; }
+  .sk-work__body > * + * { margin-top: 14px; }
+  .sk-ex--fill, .sk-ex--fill .sk-ex__body { display: block; }
+  .sk-ex--fill .sk-table { height: 440px; }
+  .sk-calc__heroes { grid-template-columns: minmax(0, 1fr); }
+  .sk-pgrid { grid-template-columns: minmax(0, 1fr); }
+  .sk-prog__dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .sk-prog__dl dd { margin-bottom: 6px; }
+  .sk-next__row { grid-template-columns: minmax(0, 1fr); }
+  .sk-next__step { grid-column: 1; }
+  .sk-step { grid-template-columns: 112px minmax(0, 1fr) 30px; }
+  .sk-tab, .sk-plist__row, .sk-step, .sk-dl__row { min-height: 44px; }
+  .sk-fg .seg__opt { min-height: 40px; }
+  .sk-dd .dd-kv { grid-template-columns: 108px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-work, .sk-mini__row { transition: none; }
+  .sk-load__bar::after { animation: none; width: 100%; opacity: .5; }
+}
+
+/* ── UX fix plan C-07: tabs with edge fades, the footer link, filters above the SMA list ── */
+.sk-tabhost { flex: none; min-width: 0; }
+.sk-tabs { -webkit-mask-image: none; mask-image: none; }
+.sk-tabs.is-fade-r { -webkit-mask-image: linear-gradient(90deg, var(--text-1) calc(100% - 32px), transparent); mask-image: linear-gradient(90deg, var(--text-1) calc(100% - 32px), transparent); }
+.sk-tabs.is-fade-l { -webkit-mask-image: linear-gradient(90deg, transparent, var(--text-1) 32px); mask-image: linear-gradient(90deg, transparent, var(--text-1) 32px); }
+.sk-tabs.is-fade-l.is-fade-r { -webkit-mask-image: linear-gradient(90deg, transparent, var(--text-1) 32px, var(--text-1) calc(100% - 32px), transparent); mask-image: linear-gradient(90deg, transparent, var(--text-1) 32px, var(--text-1) calc(100% - 32px), transparent); }
+.sk-tab { height: 40px; padding: 0 12px; font: 600 14px/1 var(--font-sans); }
+.sk-tab[aria-selected="true"]::after { height: 3px; }
+.sk-work__foot { flex: none; display: flex; justify-content: flex-end; padding: 8px 16px 12px; border-top: 1px solid var(--rule); }
+.sk-work__src { min-height: 40px; font: 600 14px/20px var(--font-sans); }
+.sk-tools--filters { align-items: flex-end; gap: 12px 16px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+.sk-fg--inline { gap: 6px; }
+.sk-seg--km .seg__opt { min-height: 40px; padding: 0 12px; font-weight: 600; }
+.sk-tools--filters .sk-toggle { min-height: 40px; }
+.sk-openwork { width: 100%; justify-content: center; min-height: 44px; }
+.sk-dd-gm { margin: 0 0 12px; }
+.sk-dd-gm .gmaps-link, .sk-dd-gm .btn { min-height: 40px; height: auto; padding: 8px 12px; gap: 8px; font: 600 14px/18px var(--font-sans); text-decoration: none; }
+.sk-btn, body[data-section="schools"] .btn--bar { min-height: 36px; }
+@media (min-width: 1280px) { .sk-openwork { display: none; } }
+@media (max-width: 1279px) { .sk-openwork { display: inline-flex; } }
+@media (max-width: 599px) { .sk-openwork { display: none; } }
+
+/* Segments whose options are 32–40 px tall: the shared track is 28 px, so it grows with them */
+.sk-seg--km, .sk-ov .seg, .sk-fg .seg { height: auto; }
+/* Long Indonesian column names ("Jarak dari Mabes TNI") wrap to two lines instead of being cut */
+.sk-table .mc-table th { white-space: normal; text-overflow: clip; vertical-align: bottom; line-height: 16px; }
+
+/* ── Students aged 17+, distance from KCP and school symbols (items 26–29, 34) ── */
+/* MA / SMK point switches under the distance switch */
+.sk-ov__sw { display: grid; gap: 2px; }
+
+/* school symbol (the same picture as the map: schools-map.js sprites; CSS shapes only without a canvas) */
+.sk-sym { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; vertical-align: middle; }
+.sk-sym img { display: block; width: 16px; height: 16px; }
+.sk-sym > i { display: block; width: 11px; height: 11px; border: 1.5px solid var(--surface-solid); background: var(--status-mid); }
+.sk-sym.is-negeri > i { background: var(--chart-3); }
+.sk-sym.is-unknown > i { background: var(--status-none); }
+.sk-sym.is-ctx > i { background: var(--text-3); opacity: .7; }
+.sk-sym--circle > i { border-radius: 50%; }
+.sk-sym--diamond > i { width: 9px; height: 9px; transform: rotate(45deg); }
+.sk-sym--rsq > i { border-radius: 3px; }
+.sk-symlabel { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 600 12px/16px var(--font-sans); color: var(--text-1); }
+.dd-tags .sk-symlabel { height: 22px; padding: 0 8px 0 4px; border: 1px solid var(--rule-strong); border-radius: 11px; background: var(--surface-raised); }
+
+/* new-CIF card (items 29, 35(a)): two groups, each with its small product picture. Siswa 17+ → Tabungan through
+   Livin' by Mandiri (with a KTP); siswa di bawah 17 → Tabungan SimPel (with a parent or guardian). One gold
+   accent only (the card's top rule); the groups sit on quiet wells. */
+.sk-cif { --sk-tone: var(--gold); --sk-tint: var(--gold-a10); }
+.sk-cif__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.sk-cif__grp {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: start; gap: 10px;
+  padding: 10px; border: 1px solid var(--rule); border-radius: var(--r-ctl); background: var(--surface-well);
+}
+.sk-cif__txt { display: grid; gap: 1px; min-width: 0; }
+.sk-cif__logo { display: inline-grid; place-items: center; width: 64px; height: 40px; padding: 4px 6px; border-radius: var(--r-ctl); background: var(--brand-navy); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.sk-cif__logo img { display: block; width: 100%; height: auto; max-height: 32px; object-fit: contain; }
+/* the SimPel card picture: small and fixed (40 × 26), centred in the same 64 px column as the Livin' wordmark */
+.sk-cif__card { display: inline-grid; place-items: center; width: 64px; height: 40px; }
+.sk-cif__card img { display: block; width: 40px; height: 26px; object-fit: contain; border-radius: 3px; box-shadow: 0 1px 2px var(--rule-strong); }
+.sk-cif__l { margin: 0; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.sk-cif__v { margin: 2px 0 0; font: 400 var(--fs-num-s)/var(--lh-num-s) var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.sk-cif__split { margin: 0; font: 500 12px/17px var(--font-sans); color: var(--text-2); }
+.sk-cif__line { margin: 4px 0 0; font: 400 13px/19px var(--font-sans); color: var(--text-1); }
+.sk-cif__scope { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.sk-cif__scope:empty, .sk-cif__split:empty { display: none; }
+.sk-cif.is-compact .sk-card__body { padding: 12px 12px 10px; gap: 6px; }
+.sk-cif.is-compact .sk-cif__grp { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; padding: 8px; }
+.sk-cif.is-compact .sk-cif__logo, .sk-cif.is-compact .sk-cif__card { width: 52px; height: 32px; }
+.sk-cif.is-compact .sk-cif__line { font-size: 12.5px; line-height: 18px; }
+
+/* Mandiri status before the school file: a text empty state with the import button (no 100% bar) */
+.sk-empty { display: grid; gap: 6px; justify-items: start; }
+.sk-empty[hidden], .sk-ex__bar[hidden], .sk-card__slot[hidden] { display: none; }
+.sk-empty__t { margin: 0; font: 500 13px/19px var(--font-sans); color: var(--text-1); }
+.sk-empty code { font: 500 12px/1 var(--font-mono); color: var(--text-1); padding: 1px 4px; border-radius: 3px; background: var(--surface-well); }
+.sk-empty .sk-note { margin: 0; }
+.sk-mini__foot { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-mini__row > .sk-num2 { white-space: nowrap; }
+.sk-help { flex: none; }
+.sk-tools .sk-help { margin-left: auto; }
+
+/* SMA to visit: top five by students aged 17+ or nearest the branch */
+.sk-card--top .seg { display: flex; width: 100%; }
+.sk-top__row { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.sk-top__row > .sk-sym { margin-top: 2px; }
+.sk-top__txt { display: grid; gap: 1px; min-width: 0; }
+.sk-top__meta { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+
+/* the shared travel-time switches ("Jam sibuk", "Motor (tanpa tol)") */
+.sk-distsw { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.sk-distsw .sk-toggle { min-height: 36px; }
+
+/* Daftar SMA: symbol + name, two-line number cells (17+ over all students; km over minutes) */
+.sk-tools--sort { align-items: flex-end; gap: 8px 16px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+/* long Indonesian option names wrap onto a second row instead of overlapping (390 px) */
+.sk-seg--sort, .sk-card--top .sk-seg--top, .sk-seg--prod { height: auto; flex-wrap: wrap; max-width: 100%; }
+.sk-fg .sk-seg--sort .seg__opt, .sk-card--top .sk-seg--top .seg__opt, .sk-fg .sk-seg--prod .seg__opt { flex: 1 1 auto; min-height: 36px; padding: 6px 10px; font-weight: 600; line-height: 16px; white-space: normal; text-align: center; }
+/* Tindak lanjut: filter the entries by target product (Penagihan SPP · Tabungan · Tabungan SimPel · QRIS kantin) */
+.sk-tools--prod { margin-bottom: 10px; }
+.sk-tools--prod[hidden] { display: none; }
+.sk-tools--prod .sk-fg { width: 100%; }
+.sk-ent--sym { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; }
+.sk-ent__txt { display: grid; gap: 1px; min-width: 0; }
+.sk-ent__sub.is-off { color: var(--status-mid-text); }
+.sk-num2 { display: grid; justify-items: end; gap: 0; line-height: 17px; font-variant-numeric: tabular-nums; }
+.sk-num2__a { font: 600 13px/17px var(--font-sans); color: var(--text-1); white-space: nowrap; }
+.sk-num2__b { font: 400 12px/16px var(--font-sans); color: var(--text-3); white-space: nowrap; }
+/* number cells: less left padding, and the minutes may wrap ("± 1 jam 14 menit" on a phone) instead of pushing
+   the km out of view; the mode ("jam sibuk, tanpa tol") is in the column header, not in each cell */
+.sk-table .mc-table td.is-right, .sk-table .mc-table th.is-right { padding-left: 6px; }
+.sk-table .sk-num2--dist .sk-num2__b { white-space: normal; text-align: right; }
+
+/* drawer: students block, the distance that follows the switches, rows with a symbol */
+.sk-dd--stu .dd-kv__v, .sk-dd-dist { font-variant-numeric: tabular-nums; }
+.sk-dd-row.has-sym { grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.sk-dd-row.has-sym > .sk-sym { grid-column: 1; grid-row: 1 / span 2; }
+.sk-dd-row.has-sym > .dd-list__name, .sk-dd-row.has-sym > .dd-list__meta { grid-column: 2; min-width: 0; }
+.sk-mini__badge { display: inline-flex; gap: 4px; }
+.sk-mini__badge .sk-sym { width: 14px; height: 14px; }
+.sk-mini__badge .sk-sym img { width: 14px; height: 14px; }
+
+/* "?" method: editable shares aged 17+ per grade */
+.sk-shares { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.sk-shares__f { display: grid; gap: 4px; min-width: 0; }
+.sk-shares__l { font: 500 12.5px/16.5px var(--font-sans); color: var(--text-1); }
+.sk-shares__in { width: 100%; min-width: 0; height: 36px; }
+.sk-shares__in.is-invalid { border-color: var(--status-bad); }
+.sk-shares__total { margin: 10px 0 0; padding: 8px 10px; border-left: 3px solid var(--gold); background: var(--surface-well); font: 500 12.5px/18px var(--font-sans); color: var(--text-1); }
+
+@media (max-width: 599px) {
+  .sk-shares { grid-template-columns: minmax(0, 1fr); }
+  .sk-fg .sk-seg--sort .seg__opt, .sk-card--top .sk-seg--top .seg__opt, .sk-distsw .sk-toggle { min-height: 40px; }
+  .sk-cif__v { font-size: var(--fs-num-s); line-height: var(--lh-num-s); }
+}
+
+/* ── v4 (items 36, 38; V3_REPORT §4.5) ──────────────────────────────────── */
+/* "Rute di Google Maps" beside the distance from KCP in the school drawer: a quiet link that opens a new tab */
+.sk-dd-distv { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+.sk-route {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0;
+  font: 600 12.5px/17px var(--font-sans); color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-hover) var(--ease-standard);
+}
+.sk-route .icon { flex: none; width: 13px; height: 13px; color: var(--text-2); }
+.sk-route:hover { text-decoration-color: var(--text-1); }
+.sk-route:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
+@media (pointer: coarse) { .sk-route { min-height: 40px; } }
+
+/* motion (item 38): blocks and rows enter one after another (the delay comes from the script, 35 ms apart);
+   opacity and transform only, ease-out-quint, nothing moves under reduced motion */
+@keyframes sk-stg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.sk-stg { animation: sk-stg-in var(--dur-base, 300ms) var(--ease-out, cubic-bezier(.22, 1, .36, 1)) var(--sk-stg-d, 0ms) both; }
+
+/* Daftar SMA on phones (V3_REPORT §4.5): the name wraps onto a second line instead of being cut (never "…");
+   siswa 17+ and the Mandiri status sit on the line under it. The row is sized for two lines; the few very long
+   names (international schools) take a third line and that row grows. */
+.sk-ent--wrap { align-items: start; }
+.sk-ent--wrap .sk-ent__sym { margin-top: 1px; }
+.sk-ent--wrap .sk-ent__name { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+.sk-table .mc-table td .sk-ent--wrap { white-space: normal; padding: 4px 0; }
+@media (max-width: 599px) {
+  .sk-table .mc-table td, .sk-table .mc-table th { padding-left: 8px; padding-right: 8px; }
+}
+.sk-ent__line { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px; }
+.sk-ent__line > .sk-st { flex: none; height: 20px; padding: 0 6px 0 5px; font-size: 12px; }
+.sk-ent__line > .sk-ent__sub { min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-stg { animation: none; }
+}
+
+/* ── v5 (item 43, concept C "Kartu bertahap"; docs/LAYOUT_V5C_SPEC.md §3.3.4, §9) ───────────────────────── */
+/* The kecamatan card lists its SMA first, siswa 17+ first: symbol | name over "504 siswa 17+ · 18,3 km · ± 39 menit"
+   | the Mandiri status once the school file is in. Compact rows, so five show without scrolling at 1366×768. */
+.sk-kl { gap: 4px; }
+.sk-kl__li { min-width: 0; }
+.sk-kl__row { padding: 7px 10px; }
+.sk-dd-row.sk-kl__row.has-sym { grid-template-columns: auto minmax(0, 1fr) auto; }
+/* the status chip shares the name's line, so "504 siswa 17+ · 18,3 km · ± 39 menit" keeps the full width under it */
+.sk-kl__row > .sk-st { grid-column: 3; grid-row: 1; align-self: center; }
+.sk-dd-row.sk-kl__row.has-sym > .dd-list__meta { grid-column: 2 / -1; }
+.sk-kl__row .dd-list__name { font-size: 13.5px; line-height: 18px; }
+.sk-kl__row .dd-list__meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sk-kl__row:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+.sk-kl__foot { margin: 8px 0 0; }
+.sk-kl__more { display: inline-flex; align-items: center; min-height: 40px; }
+/* "Produk sasaran": the first column holds the product names */
+.sk-dd--prod .dd-kv { grid-template-columns: 156px minmax(0, 1fr); }
+
+/* The adopted workbench is the shell's bottom drawer "Daftar & grafik" (MCD.windows): the shell sets its place and
+   size; it is never a hidden slide-over, and its own head and foot give way to the drawer bar. */
+.sk-work.ws-drawer { visibility: visible; }
+.sk-work.ws-drawer .sk-work__body { padding-top: 12px; }
+@media (max-width: 599px) {
+  .sk-kl__row { padding: 10px 12px; min-height: 52px; }
+  .sk-dd--prod .dd-kv { grid-template-columns: 112px minmax(0, 1fr); }
+}
+/* list first: the SMA list is the card itself, outside the folds (a phone folds every block of a new card) */
+.sk-kl-blk { padding: var(--s-4) 0; }
+.sk-kl-blk + .dd-blk { border-top: 1px solid var(--rule); }
+/* v5 tablets (600–1023 px): while a card is open (the 360 px slide-over sheet) the Detail rail steps aside, so the
+   selected SMA and its route stay in view; it comes back when the card closes */
+@media (min-width: 600px) and (max-width: 1023px) {
+  body.is-drawer-open[data-section="schools"] .rail--l.pg-rail { transform: translateX(calc(-100% - var(--inset))); }
+  /* the workbench's edge tab would sit on the card: it waits until the card closes */
+  body.is-drawer-open[data-section="schools"] .edge-tab { visibility: hidden; }
+}

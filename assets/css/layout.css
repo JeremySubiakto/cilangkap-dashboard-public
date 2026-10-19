@@ -1,0 +1,339 @@
+/* ==========================================================================
+ * Cilangkap Command · layout
+ * App shell (§C.1): map layer, bars (top bar · filter bar · readout), the
+ * section layer (rails, KPI strip, dock, legend, telemetry, sheets) and the
+ * overlay root. Grid and breakpoints (§C.2): xl ≥ 1680 · lg 1280–1679
+ * (reference 1440×900) · md 1024–1279 · sm 600–1023 · xs < 600 (390×844).
+ *
+ * Section DOM contract (sections mount into #section-root):
+ *   .rail.rail--l / .rail.rail--r   floating rails (Overview, Properti)
+ *   .kpi-strip                      6 ruled cells along the bottom
+ *   .dock                           centred in the free map area
+ *   .legend / .telemetry            top-right / bottom-left of the free map area
+ *   .sheet (+ --data | --wide)      right-docked scrolling sheet
+ * app.js writes the free map area as --free-t/-l/-r/-b on <body> from the
+ * active section's layout().padding, so map furniture follows the panels.
+ * ========================================================================== */
+
+:root {
+  --bars-h:  calc(var(--topbar-h) + var(--filterbar-h) + var(--readout-h));   /* 124 */
+  --stage-t: calc(var(--bars-h) + var(--inset));                              /* 140 */
+  --rail-b:  calc(var(--inset) + var(--kpi-h) + var(--gap));                  /* 140 */
+}
+body {
+  --free-t: 148px; --free-l: 388px; --free-r: 412px; --free-b: 188px;          /* Overview default (§C.1) */
+}
+
+/* ── 1 · Map layer ──────────────────────────────────────────────────────── */
+#map {
+  position: fixed; inset: 0; z-index: calc(var(--z-map) + 1);
+  overflow: hidden;
+  background: var(--grad-mesh);            /* shows only until the basemap draws */
+  outline: none;
+}
+#map-grid {
+  position: fixed; inset: 0; z-index: var(--z-map); pointer-events: none;
+  display: none;
+}
+#map-vignette {                            /* mesh glow at the map edges (no blur); Deep dive adds the dark vignette */
+  position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  background: var(--mesh-edge), radial-gradient(ellipse at 50% 46%, transparent 55%, var(--vignette-edge) 100%);
+}
+
+/* ── 2 · Section layer ──────────────────────────────────────────────────── */
+#section-root {
+  position: fixed; inset: 0; z-index: var(--z-rails);
+  pointer-events: none;                  /* the map stays interactive between panels */
+}
+#section-root > * { pointer-events: auto; }
+#section-root:focus { outline: none; }
+/* hosts fill the stage but never block the map between panels (beats `#section-root > *`) */
+#section-root > .section-host { position: absolute; inset: 0; pointer-events: none; }
+.section-host > * { pointer-events: auto; }
+.section-host:focus { outline: none; }
+
+.rail {
+  position: absolute; top: var(--stage-t); bottom: var(--rail-b);
+  display: flex; flex-direction: column;
+  z-index: var(--z-rails);
+}
+.rail--l { left: var(--inset);  width: var(--rail-l); }
+.rail--r { right: var(--inset); width: var(--rail-r); }
+.rail__scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--mask) 24px, var(--mask) calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, var(--mask) 24px, var(--mask) calc(100% - 24px), transparent 100%);
+}
+body.rail-l-collapsed .rail--l { transform: translateX(calc(-100% - var(--inset))); }
+body.rail-r-collapsed .rail--r { transform: translateX(calc(100% + var(--inset))); }
+.rail { transition: transform var(--dur-panel-in) var(--ease-enter); }
+
+.kpi-strip {
+  position: absolute; left: var(--inset); right: var(--inset); bottom: var(--inset);
+  height: var(--kpi-h);
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  z-index: var(--z-rails);
+}
+
+.dock {
+  position: absolute; bottom: var(--rail-b);
+  left: var(--free-l); right: var(--free-r);
+  width: max-content; max-width: calc(100vw - var(--free-l) - var(--free-r));
+  margin-inline: auto;
+  height: var(--dock-h);
+  display: flex; align-items: center;
+  z-index: var(--z-rails);
+}
+.legend {
+  position: absolute; top: var(--stage-t); right: var(--free-r);
+  width: 200px; z-index: var(--z-rails);
+}
+.telemetry {
+  position: absolute; left: var(--free-l); bottom: calc(var(--free-b) + 4px);
+  z-index: var(--z-rails);
+}
+
+.sheet {
+  position: absolute; top: var(--stage-t); right: var(--inset); bottom: var(--inset);
+  width: var(--sheet-w);
+  display: flex; flex-direction: column;
+  z-index: var(--z-sheet);
+  transition: transform var(--dur-sheet) var(--ease-enter);
+}
+.sheet--data { width: var(--sheet-w-data); }
+.sheet--wide { width: var(--sheet-w-wide); }
+.sheet__scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scroll-padding-top: 96px;
+}
+.sheet__head { padding: var(--s-6) var(--s-6) 0; }
+.sheet__nav {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 var(--s-6);
+  background: var(--glass-sticky);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+}
+.sheet__body { padding: 0 var(--s-6) var(--s-6); }
+
+/* 12-column grid inside sheets: 16 px gutters, 24 px sheet padding (§C.2) */
+.grid-12 { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 16px; }
+.span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; }
+.span-6  { grid-column: span 6; }  .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; }
+.span-3  { grid-column: span 3; }
+
+/* ── 3 · Bars ───────────────────────────────────────────────────────────── */
+.bar {
+  position: fixed; left: 0; right: 0; z-index: var(--z-bars);
+  background: var(--glass-bg-bar);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+#topbar   { top: 0; height: var(--topbar-h); border-bottom: 1px solid var(--rule); box-shadow: var(--hl-panel); }
+#topbar::before {                         /* machined top edge, peaking 30 % from the left (§B.6) */
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, var(--metal) 30%, transparent 85%);
+  opacity: .32;
+}
+#readout {
+  top: calc(var(--topbar-h) + var(--filterbar-h)); height: var(--readout-h);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-sm);
+}
+#topbar:empty, #readout:empty { display: none; }
+
+/* Top bar: lockup · tabs (centred in the free space) · right cluster */
+.tb {
+  height: 100%;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+  column-gap: var(--s-6);
+  padding: 0 var(--inset);
+}
+.lockup { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; }
+.lockup__bank {
+  font: 600 12px/16px var(--font-sans); letter-spacing: .16em; text-transform: uppercase; color: var(--text-1);
+}
+.lockup__rule { width: 2px; height: 18px; flex: none; background: var(--gold-brand); }   /* the only Mandiri yellow on chrome */
+.lockup__branch { font: 400 16px/20px var(--font-serif); color: var(--text-1); letter-spacing: -.005em; }
+
+.tabs {
+  position: relative; justify-self: center;
+  display: flex; align-items: stretch; height: var(--topbar-h);
+  max-width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  position: relative; flex: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  font: 500 var(--fs-ui)/var(--lh-ui) var(--font-sans); color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--dur-hover) var(--ease-standard);
+}
+.tab:hover { color: var(--text-1); }
+.tab[aria-selected="true"] { color: var(--text-1); }
+.tab:focus-visible { outline-offset: -6px; box-shadow: inset 0 0 0 5px var(--signal-a20); }
+.tab__key { display: none; font: 400 12px/1 var(--font-mono); color: var(--text-3); }
+.tab__more { display: none; }
+.tabs__ink {                               /* 2 px metal underline, 6 px below the baseline (§C.1) */
+  position: absolute; left: 0; bottom: 13px; height: 2px; width: 0;
+  background: var(--metal);
+  transform-origin: 0 0;
+  transition: transform 260ms var(--ease-standard), width 260ms var(--ease-standard);
+  pointer-events: none;
+}
+.tb-right { justify-self: end; display: flex; align-items: center; gap: var(--s-3); white-space: nowrap; }
+.asof { font: 400 var(--fs-mono)/var(--lh-mono) var(--font-mono); color: var(--text-2); }
+
+/* Readout (§D.6, Deep dive) */
+
+.readout {
+  height: 100%; display: flex; align-items: center; gap: var(--s-4);
+  padding: 0 var(--inset);
+  font: 400 var(--fs-mono)/var(--lh-mono) var(--font-mono); color: var(--text-2);
+}
+.readout__q { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.readout__q b, .readout__q strong { font-weight: 400; color: var(--text-1); }
+.readout__caret { color: var(--text-3); margin-right: 6px; }
+
+/* ── 4 · Bottom tab bar (< 1024 px; §C.3 390 behaviour) ──────────────────── */
+#tabbar { display: none; }
+
+/* ── 5 · Overlay root ───────────────────────────────────────────────────── */
+#overlay-root { position: relative; z-index: var(--z-pop); }
+
+/* "Peta ⟷ Panel" toggle (md and below, sheet sections only) */
+.map-toggle { display: none; }
+
+/* ==========================================================================
+ * Breakpoints
+ * ========================================================================== */
+
+/* xl ≥ 1680: wider rails, full tab labels, key numerals */
+@media (min-width: 1680px) {
+  :root { --rail-l: 384px; --rail-r: 440px; }
+  .tab__key  { display: inline; }
+  .tab__more { display: inline; }
+}
+
+/* lg 1280–1679 is the reference. Below 1440 the as-of stamp drops its lead-in. */
+@media (max-width: 1599px) {
+  .asof__lead { display: none; }
+  .tb { column-gap: var(--s-5); }
+  .tab { padding: 0 8px; }
+}
+@media (max-width: 1439px) {
+  .tb { column-gap: var(--s-4); }
+}
+@media (max-width: 1359px) {
+  .tab { padding: 0 8px; }
+  .tb-right .btn--bar .btn__label { display: none; }
+  .tb-right .btn--bar { width: 28px; padding: 0; justify-content: center; }
+}
+
+/* md 1024–1279 */
+@media (max-width: 1279px) {
+  :root { --rail-l: 312px; --sheet-w: calc(100vw - 32px); --sheet-w-data: calc(100vw - 32px); --sheet-w-wide: calc(100vw - 32px); }
+  .lockup__bank { letter-spacing: .12em; }
+  .lockup__branch .lockup__long { display: none; }
+  .asof { display: none; }
+  .tab { padding: 0 8px; }
+
+  /* Right rail becomes a 380 px slide-over drawer */
+  .rail--r {
+    width: 380px; top: var(--bars-h); right: 0; bottom: 0;
+    border-radius: 0;
+    transform: translateX(100%);
+    z-index: var(--z-drawer);
+  }
+  .rail--r.is-open { transform: none; }
+
+  /* KPI strip: horizontal snap row, 200 px cells, 3 visible */
+  .kpi-strip {
+    grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 200px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, var(--mask) 16px, var(--mask) calc(100% - 16px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, var(--mask) 16px, var(--mask) calc(100% - 16px), transparent 100%);
+  }
+  .kpi-strip > * { scroll-snap-align: start; }
+
+  /* Sheets: full width minus 32; the Peta ⟷ Panel toggle slides them away */
+  body.is-sheet-away .sheet { transform: translateX(calc(100% + var(--inset))); }
+  body[data-posture="sheet"] .map-toggle { display: inline-flex; }
+  .grid-12 > .span-8, .grid-12 > .span-7, .grid-12 > .span-6,
+  .grid-12 > .span-5, .grid-12 > .span-4 { grid-column: span 12; }
+}
+
+/* sm 600–1023: bottom tab bar, rails as drawers, sheets full screen */
+@media (max-width: 1023px) {
+  .tabs { display: none; }
+  .tb { grid-template-columns: auto 1fr auto; }
+  #tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-bars);
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--glass-bg-bar);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border-top: 1px solid var(--glass-border);
+  }
+  .rail--l {
+    width: min(360px, 88vw); top: var(--bars-h); left: 0; bottom: 0;
+    border-radius: 0;
+    transform: translateX(-100%);
+    z-index: var(--z-drawer);
+  }
+  .rail--l.is-open { transform: none; }
+  .kpi-strip {
+    left: 0; right: 0; bottom: var(--tabbar-h); height: auto;
+    grid-auto-flow: row; grid-auto-columns: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-radius: 0; -webkit-mask-image: none; mask-image: none;
+  }
+  .dock, #section-root .telemetry { display: none; }
+  .sheet { top: var(--bars-h); left: 0; right: 0; bottom: var(--tabbar-h); width: auto; border-radius: 0; border-left: 0; border-right: 0; }
+  .sheet__head { padding: var(--s-5) var(--s-4) 0; }
+  .sheet__nav, .sheet__body { padding-left: var(--s-4); padding-right: var(--s-4); }
+  body .map-toggle { bottom: calc(var(--tabbar-h) + var(--inset)); }
+}
+
+/* sm only: with the rails folded into drawers, the pre-map stage uses the open map */
+@media (min-width: 600px) and (max-width: 1023px) {
+  body[data-posture="rails"] .stage { left: 0; right: 0; top: var(--bars-h); bottom: calc(var(--tabbar-h) + 2 * var(--kpi-h)); }
+}
+
+/* xs < 600 (spec at 390×844): the page flows; the map is a hero behind it */
+@media (max-width: 599px) {
+  :root { --topbar-h: var(--topbar-h-xs); --map-h-xs: 52vh; }
+  body[data-posture="sheet"] { --map-h-xs: 34vh; }
+  body { overflow-x: hidden; overflow-y: auto; }
+  #map { bottom: auto; top: var(--topbar-h); height: var(--map-h-xs); }
+  #map-vignette { display: none; }
+  #topbar { position: fixed; }
+  #readout { position: relative; top: auto; box-shadow: none; }
+  #readout .btn { display: none; }
+  #section-root { position: relative; inset: auto; z-index: auto; pointer-events: auto; padding: var(--s-4) var(--inset) calc(var(--tabbar-h) + var(--s-6)); }
+  #section-root > .section-host { position: static; display: flex; flex-direction: column; gap: var(--s-3); pointer-events: auto; }
+
+  .lockup__bank { font-size: 12px; letter-spacing: .1em; }
+  .lockup__bank .lockup__long { display: none; }
+  .lockup__branch { font-size: 15px; }
+
+  .rail, .rail--l, .rail--r, .kpi-strip, .dock, .telemetry, .sheet {
+    position: relative; inset: auto; top: auto; left: auto; right: auto; bottom: auto;
+    width: auto; max-width: none; height: auto; margin: 0; transform: none;
+    z-index: auto; border-radius: var(--r-panel);
+  }
+  .rail, .dock { display: flex; }
+  .rail__scroll { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+  .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dock { order: 9; overflow-x: auto; }
+  .sheet { display: block; }
+  .sheet__scroll { overflow: visible; }
+  .sheet__nav { position: static; overflow-x: auto; }
+  #section-root .telemetry { display: none; }
+  .map-toggle { display: none !important; }
+
+  /* Touch targets ≥ 44 px under 600 px (§L.5) */
+  .tab, .btn, .chip, .seg__opt { min-height: 44px; }
+}

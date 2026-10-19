@@ -1,0 +1,497 @@
+/* ==========================================================================
+ * Cilangkap Command · design tokens
+ * 1. docs/BUILD_SPEC.md §B.1, copied verbatim (do not edit that block).
+ * 2. Appended amendments, each labelled with its source:
+ *    · SME addendum AM-9 (group colours)
+ *    · Properti & KPR + Leaderboard addendum §2.5
+ *    · 8-section navigation (section metals), shell constants, §L.5 contrast.
+ * Every colour used anywhere in CSS is defined in this file (§M.7).
+ * ========================================================================== */
+
+/* ── 1 · BUILD_SPEC §B.1 (verbatim) ───────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* ── Surfaces ─────────────────────────────────────────── */
+  --canvas:            #05080F;                 /* app background, map underlay, vignette */
+  --surface-glass:     rgba(10, 17, 31, 0.76);  /* floating rails over map (never < .72) */
+  --surface-glass-hi:  rgba(10, 17, 31, 0.88);  /* filter bar, KPI strip, dock */
+  --surface-sheet:     rgba(9, 15, 27, 0.95);   /* section sheets carrying charts */
+  --surface-solid:     #0E1626;                 /* drawers, tooltips, popovers */
+  --surface-raised:    #121C2E;                 /* inputs on panels, segmented track */
+  --surface-hover:     #141E31;                 /* row/chip hover */
+  --surface-well:      #080D18;                 /* input wells, matrix gutters */
+  --brand-navy:        #003D79;                 /* selected-row fills, focus fill. NEVER text on dark */
+  --navy-deep:         #00244A;
+  --navy-wash:         #04122A;                 /* map tint layer colour */
+
+  /* ── Rules (hairlines) ────────────────────────────────── */
+  --rule:              rgba(214, 224, 240, 0.08);
+  --rule-strong:       rgba(214, 224, 240, 0.14);
+  --rule-gold:         rgba(242, 183, 5, 0.32);
+  --rule-platinum:     rgba(201, 209, 220, 0.30);
+  --rule-signal:       rgba(56, 214, 232, 0.55);
+
+  /* ── Text (contrast on --surface-solid) ───────────────── */
+  --text-1:            #EDEFF3;   /* ≈16:1  primary */
+  --text-2:            #A7B0C0;   /* ≈8.6:1 secondary */
+  --text-3:            #7C879A;   /* ≈5.0:1 meta; floor for any text; only on surfaces ≥ 85% opaque */
+  --text-off:          #4B5568;   /* non-text marks only (ticks, disabled glyphs) */
+  --text-on-gold:      #1A1405;
+
+  /* ── Metals and signal ────────────────────────────────── */
+  --gold:              #F2B705;   /* console metal: active filter, bevel, opportunity */
+  --gold-soft:         #FFE7A1;   /* active labels, specular */
+  --gold-brand:        #FFB700;   /* Mandiri yellow: ONLY the home-branch beacon */
+  --gold-a10:          rgba(242, 183, 5, 0.10);
+  --gold-a16:          rgba(242, 183, 5, 0.16);
+  --platinum:          #C9D1DC;   /* business metal */
+  --platinum-a10:      rgba(201, 209, 220, 0.10);
+  --signal:            #38D6E8;   /* focus, selection, telemetry ONLY */
+  --signal-a20:        rgba(56, 214, 232, 0.20);
+
+  /* ── Semantic ─────────────────────────────────────────── */
+  --pos:               #4CC38A;   /* always with ▲ */
+  --neg:               #F26D5B;   /* always with ▼ */
+  --warn:              #E8A13A;   /* always with a glyph */
+  --info:              #6CC4E0;
+
+  /* Kolektibilitas */
+  --kol-1: #4CC38A;  --kol-2: #E8A13A;  --kol-3: #F2925B;  --kol-4: #F26D5B;  --kol-5: #C8475E;
+
+  /* ── Product categorical (each also has a glyph, §B.5) ── */
+  --p-ksm:   #5AA9FF;   /* azure     ● circle            */
+  --p-kpr:   #3FC1A5;   /* jade      ■ square            */
+  --p-kkb:   #E8875B;   /* copper    ◆ diamond           */
+  --p-cc:    #B58CFF;   /* amethyst  ▲ triangle          */
+  --p-mg:    #EF7A9A;   /* rose      ⬢ hexagon           */
+  --p-pen:   #B8D35A;   /* lime      ✦ four-point star   */
+  --p-oth:   #8F99AB;   /* slate     – dash              */
+  /* status glyphs on map */
+  --st-whitespace: var(--gold);      /* ◯ gold ring: payroll without credit = opportunity */
+  --st-prospect:   #8F99AB;          /* ◇ slate hollow diamond: non-payroll prospect      */
+
+  /* ── Sequential "Ember→Gold" (heat, hex, matrix) ──────── */
+  --heat-0: #2A1B3D;  /* never on map (vanishes); legends only */
+  --heat-1: #5A2A4E;
+  --heat-2: #8E3B47;
+  --heat-3: #C2573A;
+  --heat-4: #E68A2E;
+  --heat-5: #F2B705;
+  --heat-6: #FFE7A1;
+
+  /* ── Diverging (vs target / vs branch average) ────────── */
+  --div-neg-2: #F26D5B;  --div-neg-1: #9C4A42;  --div-mid: #2B3445;
+  --div-pos-1: #2E6E8E;  --div-pos-2: #6CC4E0;
+
+  /* ── "Platinum" ramp (Business) ──────────────────────── */
+  --plat-0: #1A2333;  --plat-1: #3A4A63;  --plat-2: #6F819E;  --plat-3: #AEBBCD;  --plat-4: #EEF2F7;
+
+  /* Business entities */
+  --b-merchant: #E9EDF2;   /* ■ square 6px+       */
+  --b-giro:     #A7B4C6;   /* ◆ diamond 9px+      */
+  --b-payroll:  #7E97BA;   /* ring / nested column */
+  /* Other banks (graphical only, never text) */
+  --bank-bsi: #5A6B88;  --bank-bni: #4A5873;  --bank-bri: #3D495F;  --bank-btn: #334055;  --bank-bjb: #6B5A4A;  --bank-oth: #2B3445;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-sans:  "Inter Tight", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --fs-eyebrow: 10px;  --lh-eyebrow: 14px;   /* caps, +0.12em, sans 600, text-3 */
+  --fs-mono:    11px;  --lh-mono:    16px;
+  --fs-chip:    12px;  --lh-chip:    16px;
+  --fs-body:    13px;  --lh-body:    20px;   /* BASE */
+  --fs-ui:      14px;  --lh-ui:      20px;
+  --fs-panel:   15px;  --lh-panel:   22px;   /* panel titles, sans 600 */
+  --fs-section: 18px;  --lh-section: 24px;   /* serif 500 */
+  --fs-sheet:   26px;  --lh-sheet:   32px;   /* sheet titles, serif 400 */
+  --fs-num-s:   24px;  --lh-num-s:   28px;   /* secondary numerals, serif 400 */
+  --fs-num:     36px;  --lh-num:     40px;   /* KPI numerals, serif 400 */
+  --fs-hero:    56px;  --lh-hero:    56px;   /* one hero figure per view, serif 300 */
+
+  /* ── Space (4px base) ─────────────────────────────────── */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;  --s-5: 20px;  --s-6: 24px;  --s-8: 32px;  --s-12: 48px;
+  --inset: 16px;        /* panels from viewport edges */
+  --gap:   12px;        /* between floating panels */
+
+  /* ── Radii (nothing rounder than 6px) ─────────────────── */
+  --r-ctl: 2px;  --r-tip: 4px;  --r-panel: 6px;
+
+  /* ── Elevation: ONE SUN at azimuth 300°, altitude 35° → shadows fall east-south-east ── */
+  --blur-panel: blur(18px) saturate(140%);
+  --shadow-panel: 10px 24px 48px -12px rgba(0, 0, 0, 0.60);
+  --shadow-pop:    8px 18px 40px -10px rgba(0, 0, 0, 0.70);
+  --hl-panel: inset 0 1px 0 rgba(255, 255, 255, 0.045), inset 1px 0 0 rgba(255, 236, 200, 0.025);
+
+  /* ── Motion ───────────────────────────────────────────── */
+  /* Item 38 (16 Oct 2026): one easing family and three durations for the whole dashboard. The same numbers live in
+     MCD.motion (assets/js/motion.js: ease, dur, flightMs, countUp, stagger); keep both in step. Opacity and
+     transforms only; under prefers-reduced-motion the durations below become an instant cut. */
+  --ease-out:      cubic-bezier(.22, 1, .36, 1);   /* ease-out-quint: entrances, camera, numbers */
+  --ease-in-out:   cubic-bezier(.65, 0, .35, 1);   /* ease-in-out-cubic: exits */
+  --dur-fast: 180ms;  --dur-base: 300ms;  --dur-slow: 500ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* hover and colour changes */
+  /* Older names point at the item 38 scale, so every older rule (sections.css panels, slide-overs, sheets) joins
+     the family and follows reduced motion with it. (--dur-camera is gone: the map's flights use MCD.motion.flightMs.) */
+  --ease-enter:    var(--ease-out);
+  --ease-exit:     var(--ease-in-out);
+  --ease-camera:   var(--ease-in-out);
+  --dur-panel-in:  var(--dur-base);  --dur-panel-out: var(--dur-fast);  --dur-sheet: var(--dur-base);
+  --dur-hover: 140ms;  --dur-chip: 160ms;  --dur-xhl: 180ms;  --dur-num: var(--dur-slow);  --dur-grow: 900ms;
+
+  /* ── Layout constants (1440 reference) ────────────────── */
+  --topbar-h: 52px;  --filterbar-h: 48px;  --readout-h: 24px;
+  --rail-l: 360px;   --rail-r: 384px;  --kpi-h: 112px;  --dock-h: 40px;
+  --sheet-w: clamp(760px, 62vw, 1080px);
+
+  /* ── Z-index ──────────────────────────────────────────── */
+  --z-map: 0; --z-markers: 10; --z-rails: 20; --z-sheet: 30; --z-bars: 40; --z-pop: 50; --z-drawer: 60; --z-modal: 70; --z-tip: 80; --z-skip: 90;
+
+  /* Section metal: switched by [data-section] on <body> */
+  --metal: var(--gold);
+  --metal-rule: var(--rule-gold);
+}
+body[data-section="data"] {
+  --metal: var(--platinum);
+  --metal-rule: var(--rule-platinum);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Item 38: instant cuts. 1 ms, not 0: a cut that still fires transitionend / animationend, which map.js uses to
+     re-fit its labels after a panel moved. */
+  :root { --dur-hover: 0ms; --dur-chip: 0ms; --dur-xhl: 120ms; --dur-num: 0ms; --dur-grow: 0ms;
+          --dur-fast: 1ms; --dur-base: 1ms; --dur-slow: 1ms; }   /* --dur-panel-in/-out and --dur-sheet follow */
+}
+
+/* ── 2a · SME addendum, AM-9: SME group colours (mirrored as RGB in map.js) ── */
+:root {
+  /* ── SME groups (Addendum A1) ─────────────────────────── code · label */
+  --g-0:  #D9A066;   /* KL · Kuliner (F&B) */
+  --g-1:  #7FB3D5;   /* RT · Ritel & Kelontong */
+  --g-2:  #A99BD6;   /* OT · Otomotif */
+  --g-3:  #D98C8C;   /* KS · Kesehatan & Apotek */
+  --g-4:  #8CC7A1;   /* PD · Pendidikan */
+  --g-5:  #D6A2C4;   /* KC · Kecantikan & Perawatan */
+  --g-6:  #B5A58A;   /* BN · Konstruksi & Bahan Bangunan */
+  --g-7:  #9AA5B4;   /* MF · Manufaktur & Industri */
+  --g-8:  #6FC2C0;   /* GD · Grosir & Distribusi */
+  --g-9:  #8F9FD9;   /* JS · Jasa Profesional */
+  --g-10: #C9CF7A;   /* PW · Perhotelan & Wisata */
+  --g-11: #6B7588;   /* LN · Lainnya */
+}
+
+/* ── 2b · Properti & KPR + Leaderboard addendum §2.5 ─────────────────────── */
+:root{
+  /* Affordability classes. Terjangkau is an opportunity marker, so it is gold (§0.1.4). */
+  --cls-a:  var(--status-ok);   /* KPR affordability: Affordable (green) */
+  --cls-s:  var(--status-mid);  /* Stretch, up to 15% above the budget (amber) */
+  --cls-o:  var(--status-bad);  /* Out of reach (red) */
+  --cls-na: var(--status-none); /* Cannot assess (grey) */
+  --cls-p:  var(--status-potential); /* before a take-home pay is entered (blue) */
+  /* Segments, ordered by price on the Ember→Gold ramp */
+  --seg-subsidi: var(--heat-2); --seg-menengah: var(--heat-3); --seg-menengah-atas: var(--heat-4); --seg-premium: var(--heat-5);
+  /* Amortisation */
+  --amort-principal: var(--p-kpr); --amort-interest: var(--heat-4); --amort-balance: var(--text-1);
+  /* Leaderboard */
+  --lb-bronze: #B98A5E;                      /* the only new colour: third-place metal (rules only) */
+  --sheet-w-wide: clamp(980px, 86vw, 1320px);
+}
+
+/* ── 2c · Navigation: five sections, keys 1–5 (15 Oct 2026) ──────────────────
+ * Merchants and Schools wear the platinum metal (institutional and business
+ * banking); Overview and KPR stay gold (property addendum §1).               */
+body[data-section="merchants"], body[data-section="schools"] {
+  --metal: var(--platinum);
+  --metal-rule: var(--rule-platinum);
+}
+
+/* Registered so the bevel and underline cross-fade gold ⇄ platinum (§L.1). */
+@property --metal      { syntax: '<color>'; inherits: true; initial-value: #F2B705; }
+@property --metal-rule { syntax: '<color>'; inherits: true; initial-value: rgba(242, 183, 5, 0.32); }
+
+/* ── 2d · Shell constants and derived colours (no raw colours elsewhere) ── */
+:root {
+  --sheet-w-data:   clamp(820px, 70vw, 1180px);    /* §C.1 Data & Privasi sheet  */
+  --tabbar-h:       56px;                          /* §C.3 390 bottom tab bar    */
+  --topbar-h-xs:    48px;                          /* §C.3 390 top bar           */
+  --drawer-w:       400px;                         /* §C.8.4 drawer              */
+  --palette-w:      560px;                         /* §C.7                       */
+
+  --surface-glass-fb: rgba(10, 17, 31, 0.94);     /* §B.4 no-backdrop-filter fallback */
+  --scrim:          rgba(2, 6, 13, 0.64);          /* §C.7 palette / modal scrim */
+  --scrim-drag:     rgba(5, 8, 15, 0.60);          /* §C.6 drag-over (40% view)  */
+  --vignette-edge:  rgba(5, 8, 15, 0.85);          /* §E.3 map vignette          */
+  --grid-line:      rgba(214, 224, 240, 0.05);     /* §E.12 navy grid fallback   */
+  --scrollbar:      rgba(214, 224, 240, 0.14);     /* §C.8.4 scrollbars          */
+  --shimmer:        rgba(255, 255, 255, 0.04);     /* §L.3 skeleton shimmer      */
+  --hairline-hi:    rgba(255, 255, 255, 0.06);     /* lit top edge of 3D controls (one sun) */
+  --keyline:        rgba(5, 8, 15, 0.90);          /* dark keyline under glyphs and thumbs */
+  --navy-a40:       rgba(0, 61, 121, 0.40);        /* §B.4 selected-row fill     */
+  --navy-glow:      rgba(0, 61, 121, 0.38);        /* canvas atmosphere          */
+  --gold-glow:      rgba(242, 183, 5, 0.06);       /* canvas atmosphere (sun side) */
+  --gold-brand-a24: rgba(255, 183, 0, 0.24);       /* beacon halo                */
+  --neg-a50:        rgba(242, 109, 91, 0.50);      /* §C.8.4 danger button rule  */
+  --neg-a06:        rgba(242, 109, 91, 0.06);      /* §C.4 "melewati pensiun" region */
+  --warn-a10:       rgba(232, 161, 58, 0.10);
+  --signal-a70:     rgba(56, 214, 232, 0.70);      /* §B.4 KPI selection brackets */
+  --mask:           #000;                          /* alpha source for mask-image fades (never painted) */
+}
+
+/* ── 2e · §L.5 prefers-contrast: more ─────────────────────────────────────── */
+@media (prefers-contrast: more) {
+  :root { --text-3: var(--text-2); --rule: rgba(214, 224, 240, 0.20); --rule-strong: rgba(214, 224, 240, 0.30); }
+}
+
+/* ── 2f · Shell v2: two views (Overview · Deep dive) and child-simple navigation
+ * (branch decisions of 12 Oct 2026, docs/COPY_STYLE_EN.md "Product decisions").
+ * The bars grow: a 60 px top bar (brand · view switch · Day/Night · Help ·
+ * Search · Lock) and a 56 px section row. Overview hides the readout.      */
+:root {
+  --topbar-h:     60px;
+  --navrow-h:     56px;
+  --filterbar-h:  0px;                             /* no global filter bar since 15 Oct 2026: filters live in each section */
+  --readout-h:    26px;
+  --guide-w:      clamp(340px, 30vw, 420px);       /* Overview card column (left) */
+  --target:       40px;                            /* minimum click target in Overview */
+  --map-ctl-gap:  8px;
+  /* text drawn over satellite imagery keeps its night look in both themes */
+  --on-imagery:      #FFE7A1;
+  --on-imagery-2:    #A7B0C0;
+  --on-imagery-halo: rgba(5, 8, 15, 0.95);
+  /* KPI tiles reserve two lines for their titles (never cut a label short) */
+  --kpi-h:        124px;
+
+  /* Demo data (COPY_STYLE_EN item 7): amber banner, switch and DEMO marks.
+     Ink on the banner is 7.5:1 (night) and 9.9:1 (day); tag text uses --warn (AA in both themes). */
+  --banner-h:        0px;                          /* body.is-demo sets the banner height */
+  --demo-bg:         #D99A2B;
+  --demo-ink:        #1A1405;
+  --demo-ink-rule:   rgba(26, 20, 5, 0.45);
+  --demo-ink-a10:    rgba(26, 20, 5, 0.10);
+  --demo-tag-ink:    var(--warn);
+  --demo-tag-bg:     var(--warn-a10);
+  --demo-tag-rule:   rgba(232, 161, 58, 0.55);
+  /* Map loading state */
+  --map-skeleton:    rgba(214, 224, 240, 0.035);
+
+  /* ── Status colour code (COPY_STYLE_EN item 11), the same everywhere: legends say the words.
+     green = already acquired / on target · amber = partly / close · red = not yet / behind ·
+     grey = no data · blue = potential (before the bank file is imported; never a fake red).
+     Fills are bold on purpose; text on them uses --status-ink. -a20 tints for tiles and rows. */
+  --status-ok:          #2FB879;
+  --status-mid:         #F0A92E;
+  --status-bad:         #EE5A4F;
+  --status-none:        #6F7B90;
+  --status-potential:   #4C8DF6;
+  --status-ink:         #05080F;
+  --status-ok-a20:      rgba(47, 184, 121, 0.20);
+  --status-mid-a20:     rgba(240, 169, 46, 0.20);
+  --status-bad-a20:     rgba(238, 90, 79, 0.20);
+  --status-none-a20:    rgba(111, 123, 144, 0.20);
+  --status-potential-a20: rgba(76, 141, 246, 0.20);
+}
+
+/* ── 3 · Day theme ─────────────────────────────────────────────────────────
+ * :root[data-theme="day"] overrides the night tokens above. Warm off-white
+ * canvas, navy ink, gold darkened for text and lines. Every text token was
+ * checked for WCAG AA (≥ 4.5:1) on --canvas, --surface-solid, --surface-sheet
+ * and --surface-glass composited over a light map: text-1 14.8:1, text-2
+ * 7.9:1, text-3 5.5:1, gold 5.9:1, gold-soft 7.2:1, pos 5.2:1, neg 5.2:1,
+ * warn 5.0:1, signal 5.0:1 (lowest values, on --canvas).                    */
+:root[data-theme="day"] {
+  color-scheme: light;
+
+  --canvas:            #F4F1EA;
+  --surface-glass:     rgba(252, 250, 245, 0.86);
+  --surface-glass-hi:  rgba(252, 250, 245, 0.94);
+  --surface-sheet:     rgba(253, 252, 248, 0.97);
+  --surface-solid:     #FDFBF6;
+  --surface-raised:    #EDE8DD;
+  --surface-hover:     #EFEAE0;
+  --surface-well:      #F1EDE4;
+  --navy-wash:         #FFFFFF;
+
+  --rule:              rgba(14, 30, 54, 0.10);
+  --rule-strong:       rgba(14, 30, 54, 0.18);
+  --rule-gold:         rgba(122, 86, 0, 0.42);
+  --rule-platinum:     rgba(78, 94, 119, 0.38);
+  --rule-signal:       rgba(0, 114, 127, 0.60);
+
+  --text-1:            #0E1E36;
+  --text-2:            #3B4A62;
+  --text-3:            #566275;
+  --text-off:          #A3ABB7;
+  --text-on-gold:      #1A1405;
+
+  --gold:              #7A5600;
+  --gold-soft:         #6B4A00;
+  --gold-a10:          rgba(184, 134, 0, 0.12);
+  --gold-a16:          rgba(184, 134, 0, 0.20);
+  --platinum:          #4E5E77;
+  --platinum-a10:      rgba(78, 94, 119, 0.10);
+  --signal:            #00727F;
+  --signal-a20:        rgba(0, 114, 127, 0.20);
+
+  --pos:               #17734A;
+  --neg:               #B5372A;
+  --warn:              #985700;
+  --info:              #1C6580;
+  --kol-1: #17734A;  --kol-2: #985700;  --kol-3: #B4561C;  --kol-4: #B5372A;  --kol-5: #8E2240;
+
+  --p-ksm:   #2F7FD8;
+  --p-kpr:   #168F78;
+  --p-kkb:   #C4602D;
+  --p-cc:    #8457DB;
+  --p-mg:    #CC4C77;
+  --p-pen:   #6F8C14;
+  --p-oth:   #687386;
+  --st-prospect: #687386;
+
+  --heat-0: #FFF4DC;
+  --heat-1: #FCE3B0;
+  --heat-2: #F7C66B;
+  --heat-3: #EE9B3B;
+  --heat-4: #D9692A;
+  --heat-5: #B23A2A;
+  --heat-6: #7A1E3A;
+
+  --div-neg-2: #B5372A;  --div-neg-1: #E3A296;  --div-mid: #E4DFD5;
+  --div-pos-1: #96C1D6;  --div-pos-2: #1C6580;
+
+  --plat-0: #EEF2F7;  --plat-1: #C9D3E0;  --plat-2: #8D9DB5;  --plat-3: #55667F;  --plat-4: #1A2333;
+  --b-merchant: #33435C;  --b-giro: #5E7290;  --b-payroll: #3F5F92;
+  --bank-bsi: #6A7B98;  --bank-bni: #5A6883;  --bank-bri: #4D596F;  --bank-btn: #435065;  --bank-bjb: #7B6A5A;  --bank-oth: #8C95A3;
+
+  --shadow-panel: 6px 16px 36px -14px rgba(20, 30, 50, 0.26);
+  --shadow-pop:   6px 14px 32px -10px rgba(20, 30, 50, 0.30);
+  --hl-panel:     inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 1px 0 0 rgba(255, 255, 255, 0.35);
+
+  --surface-glass-fb: rgba(252, 250, 245, 0.97);
+  --scrim:          rgba(14, 22, 38, 0.38);
+  --scrim-drag:     rgba(244, 241, 234, 0.72);
+  --vignette-edge:  rgba(14, 30, 54, 0.10);
+  --grid-line:      rgba(14, 30, 54, 0.06);
+  --scrollbar:      rgba(14, 30, 54, 0.22);
+  --shimmer:        rgba(14, 30, 54, 0.05);
+  --hairline-hi:    rgba(255, 255, 255, 0.85);
+  --keyline:        rgba(255, 255, 255, 0.92);
+  --navy-a40:       rgba(0, 61, 121, 0.12);
+  --navy-glow:      rgba(0, 61, 121, 0.06);
+  --gold-glow:      rgba(184, 134, 0, 0.06);
+  --gold-brand-a24: rgba(255, 183, 0, 0.30);
+  --neg-a50:        rgba(181, 55, 42, 0.50);
+  --neg-a06:        rgba(181, 55, 42, 0.06);
+  --warn-a10:       rgba(152, 87, 0, 0.10);
+  --signal-a70:     rgba(0, 114, 127, 0.70);
+
+  --lb-bronze: #8C6239;
+
+  --demo-bg:         #F3C14B;
+  --demo-ink:        #2B1D00;
+  --demo-ink-rule:   rgba(43, 29, 0, 0.40);
+  --demo-ink-a10:    rgba(43, 29, 0, 0.08);
+  --demo-tag-rule:   rgba(152, 87, 0, 0.45);
+  --map-skeleton:    rgba(14, 30, 54, 0.045);
+
+  /* Status colour code, day: darker so text and thin lines keep ≥ 4.5:1 on the light canvas */
+  --status-ok:          #12764A;
+  --status-mid:         #B87300;                 /* D18 (16 Oct 2026): a true amber fill, not brown */
+  --status-bad:         #C2392E;
+  --status-none:        #5D6879;
+  --status-potential:   #1F5FD1;
+  --status-ink:         #FFFFFF;
+  --status-ok-a20:      rgba(18, 118, 74, 0.16);
+  --status-mid-a20:     rgba(184, 115, 0, 0.16);
+  --status-bad-a20:     rgba(194, 57, 46, 0.16);
+  --status-none-a20:    rgba(93, 104, 121, 0.16);
+  --status-potential-a20: rgba(31, 95, 209, 0.16);
+}
+@media (prefers-contrast: more) {
+  :root[data-theme="day"] { --text-3: var(--text-2); --rule: rgba(14, 30, 54, 0.22); --rule-strong: rgba(14, 30, 54, 0.34); }
+}
+
+/* ── 4 · UX fix plan (16 Oct 2026, docs/UX_FIX_PLAN.md §2.4, §4.2, D13, D18) ─────────────────
+ * Type scale: nothing below 12 px anywhere; weights 400/500/600 only (no 700, no synthetic bold).
+ * Amber: --status-mid is the fill; amber TEXT uses --status-mid-text; text ON an amber fill uses
+ * --status-ink-mid (dark ink, ≥ 4.5:1 on the amber of both themes).
+ * Depth: decorative light / shade / shadow overlays for the 3D-look charts on Ringkasan only
+ * (the front face of a mark still carries the value; depth never encodes data).
+ * Primary button (D13): Mandiri navy with white ink by day, Mandiri gold with dark ink at night. */
+:root {
+  --fs-meta:    12px;  --lh-meta:    16px;   /* source lines, units, legend notes, axis ticks, breadcrumb */
+  --fs-eyebrow: 12px;  --lh-eyebrow: 16px;   /* caps, +0.06em, sans 600; at most one per exhibit */
+  --fs-mono:    12px;  --lh-mono:    16px;   /* number columns, file names and codes only */
+  --fs-chip:    13px;  --lh-chip:    18px;
+  --fs-body:    14px;  --lh-body:    20px;
+  --fs-ui:      14px;  --lh-ui:      20px;
+  --fs-panel:   16px;  --lh-panel:   22px;
+  --fs-section: 20px;  --lh-section: 26px;
+  --fs-sheet:   26px;  --lh-sheet:   32px;
+  --fs-num-s:   24px;  --lh-num-s:   28px;
+  --fs-num:     36px;  --lh-num:     40px;
+  --fs-hero:    48px;  --lh-hero:    52px;
+
+  --status-mid-text:  #F0A92E;                   /* amber words and numbers (night: the fill itself is AA) */
+  --status-ink-mid:   #1A1405;                   /* dark ink on an amber fill (both themes) */
+
+  --depth-light:  rgba(255, 255, 255, 0.22);     /* top faces */
+  --depth-shade:  rgba(2, 8, 20, 0.42);          /* side faces and the donut wall */
+  --depth-shadow: rgba(0, 6, 18, 0.45);          /* floor shadow under columns and the donut */
+
+  --btn-primary-bg:    #FFB700;                  /* --gold-brand */
+  --btn-primary-ink:   #1A1405;                  /* --text-on-gold */
+  --btn-primary-hover: #FFC633;
+  --btn-primary-rule:  rgba(255, 183, 0, 0.55);
+
+  --gutter: 16px;                                /* 8 px grid: gaps between exhibits */
+  --topbar-h: 56px;                              /* band 56 + section row 48 = 104 px of chrome (§2.2) */
+  --navrow-h: 48px;
+  --readout-h: 0px;                              /* the readout row is gone; its tools live in the "⋯" menu */
+  --sheet-w: clamp(560px, 46vw, 760px);          /* the free map strip stays ≥ 600 px at 1366 (A-12) */
+  --target-xs: 44px;                             /* touch targets on phones */
+}
+:root[data-theme="day"] {
+  --status-mid-text:  #985700;                   /* 5.6:1 on the light canvas */
+  --status-ink-mid:   #1A1405;
+  --depth-light:  rgba(255, 255, 255, 0.55);
+  --depth-shade:  rgba(14, 30, 54, 0.26);
+  --depth-shadow: rgba(14, 30, 54, 0.20);
+  --btn-primary-bg:    #003D79;                  /* Mandiri navy, white ink 11.0:1 */
+  --btn-primary-ink:   #FFFFFF;
+  --btn-primary-hover: #0B4F96;
+  --btn-primary-rule:  rgba(0, 61, 121, 0.55);
+}
+
+/* ── 5 · Google Maps attribution (16 Oct 2026, COPY_STYLE_EN item 33, docs/GOOGLE_PLACES.md rule 4) ──
+ * Google allows only black #1F1F1F, grey #5E5E5E or white for the "Google Maps" attribution text,
+ * at ≥ 4.5:1 on its background. MCD.places.attribution() reads this token. */
+:root {
+  --gm-attr-ink: #FFFFFF;                        /* Gelap */
+}
+:root[data-theme="day"] {
+  --gm-attr-ink: #1F1F1F;                        /* Terang */
+}
+
+/* ── 6 · Progressive cards (17 Oct 2026, COPY_STYLE_EN item 43; MCD.windows, assets/css/windows.css) ──
+ * The workspace: slim summary rail, docked card columns, bottom drawer "Daftar & grafik", callouts and the tray.
+ * Sizes match assets/js/windows.js (INSET, GAP, RAIL_SLIM, RAIL_FULL, BAR_H, CO_W). Stacking inside #overlay-root:
+ * drawer < columns < floating cards < callout = tray < popovers (50) < phone sheet (60) < modals < tips. */
+:root {
+  --ws-inset: 16px;
+  --ws-gap: 12px;
+  --ws-rail-slim: 76px;
+  --ws-rail-full: 360px;
+  --ws-col-w: clamp(320px, 26vw, 420px);
+  --ws-bar-h: 56px;
+  --ws-callout-w: 300px;
+  --ws-glass-strong: rgba(10, 22, 44, 0.84);     /* Gelap: the cards' tint over the dark satellite */
+  --z-ws-drawer: 22;
+  --z-ws-col: 30;
+  --z-ws-float: 31;                              /* floating cards take 31–37 by raise order */
+  --z-ws-callout: 38;
+  --z-ws-tray: 38;
+}
+:root[data-theme="day"] {
+  --ws-glass-strong: rgba(255, 255, 255, 0.86);  /* Terang: ≥ 82 % white, so text is never grey on grey over satellite */
+}

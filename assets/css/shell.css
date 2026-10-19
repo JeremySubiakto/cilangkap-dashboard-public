@@ -1,0 +1,1153 @@
+/* ==========================================================================
+ * Acquisition Dashboard · shell v2
+ * Branch decisions of 12 Oct 2026 (docs/COPY_STYLE_EN.md "Product decisions"):
+ * two views (Overview · Deep dive), Day / Night themes, one visible row of
+ * five sections (15 Oct 2026), map controls in words at the bottom right, details that
+ * slide in from the right with a large Close, a "?" tip beside every section
+ * title and ≥ 40 px targets in Overview.
+ *
+ * Loaded after sections.css and before the section sheets, so it overrides
+ * the phase-1 shell geometry and sections can still override it. Tokens only:
+ * every colour comes from tokens.css (night = :root, day = [data-theme="day"]).
+ *
+ *   body[data-view="overview" | "deep"]   set by app.js from state.view
+ *   html[data-theme="day" | "night"]      set by app.js (system default, remembered)
+ * ========================================================================== */
+
+/* ── 1 · Bars: top bar 60 · section row 56 · readout 26 (Deep dive). No filter bar (--filterbar-h: 0). */
+body {
+  --bars-h:  calc(var(--banner-h) + var(--topbar-h) + var(--navrow-h) + var(--filterbar-h));
+  --stage-t: calc(var(--bars-h) + var(--inset));
+  --rail-b:  var(--inset);
+}
+body.is-demo { --banner-h: 32px; }
+body { background: var(--grad-mesh); background-attachment: fixed; color: var(--text-1); }
+
+#topbar   { top: var(--banner-h); height: var(--topbar-h); }
+#navrow   { top: calc(var(--banner-h) + var(--topbar-h)); height: var(--navrow-h); border-bottom: 1px solid var(--glass-border); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+#navrow::-webkit-scrollbar { display: none; }
+#navrow:empty { display: none; }
+#readout  { top: calc(var(--banner-h) + var(--topbar-h) + var(--navrow-h) + var(--filterbar-h)); height: var(--readout-h); }
+#readout { display: none !important; }               /* removed (A-07): its tools live in each section's "⋯" menu */
+
+/* Top bar: brand · view switch (centre) · tools */
+.tb { grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr); column-gap: var(--s-5); }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand__rule { width: 3px; height: 32px; flex: none; border-radius: 1px; background: var(--gold-brand); }   /* the only Mandiri yellow on chrome */
+.brand__text { display: grid; gap: 3px; min-width: 0; }
+.brand__line { font: 600 12px/16px var(--font-sans); letter-spacing: .16em; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand__product { font: 400 19px/22px var(--font-serif); color: var(--text-1); letter-spacing: -.005em; white-space: nowrap; }
+.tb-right { justify-self: end; gap: 6px; }
+.tb .btn--bar { height: 36px; padding: 0 10px; font: 500 13px/1 var(--font-sans); }
+.tb .btn--bar.btn--icon { width: 36px; padding: 0; }
+.tb-btn__q { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.25px solid currentColor; font: 600 12px/1 var(--font-sans); }
+body[data-view="overview"] .tb-deep { display: none; }
+.tb-veil.is-on { border-color: var(--rule-signal); color: var(--signal); }
+.tb-status {
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; flex: none;
+  border: 1px solid var(--rule); border-radius: var(--r-ctl);
+  font: 500 12px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.tb-status__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pos); flex: none; }
+.tb-status.is-empty .tb-status__dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+
+/* Segmented switches: Overview | Deep dive (large) and Day | Night */
+.vswitch {
+  display: inline-flex; align-items: stretch; gap: 2px; padding: 3px; flex: none;
+  background: var(--surface-raised); border: 1px solid var(--rule); border-radius: var(--r-panel);
+  box-shadow: inset 0 1px 0 var(--keyline);
+}
+.vswitch__opt {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border-radius: 4px;
+  font: 600 14px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+  transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), box-shadow var(--dur-hover) var(--ease-standard);
+}
+.vswitch__opt .icon { width: 18px; height: 18px; }
+.vswitch__opt:hover { color: var(--text-1); background: var(--surface-hover); }
+.vswitch__opt[aria-checked="true"] {
+  background: var(--surface-solid); color: var(--text-1);
+  box-shadow: inset 0 0 0 1px var(--metal-rule), 0 1px 0 var(--hairline-hi), var(--shadow-panel);
+}
+.vswitch__opt[aria-checked="true"] .icon { color: var(--metal); }
+.vswitch--view { justify-self: center; }
+.vswitch--view .vswitch__opt { min-width: 148px; }
+.vswitch--theme .vswitch__opt { height: 34px; padding: 0 10px; gap: 6px; font-size: 13px; }
+
+/* ── 2 · Section row (U5): icon · label · "You are here" ────────────────── */
+.nav { display: flex; align-items: center; gap: 6px; height: 100%; margin: 0; padding: 0 var(--inset); list-style: none; min-width: max-content; }
+.nav__item { flex: none; }
+.nav__btn {
+  position: relative; display: inline-flex; align-items: center; gap: 10px;
+  height: 44px; padding: 0 12px 0 8px;
+  border: 1px solid transparent; border-radius: var(--r-panel);
+  font: 500 14px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+  transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
+}
+.nav__btn:hover { background: var(--surface-hover); color: var(--text-1); }
+.nav__icon { display: inline-grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 4px; background: var(--surface-raised); color: var(--text-2); }
+.nav__icon .icon { width: 18px; height: 18px; }
+.nav__text { display: grid; gap: 3px; text-align: left; }
+.nav__label { font-weight: 600; }
+.nav__long { display: none; }
+.nav__here { display: none; font: 600 12px/1 var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--metal); }
+.nav__key { font: 500 12px/1 var(--font-mono); color: var(--text-3); padding: 3px 5px; border: 1px solid var(--rule); border-radius: 2px; }
+.nav__btn[aria-current="page"] {
+  background: var(--surface-solid); border-color: var(--metal-rule); color: var(--text-1);
+  box-shadow: inset 0 -2px 0 var(--metal), var(--hl-panel);
+}
+.nav__btn[aria-current="page"] .nav__icon { background: var(--metal); color: var(--canvas); }
+.nav__btn[aria-current="page"] .nav__here { display: block; }
+.nav__btn[aria-current="page"] .nav__key { display: none; }
+/* The full names ("Data & Privacy") from 600 px: the row of five fits; phones keep the short names */
+@media (min-width: 600px) {
+  .nav__long { display: inline; }
+  .nav__short { display: none; }
+}
+
+/* ── 3 · Big segmented controls ────────────────────────────────────────── */
+.seg--big { height: 40px; padding: 3px; }
+.seg--big .seg__opt { padding: 0 12px; font: 500 13px/1 var(--font-sans); }
+.seg.is-na { opacity: .4; }
+
+/* ── 4 · Map furniture: legend bottom-left, controls bottom-right (U8) ──── */
+#map .maplibregl-ctrl-bottom-right { right: calc(var(--free-r) - 8px); bottom: calc(var(--free-b) - 8px); }
+body[data-view="overview"] #map-vignette { display: none; }
+
+.mapctl {
+  position: absolute; right: var(--free-r); bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px); z-index: var(--z-rails);
+  display: grid; gap: 6px; padding: 8px; width: max-content; border-radius: var(--r-glass);
+  max-width: min(440px, calc(100vw - var(--free-l) - var(--free-r)));
+}
+.mapctl[hidden] { display: none; }
+.mapctl__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
+.mapctl__btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 12px; border-radius: 9px;
+  border: 1px solid var(--glass-border-card); background: var(--glass-card-flat);
+  box-shadow: var(--glass-hl-card);
+  font: 500 13px/1 var(--font-sans); color: var(--text-1); white-space: nowrap;
+  transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
+}
+.mapctl__btn .icon { width: 16px; height: 16px; color: var(--text-2); }
+.mapctl__btn:hover { background: var(--glass-card-hover); border-color: var(--metal-rule); }
+.mapctl__btn--icon { width: 40px; padding: 0; }
+.mapctl__btn--icon .icon { color: var(--text-1); }
+.mapctl__btn[aria-pressed="true"] { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); }
+.mapctl__seg { width: 100%; }
+.mapctl__seg .seg__opt { flex: 1 1 0; }
+.mapctl__cap { align-self: center; margin-right: auto; font: 600 12px/1 var(--font-sans); color: var(--text-3); }
+.mapctl.is-disabled { opacity: .5; pointer-events: none; }
+/* Scale bar in the map controls (both views): a labelled km bar, north is always up */
+.mapctl__scale { display: inline-flex; align-items: flex-end; gap: 8px; min-height: 24px; padding: 0 4px; font: 500 12px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.mapctl__scale .scalebar__bar { height: 6px; min-width: 8px; border: 1.5px solid var(--text-1); border-top: 0; }
+.mapctl__scale .scalebar__label { font-size: 12px; line-height: 12px; color: var(--text-1); }
+
+.lg__row { font: 400 13px/18px var(--font-sans); }
+.lg__title { font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.telemetry { left: var(--free-l); bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px); }
+.dock-slot, .dock { display: none !important; }       /* the phase-1 dock is replaced by .mapctl */
+
+/* Map callouts (Mabes TNI, our branch, TNI places) sit on small glass plates (map.css) */
+body[data-view="overview"] .mk-mabes__name { font-size: 13.5px; letter-spacing: .12em; }
+body[data-view="overview"] .mk-site__name { font-size: 13px; }
+
+/* Sederhana ⇄ Detail (U6, item 38): the panels cross-fade per section host (section 13 below); the map dims a
+   little while its basemap changes (street ⇄ satellite), then comes back. Opacity only. */
+#map { transition: opacity var(--dur-base) var(--ease-out); }
+body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast); transition-timing-function: var(--ease-in-out); }
+@media (prefers-reduced-motion: reduce) { #map { transition: none; } }
+
+/* ── 5 · Section page: Overview guide column and Deep dive sheet/rail ───── */
+.guide {
+  position: absolute; top: var(--stage-t); left: var(--inset); bottom: var(--inset);
+  width: var(--guide-w); z-index: var(--z-sheet);
+  display: flex; flex-direction: column;
+  background: var(--glass-bg);
+}
+.guide__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 22px 12px; }
+.pg-head { margin-bottom: 18px; }
+.pg-where { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font: 600 12px/16px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.pg-where__dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--metal); box-shadow: 0 0 0 3px var(--gold-a16); }
+.pg-title-row { display: flex; align-items: center; gap: 10px; }
+.pg-title { font: 400 28px/34px var(--font-serif); color: var(--text-1); letter-spacing: -.01em; }
+.tipbtn {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none;
+  border: 1px solid var(--glass-border-card); border-radius: 50%; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+  font: 600 16px/1 var(--font-sans); color: var(--text-1);
+  transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
+}
+/* on a card the glass ring disappears (white on white in Terang): a visible ring shows it is a button */
+.exhibit .tipbtn { border-color: var(--rule-strong); }
+.tipbtn:hover, .tipbtn[aria-expanded="true"] { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); }
+.pg-lede { margin-top: 8px; font: 400 15px/22px var(--font-sans); color: var(--text-2); max-width: 64ch; }
+.pg-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.pg-tab {
+  height: 40px; padding: 0 14px; border-radius: var(--r-ctl);
+  border: 1px solid var(--rule-strong); font: 600 14px/1 var(--font-sans); color: var(--text-2);
+}
+.pg-tab:hover { background: var(--surface-hover); color: var(--text-1); }
+.pg-tab[aria-selected="true"] { background: var(--gold-a10); border-color: var(--metal-rule); color: var(--gold-soft); }
+
+.pg-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.pg-cards[hidden] { display: none; }
+.pg-card {
+  display: grid; gap: 4px; width: 100%; padding: 14px 16px; text-align: left;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+  color: var(--text-1);
+}
+.pg-card__label { display: flex; align-items: center; gap: 6px; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.pg-card__value { font: 400 32px/38px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.pg-card__unit { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.pg-card.is-empty .pg-card__value { color: var(--text-3); }
+.pg-card__explain { font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.pg-card__src { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.pg-card--link { cursor: pointer; transition: border-color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard); }
+.pg-card--link:hover { border-color: var(--metal-rule); background: var(--glass-card-hover); }
+.pg-card__go { justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font: 600 12px/1 var(--font-sans); color: var(--gold-soft); }
+
+.pg-foot { flex: none; display: grid; gap: 10px; padding: 14px 22px 16px; border-top: 1px solid var(--rule); background: var(--glass-card-flat); }
+.pg-actions { display: flex; gap: 8px; }
+.pg-actions .btn { flex: 1 1 auto; }
+.pg-prov { padding: 0; border-top: 0; white-space: normal; }
+.btn--lg { height: 44px; padding: 0 18px; gap: 8px; font: 600 14px/1 var(--font-sans); }
+.btn--lg .icon { width: 16px; height: 16px; }
+
+.pg-empty[hidden], .pg-outline[hidden], .pg-custom[hidden] { display: none; }
+.empty {
+  display: grid; gap: 10px; margin-top: 12px; padding: 18px;
+  border: 1px dashed var(--rule-strong); border-radius: var(--r-card); background: var(--glass-card-flat);
+}
+.empty__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--gold-a10); color: var(--gold-soft); }
+.empty__title { font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.empty__p { font: 400 14px/21px var(--font-sans); color: var(--text-2); }
+.empty__list { display: grid; gap: 4px; margin: 0; padding-left: 18px; list-style: disc; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.empty__sheet, .empty__file { padding: 1px 5px; border-radius: 2px; background: var(--surface-raised); font: 500 12px/18px var(--font-mono); color: var(--text-1); }
+.empty__file { word-break: break-all; }
+.empty__actions { display: flex; gap: 8px; }
+
+.pg-outline { margin-top: 22px; }
+.pg-outline__t { margin-bottom: 10px; font: 600 12px/16px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.pg-outline__grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
+.pg-rail .pg-outline__grid { grid-template-columns: minmax(0, 1fr); }
+.pg-block { display: grid; align-content: start; gap: 6px; min-height: 92px; padding: 14px; border: 1px dashed var(--rule-strong); border-radius: var(--r-panel); }
+.pg-block__kind { font: 600 12px/16px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
+.pg-block__t { font: 500 15px/20px var(--font-sans); color: var(--text-1); }
+.pg-block__note { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+
+/* Deep dive: sheet (right) and rail (left) wear the same page parts */
+.pg-sheet .sheet__head { padding-bottom: var(--s-4); }
+.pg-sheet .pg-cards { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.pg-sheet .pg-foot { padding: 12px var(--s-6) 14px; }
+.pg-sheet .pg-actions { justify-content: flex-start; }
+.pg-sheet .pg-actions .btn { flex: 0 0 auto; }
+.pg-rail { background: var(--glass-bg); }
+.pg-rail__scroll { padding: 20px; }
+.pg-rail .pg-card__value { font-size: 28px; line-height: 34px; }
+
+/* Help tip ("?") and help dialog */
+.popover.tipcard { width: 360px; max-width: calc(100vw - 32px); display: grid; gap: 8px; padding: 16px; }
+.tipcard__title { font: 600 15px/20px var(--font-sans); color: var(--text-1); }
+.tipcard__p { font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.tipcard__list { display: grid; gap: 2px; margin: 0; padding-left: 18px; list-style: disc; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.tipcard__foot { display: flex; justify-content: flex-end; padding-top: 4px; }
+.modal--help { top: 8vh; width: min(660px, calc(100vw - 32px)); max-height: 84vh; overflow-y: auto; }
+.help__steps { display: grid; gap: 10px; margin: 14px 0 18px; padding: 0; list-style: none; }
+.help__step { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; font: 400 14px/21px var(--font-sans); color: var(--text-2); }
+.help__step b { font-weight: 600; color: var(--text-1); }
+.help__n { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--gold-a10); color: var(--gold-soft); font: 600 13px/1 var(--font-sans); }
+.help__keys { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.help__note { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.help__cols[hidden] { display: none; }
+
+/* Drawer: slides in from the right with a large Close (U8) */
+.drawer { top: calc(var(--bars-h) + 8px); }
+.drawer__head { align-items: flex-start; }
+.drawer__close { flex: none; }
+.dd-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.dd-list__row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; width: 100%; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); color: var(--text-1);
+}
+.dd-list__row:hover { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+.dd-list__name { font: 600 14px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-list__meta { grid-column: 1; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.dd-list__score { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 500 12px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+/* Palette close button and small-screen panel/map toggle */
+.palette__foot { display: flex; align-items: center; gap: 4px; }
+.palette__sp { flex: 1 1 auto; }
+.map-toggle { display: none; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: var(--z-drawer); }
+
+/* ── 6 · Data & Privacy page parts (section 8) ──────────────────────────── */
+.dp-block { display: grid; gap: 10px; margin-top: 16px; padding: 16px; border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card); box-shadow: var(--glass-hl-card), var(--glass-shadow-card); }
+.dp-block[hidden] { display: none; }
+.dp-h { font: 600 15px/20px var(--font-sans); color: var(--text-1); }
+.dp-p { font: 400 14px/21px var(--font-sans); color: var(--text-2); }
+.dp-p code, .dp-sheet__code { font: 500 12px/18px var(--font-mono); color: var(--text-1); }
+.dp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dp-lock { display: flex; align-items: center; gap: 6px; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.dp-sheets, .dp-log { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.dp-sheet { display: grid; grid-template-columns: 22px 132px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: var(--r-ctl); background: var(--surface-well); }
+.dp-sheet__mark { display: grid; place-items: center; color: var(--text-3); }
+.dp-sheet.is-in .dp-sheet__mark { color: var(--pos); }
+.dp-sheet__label { font: 500 14px/18px var(--font-sans); color: var(--text-1); }
+.dp-sheet__status { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); text-align: right; }
+.dp-sheet.is-in .dp-sheet__status { color: var(--text-2); }
+.dp-log__row { font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.dp-log__row.is-ok { color: var(--pos); }
+.dp-log__row.is-warn { color: var(--warn); }
+.guide .dp-sheet { grid-template-columns: 20px minmax(0, 1fr) auto; }
+.guide .dp-sheet__code { display: none; }
+
+/* ── 7 · Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 1439px) {
+  .brand__line { letter-spacing: .12em; }
+  .nav__key { display: none; }                       /* the row of 8 plus the data status fits; keys stay in Help */
+  .tb .btn__label { display: none; }
+  .tb .tb-btn { width: 36px; padding: 0; justify-content: center; }
+  .tb .tb-btn .icon { margin: 0; }
+}
+@media (max-width: 1279px) {
+  .tb-status { display: none; }
+  .vswitch--view .vswitch__opt { min-width: 0; padding: 0 12px; }
+  .vswitch--theme .vswitch__label { display: none; }
+  .vswitch--theme .vswitch__opt { width: 38px; padding: 0; }
+  body[data-posture="sheet"] .map-toggle, body[data-posture="dim"] .map-toggle { display: inline-flex; }
+}
+@media (max-width: 1023px) {
+  .brand__line { display: none; }
+  .tb { grid-template-columns: auto 1fr auto; }
+  .guide { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 50vh; border-radius: 0; }
+  body.is-sheet-away .guide { transform: translateY(calc(100% - 64px)); }
+  body[data-posture="guide"] .map-toggle { display: inline-flex; bottom: auto; top: calc(var(--stage-t) + 8px); }
+  .mapctl { bottom: auto; top: var(--stage-t); }
+  .rail--l { top: var(--stage-t); }
+}
+@media (max-width: 719px) {
+  .brand__product { font-size: 16px; }
+  .vswitch--view .icon { display: none; }
+}
+@media (max-width: 599px) {
+  #navrow { position: relative; top: auto; margin-top: calc(var(--banner-h) + var(--topbar-h) + var(--map-h-xs)); }
+  #map { top: calc(var(--banner-h) + var(--topbar-h)); }
+  .guide { position: relative; inset: auto; width: auto; max-height: none; transform: none !important; }
+  .guide__scroll { overflow: visible; }
+  .mapctl { position: fixed; right: 8px; top: calc(var(--banner-h) + var(--topbar-h) + 8px); bottom: auto; padding: 4px; }
+  .mapctl__row:not(:last-child) { display: none; }
+  .brand__rule { display: none; }
+  .vswitch--view .vswitch__opt { padding: 0 10px; font-size: 13px; }
+  .map-toggle { display: none !important; }
+}
+
+/* Data status sits at the end of the section row (frees the top bar) */
+#navrow { display: flex; align-items: center; }
+#navrow .nav { flex: 1 0 auto; }
+.navrow__end { flex: none; display: flex; align-items: center; padding: 0 var(--inset) 0 var(--s-3); }
+.readout .tb-veil.is-on, .readout .tb-reveal.is-on { color: var(--signal); }
+.readout .tb-reveal.is-on { color: var(--warn); }
+/* With details open, the map controls step left of the drawer so they stay visible */
+@media (min-width: 1024px) {
+  body.is-drawer-open .mapctl { right: max(var(--free-r), calc(var(--drawer-w) + var(--inset))); }
+  body.is-drawer-open #map .maplibregl-ctrl-bottom-right { right: max(calc(var(--free-r) - 8px), calc(var(--drawer-w) + 8px)); }
+}
+.readout .tb-veil, .readout .tb-veil.is-on { width: auto; padding: 0 6px; }
+.readout .tb-veil.is-on { background: var(--signal-a20); }
+.readout .tb-reveal.is-on { background: var(--warn-a10); }
+
+/* xs (< 600 px): the page flows under a 52 vh map (layout.css); one compact top row */
+@media (max-width: 599px) {
+  #readout { top: auto; }
+  .tb { grid-template-columns: auto auto; justify-content: space-between; column-gap: 8px; padding: 0 8px; }
+  .brand { display: none; }
+  .tb-right { gap: 6px; }
+  .tb-right .tb-btn:not(.tb-lock):not([title^="Help"]) { display: none; }
+  .vswitch { padding: 2px; }
+  .vswitch--view .vswitch__opt { height: 38px; padding: 0 10px; min-width: 0; font-size: 13px; }
+  .vswitch--theme .vswitch__opt { height: 38px; width: 36px; }
+  .mapctl__row { display: none; }
+  .mapctl__row[aria-label="Zoom"] { display: flex; }
+  #map .maplibregl-ctrl-bottom-right { right: 0; bottom: 0; }
+  .nav { gap: 4px; padding: 0 8px; }
+  .navrow__end { display: none; }
+}
+
+/* ── 8 · Demo data (COPY_STYLE_EN product decision 7) ───────────────────────
+ * Amber banner across the top, the "Demo data" switch next to Day | Night,
+ * DEMO marks on bank figures and locked export controls. app.js sets
+ * body.is-demo; nothing here is visible while the switch is off.            */
+.demo-banner {
+  position: fixed; left: 0; right: 0; top: 0; height: var(--banner-h); z-index: calc(var(--z-bars) + 1);
+  display: flex; align-items: center; gap: 10px; padding: 0 var(--inset);
+  background: var(--demo-bg); color: var(--demo-ink);
+  box-shadow: inset 0 -1px 0 var(--demo-ink-rule);
+}
+.demo-banner[hidden] { display: none; }
+.demo-banner__icon { display: inline-grid; place-items: center; flex: none; }
+.demo-banner__icon .icon { width: 16px; height: 16px; }
+.demo-banner__t { flex: 1 1 auto; min-width: 0; margin: 0; font: 500 13px/18px var(--font-sans); }
+.demo-banner__t strong { font-weight: 600; }
+.demo-banner__off {
+  flex: none; gap: 6px; height: 28px; padding: 0 12px;
+  border: 1px solid var(--demo-ink-rule); border-radius: var(--r-ctl); background: transparent;
+  font: 600 12.5px/1 var(--font-sans); color: var(--demo-ink);
+}
+.demo-banner__off:hover { background: var(--demo-ink-a10); }
+.demo-banner__off:focus-visible { outline: 2px solid var(--demo-ink); outline-offset: 1px; }
+
+.demo-switch {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 40px; padding: 0 12px 0 10px;
+  border: 1px solid var(--rule); border-radius: var(--r-panel); background: var(--surface-raised);
+  font: 600 13px/1 var(--font-sans); color: var(--text-2); white-space: nowrap; cursor: pointer;
+  transition: border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
+}
+.demo-switch:hover { color: var(--text-1); border-color: var(--rule-strong); }
+.demo-switch__track {
+  position: relative; flex: none; width: 30px; height: 18px; border-radius: 9px;
+  background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--rule-strong);
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+.demo-switch__knob {
+  position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--text-2); transition: transform var(--dur-chip) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
+}
+.demo-switch[aria-checked="true"] { color: var(--text-1); border-color: var(--demo-tag-rule); background: var(--demo-tag-bg); }
+.demo-switch[aria-checked="true"] .demo-switch__track { background: var(--demo-bg); box-shadow: none; }
+.demo-switch[aria-checked="true"] .demo-switch__knob { transform: translateX(12px); background: var(--demo-ink); }
+.demo-switch.is-busy { cursor: progress; }
+.demo-switch.is-busy .demo-switch__knob { animation: demo-busy 900ms var(--ease-standard) infinite alternate; }
+@keyframes demo-busy { from { transform: translateX(0); } to { transform: translateX(12px); } }
+.demo-switch--block { height: 44px; padding: 0 16px 0 12px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .demo-switch.is-busy .demo-switch__knob { animation: none; opacity: .6; } }
+
+.demo-tag {
+  display: inline-flex; align-items: center; flex: none; height: 16px; padding: 0 5px;
+  border: 1px solid var(--demo-tag-rule); border-radius: var(--r-ctl); background: var(--demo-tag-bg);
+  font: 600 12px/1 var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--demo-tag-ink);
+  white-space: nowrap; vertical-align: middle; pointer-events: none;
+}
+.demo-tag--corner { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.pg-card__label .demo-tag { margin-left: auto; }
+.pg-demo {
+  display: inline-flex; align-items: center; gap: 5px; flex: none; height: 24px; padding: 0 8px;
+  border: 1px solid var(--demo-tag-rule); border-radius: var(--r-ctl); background: var(--demo-tag-bg);
+  font: 600 12px/1 var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: var(--demo-tag-ink); white-space: nowrap;
+}
+.pg-demo[hidden] { display: none; }
+.tb-status.is-demo .tb-status__dot { background: var(--demo-bg); box-shadow: none; }
+.tb-status.is-demo { color: var(--demo-tag-ink); border-color: var(--demo-tag-rule); }
+.is-demo-locked { opacity: .5; cursor: not-allowed; }
+.dp-demo { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.dp-demo .dp-p { flex: 1 1 260px; }
+
+.tb-demo { padding: 0 10px 0 8px; }
+@media (max-width: 599px) {
+  body.is-demo { --banner-h: 48px; }
+  .demo-banner { gap: 8px; padding: 0 10px; }
+  .demo-banner__t { font-size: 12px; line-height: 16px; }
+  .demo-banner__off { height: 32px; padding: 0 10px; }
+  .demo-banner__off span { display: none; }
+  .tb-demo { display: none; }
+}
+
+/* ── 9 · Brand band (DESIGN_DIRECTION_V2 §4, phase 3) ───────────────────────
+ * Gradient top band in both themes: Mandiri reverse logo · divider ·
+ * "Acquisition Dashboard · Jakarta Cilangkap Branch" · Overview | Deep dive
+ * (centre) · Day | Night · Demo data · Help · Search · Lock · "Part of
+ * Danantara Indonesia". Band colours come from brand.css (--band-*).        */
+#topbar.brand-band {
+  background: var(--grad-band); color: var(--band-ink);
+  border-bottom: 0; -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+#topbar.brand-band::before { display: none; }
+.brand-band .tb { column-gap: var(--s-4); }
+.brand-band .brand { gap: 14px; }
+.brand-band .brand__logo { height: 26px; width: auto; flex: none; }
+.brand__div { width: 1px; height: 28px; flex: none; background: var(--band-rule); }
+.brand__title { display: flex; flex-direction: column; align-items: flex-start; row-gap: 2px; min-width: 0; margin: 0; }
+.brand-band .brand__product { font: 400 19px/22px var(--font-serif); color: var(--band-ink); letter-spacing: -.005em; white-space: nowrap; }
+.brand__sep { display: none; font: 400 19px/22px var(--font-serif); color: var(--band-ink-3); white-space: pre; }
+.brand__branch { font: 500 12.5px/15px var(--font-sans); letter-spacing: .02em; color: var(--band-ink-2); white-space: nowrap; }
+/* wide screens: one line, "Acquisition Dashboard · Jakarta Cilangkap Branch" */
+@media (min-width: 1680px) {
+  .brand__title { flex-direction: row; align-items: baseline; }
+  .brand__sep { display: inline; }
+  .brand__branch { font-size: 15px; line-height: 22px; letter-spacing: 0; }
+}
+
+.brand-band .vswitch { background: var(--band-ctl); border-color: var(--band-rule); box-shadow: none; }
+.brand-band .vswitch__opt { color: var(--band-ink-2); }
+.brand-band .vswitch__opt:hover { color: var(--band-ink); background: var(--band-ctl-hover); }
+.brand-band .vswitch__opt[aria-checked="true"] { background: var(--band-on); color: var(--band-on-ink); box-shadow: var(--band-shadow); }
+.brand-band .vswitch__opt[aria-checked="true"] .icon { color: var(--band-on-ink); }
+.brand-band .btn--secondary { background: var(--band-ctl); border-color: var(--band-rule); color: var(--band-ink); }
+.brand-band .btn--secondary:hover:not(:disabled) { background: var(--band-ctl-hover); }
+.brand-band .demo-switch { background: var(--band-ctl); border-color: var(--band-rule); color: var(--band-ink-2); }
+.brand-band .demo-switch:hover { color: var(--band-ink); border-color: var(--band-ink-3); }
+.brand-band .demo-switch__track { background: var(--band-ctl-hover); box-shadow: inset 0 0 0 1px var(--band-rule); }
+.brand-band .demo-switch__knob { background: var(--band-ink); }
+.brand-band .demo-switch[aria-checked="true"] { background: var(--demo-bg); border-color: var(--demo-bg); color: var(--demo-ink); }
+.brand-band .demo-switch[aria-checked="true"] .demo-switch__track { background: var(--demo-ink-a10); box-shadow: inset 0 0 0 1px var(--demo-ink-rule); }
+.brand-band .demo-switch[aria-checked="true"] .demo-switch__knob { background: var(--demo-ink); }
+.brand-band .badge--reveal { color: var(--band-ink); border-color: var(--band-rule); }
+.brand-band :focus-visible { outline: 2px solid var(--band-focus); outline-offset: 2px; }
+.tb-danantara { gap: 8px; margin-left: 6px; padding-left: 14px; border-left: 1px solid var(--band-rule); color: var(--band-ink-2); opacity: 1; }
+.tb-danantara img { height: 17px; }
+
+/* Section row: white (Day) / deep navy (Night) with a bold active state underlined by --grad-accent */
+#navrow {
+  background: var(--glass-bg-bar);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+}
+.nav__btn { border-radius: 11px; }
+.nav__btn[aria-current="page"] {
+  background: var(--glass-card); border-color: var(--glass-border-card); color: var(--text-1);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+}
+.nav__btn:not([aria-current="page"]):hover { background: var(--glass-card-flat); }
+.nav__btn[aria-current="page"]::after {
+  content: ""; position: absolute; left: 6px; right: 6px; bottom: -6px; height: 3px; border-radius: 2px;
+  background: var(--grad-accent);
+}
+.nav__btn[aria-current="page"] .nav__icon { background: var(--grad-accent); color: var(--band-ink); }
+.nav__btn[aria-current="page"] .nav__label { font-weight: 600; }
+
+/* Help dialog footer carries the brand pair (the band hides the Danantara lockup on small screens) */
+.help__foot { align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.help__brand { display: inline-flex; align-items: center; gap: 14px; color: var(--text-2); }
+.help__logo { height: 22px; width: auto; }
+.help__lockup { opacity: 1; color: var(--text-2); }
+.help__lockup img { height: 16px; }
+
+@media (max-width: 1439px) {
+  .brand-band .brand__product { font-size: 17px; line-height: 20px; }
+  .brand__branch { font-size: 12px; line-height: 14px; }
+}
+@media (max-width: 1279px) {
+  .tb-danantara .brand-lockup__t { display: none; }
+  .tb-danantara { padding-left: 10px; margin-left: 2px; }
+}
+@media (max-width: 1023px) {
+  .tb-danantara, .brand__div, .brand__title { display: none; }
+}
+@media (max-width: 599px) {
+  .brand-band .brand { display: flex; }
+  .brand-band .brand__logo { height: 20px; }
+  .brand-band .tb { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 6px; }
+  .brand-band .vswitch--view { justify-self: center; }
+  .brand-band .vswitch--theme .vswitch__opt[aria-checked="true"] { display: none; }
+  .brand-band .vswitch--theme { padding: 2px; }
+}
+@media (max-width: 379px) {
+  .brand-band .brand__logo { height: 16px; }
+}
+
+/* Section error boundary card (coordinator request 1) */
+.sec-broken__card {
+  display: grid; gap: 10px; margin-top: 12px; padding: 20px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card-flat);
+}
+.sec-broken__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--warn-a10); color: var(--warn); }
+.sec-broken__icon .icon { width: 18px; height: 18px; }
+.sec-broken__t { margin: 0; font: 600 17px/24px var(--font-sans); color: var(--text-1); }
+.sec-broken__p { margin: 0; font: 400 14px/21px var(--font-sans); color: var(--text-2); }
+.sec-broken__actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* Global error toast (coordinator request 2): calm, dismissible, one line, never a stack trace */
+.errtoast {
+  position: fixed; left: 50%; bottom: 24px; z-index: var(--z-tip);
+  display: flex; align-items: center; gap: 10px; max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 8px 10px 14px; border: 1px solid var(--warn); border-radius: var(--r-glass);
+  background: var(--glass-bg-pop); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm); color: var(--text-1);
+  opacity: 0; transform: translate(-50%, 8px);
+  transition: opacity var(--dur-fast) var(--ease-in-out), transform var(--dur-fast) var(--ease-in-out);   /* leaves (item 38) */
+}
+.errtoast[hidden] { display: none; }
+.errtoast.is-on { opacity: 1; transform: translate(-50%, 0); transition-duration: var(--dur-base); transition-timing-function: var(--ease-out); }
+.errtoast__icon { display: inline-grid; place-items: center; flex: none; color: var(--warn); }
+.errtoast__icon .icon { width: 16px; height: 16px; }
+.errtoast__t { flex: 1 1 auto; margin: 0; font: 500 13.5px/19px var(--font-sans); }
+.errtoast__close { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--r-ctl); color: var(--text-2); }
+.errtoast__close:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (prefers-reduced-motion: reduce) { .errtoast { transition: none; } }
+
+
+/* 600–1279 px with a sheet: the sheet stops above the floating "Show map" button, so the
+   button never covers the sheet footer (Back to Overview, source line) */
+@media (min-width: 600px) and (max-width: 1279px) {
+  /* the telemetry line stops short of the centred "Show map / Show panel" button */
+  body[data-posture="sheet"] #section-root .telemetry,
+  body[data-posture="dim"] #section-root .telemetry { max-width: max(160px, calc(50vw - var(--free-l) - 96px)); }
+  body[data-posture="sheet"] .section-host .sheet,
+  body[data-posture="dim"] .section-host .sheet { bottom: calc(var(--inset) + 64px); }
+  /* while the sheet covers the map, the map furniture waits underneath ("Show map" brings it back) */
+  body[data-posture="sheet"]:not(.is-sheet-away) .mapctl,
+  body[data-posture="sheet"]:not(.is-sheet-away) .telemetry,
+  body[data-posture="dim"]:not(.is-sheet-away) .mapctl,
+  body[data-posture="dim"]:not(.is-sheet-away) .telemetry { visibility: hidden; }
+  /* the map credits wrap on the right half, so the centred "Show map / Show panel" button never covers them */
+  body[data-posture="sheet"] #map .maplibregl-ctrl-bottom-right,
+  body[data-posture="dim"] #map .maplibregl-ctrl-bottom-right { max-width: calc(50vw - 88px); }
+}
+
+/* ── 10 · Glass layer (COPY_STYLE_EN item 15, 15 Oct 2026) ──────────────────
+ * Tokens: brand.css (--glass-*, --grad-mesh, --mesh-edge). Blurred glass: every .panel (Overview
+ * guide, Deep dive sheets and rails, legend, map controls, section panels), the drawer, popovers,
+ * menus, dialogs, toasts, map callouts and the section row. Cards and KPI tiles inside a panel are
+ * glass tints with a light border and top highlight but no second blur (blur only on panels, never
+ * on a full-screen layer). Sticky headers inside a glass sheet use --glass-sticky and a short blur
+ * of the sheet's own content. Solid fallbacks: brand.css (no backdrop-filter, reduced transparency,
+ * more contrast); html.is-glass-lite while the map moves below 40 fps (map.js).                     */
+.guide, .pg-rail { border-color: var(--glass-border); }
+.sheet.panel { background: var(--glass-bg); }
+.pg-foot { border-top-color: var(--glass-border-card); }
+
+/* KPI tiles (charts-plus bigNumber) and chart tooltips wear the same glass */
+.mcp-bn { border-color: var(--glass-border-card); box-shadow: var(--glass-hl-card), var(--glass-shadow-card); }
+.mcp-bn.is-flat { box-shadow: none; }
+.mcp-bn::before {                         /* the status rule follows the rounded corners (a mask keeps it to the top) */
+  inset: 0; height: auto; border-radius: calc(var(--r-panel) - 1px); pointer-events: none;
+  -webkit-mask: linear-gradient(var(--mask), var(--mask)) top / 100% var(--brand-rule, 3px) no-repeat;
+          mask: linear-gradient(var(--mask), var(--mask)) top / 100% var(--brand-rule, 3px) no-repeat;
+}
+.mcp-bn.is-flat::before { border-radius: 0; }
+.mcp-tip, .mc-tip {
+  background: var(--glass-bg-pop); border-color: var(--glass-border); border-radius: var(--r-tip);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+}
+
+/* Top band stays the brand gradient; its lower edge catches the light like the glass below it */
+#topbar.brand-band { box-shadow: inset 0 -1px 0 var(--band-rule), var(--glass-shadow-sm); }
+#readout { border-bottom-color: var(--glass-border); }
+
+/* Help tip, Overview tabs and the demo switch inside glass */
+.pg-tab { border-color: var(--glass-border-card); background: var(--glass-card-flat); border-radius: 10px; }
+.pg-tab:hover { background: var(--glass-card-hover); }
+.demo-switch { border-radius: 10px; }
+
+/* Phones (< 600 px): the page scrolls over the fixed map hero. The flowing panels drop the blur
+   (cheaper to scroll), sit above the map, its legend and its controls, and are opaque, so map labels
+   never show through the cards and no map furniture floats over the text. */
+@media (max-width: 599px) {
+  .guide, .sheet, .rail, .pg-rail, #section-root .panel:not(.legend):not(.mapctl) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #section-root .guide, #section-root .sheet, #section-root .rail, #section-root .kpi-strip, #section-root .dock,
+  #section-root .panel:not(.legend):not(.mapctl) { position: relative; z-index: var(--z-sheet); background: var(--glass-solid); }
+}
+
+/* ── 11 · Legend: a compact glass pill, expands upward (U8, 15 Oct 2026) ─────
+ * app.js: aside.legend.panel(.is-open) > .legend__body (map.js .lg) + button.legend__toggle.
+ * Folded: "Legend ▸" at the bottom-left of the free map area, just above the map credits.
+ * Open: the panel grows upward from the pill (bottom anchored), at most 288 px wide and half the
+ * screen height, so the middle of the map stays clear; the body scrolls.                       */
+.legend {
+  position: absolute; top: auto; right: auto; left: var(--free-l); bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px);
+  z-index: var(--z-rails);
+  display: flex; flex-direction: column; align-items: stretch;
+  width: max-content; max-width: min(300px, calc(100vw - var(--free-l) - var(--free-r) - 24px));
+  max-height: min(50vh, calc(100vh - var(--free-t) - var(--free-b) - var(--credits-h, 20px) - 64px));
+  padding: 0; border-radius: 999px;
+  overflow: hidden;
+}
+.legend::before { left: 18px; right: 18px; }
+.legend.is-open { width: 288px; border-radius: var(--r-glass); }
+.legend__body[hidden] { display: none; }
+.legend__body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 16px 10px;
+}
+.legend__toggle {
+  flex: none; display: inline-flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 16px 0 14px;
+  font: 600 13px/1 var(--font-sans); color: var(--text-1); white-space: nowrap;
+  border-radius: 999px; cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard);
+}
+.legend__toggle:hover { background: var(--glass-card-hover); }
+.legend__toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: -3px; box-shadow: none; }
+.legend__icon { width: 16px; height: 16px; color: var(--text-2); }
+.legend__title { font: 600 13px/1 var(--font-sans); color: var(--text-1); }
+.legend__chev { width: 14px; height: 14px; color: var(--text-2); transition: transform var(--dur-chip) var(--ease-standard); }
+.legend__fold { display: none; margin-left: auto; font: 500 12px/1 var(--font-sans); color: var(--text-2); }
+.legend.is-open .legend__toggle { width: 100%; border-radius: 0; border-top: 1px solid var(--glass-border-card); }
+.legend.is-open .legend__chev { transform: rotate(90deg); }
+.legend.is-open .legend__fold { display: inline; }
+@media (prefers-reduced-motion: reduce) { .legend__chev { transition: none; } }
+/* Deep dive: the telemetry line sits at the bottom-left, so the legend docks just above it */
+body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 20px) + 40px); }
+/* Narrow map strip beside a wide sheet (app.js fitFurniture): the legend docks above the map controls */
+@media (min-width: 1024px) {
+  body.is-map-narrow .legend {
+    bottom: calc(var(--free-b) + var(--credits-h, 20px) + 12px + var(--mapctl-h, 220px));
+    max-height: max(120px, calc(100vh - var(--free-t) - var(--free-b) - var(--credits-h, 20px) - var(--mapctl-h, 220px) - 56px));
+  }
+  body.is-map-narrow .legend.is-open { width: 264px; }
+  /* Deep dive in a narrow strip: the telemetry line sits on top of the map controls, the legend above it */
+  body.is-map-narrow[data-view="deep"] #section-root .telemetry {
+    bottom: calc(var(--free-b) + var(--credits-h, 20px) + 12px + var(--mapctl-h, 220px));
+    max-width: calc(100vw - var(--free-l) - var(--free-r) - 8px);
+  }
+  body.is-map-narrow[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 20px) + 50px + var(--mapctl-h, 220px)); }
+}
+/* 600–1023 px: the map controls move to the top right; the legend stays bottom-left above the guide */
+@media (min-width: 600px) and (max-width: 1023px) {
+  /* Detail: "Warna asli" (map.js) holds the top-right corner of the free map; the controls start under it (item 43) */
+  body[data-view="deep"] .mapctl, body[data-view="deep"] .mapctl.is-compact { top: max(var(--stage-t), calc(var(--free-t) + 60px)); }
+  .legend { bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px); }
+  body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px); }
+}
+/* Phones: the pill sits on the bottom-left corner of the map hero and opens upward over the map */
+@media (max-width: 599px) {
+  .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
+    position: fixed; left: 8px; top: auto; right: auto;
+    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px);
+    z-index: var(--z-rails);                       /* under the panels that scroll over the map hero */
+    max-width: calc(100vw - 16px);
+    max-height: calc(var(--map-h-xs) - 72px);      /* stays below the map controls at the top of the map */
+  }
+  .legend.is-open { width: min(300px, calc(100vw - 16px)); }
+  .legend__toggle { height: 40px; }
+}
+
+/* ── 12 · UX fix plan (16 Oct 2026, docs/UX_FIX_PLAN.md §2.2–§2.4, A-03, A-05, A-07, A-08, A-09, A-12, A-15) ──
+ * Band 56 px (logo · Dashboard Akuisisi · Cari · Terang/Gelap · Data contoh · Bantuan · Kunci · Danantara),
+ * section row 48 px, every band control 40 px. The view switch "Sederhana | Detail" and the "⋯ Lainnya" menu
+ * sit in each section header with a breadcrumb line. Ringkasan and Data & Privasi are pages without a map.  */
+
+/* Band */
+#topbar.brand-band .tb { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-4); }
+.brand-band .brand { gap: 12px; min-width: 0; }
+.brand-band .brand__logo { height: 26px; }
+.brand__title { flex-direction: column; align-items: flex-start; row-gap: 0; }
+.brand-band .brand__product { font: 400 18px/22px var(--font-serif); }
+.brand__branch { font: 500 12px/16px var(--font-sans); letter-spacing: .02em; }
+.brand__short { display: none; }
+.brand__sep { display: none !important; }
+@media (min-width: 1680px) {
+  .brand__title { flex-direction: column; align-items: flex-start; }
+  .brand__branch { font-size: 12px; line-height: 16px; }
+}
+.tb-right { gap: 8px; }
+.tb-search, .tb-ctl, .tb-unsaved {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none;
+  height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--band-rule);
+  background: var(--band-ctl); color: var(--band-ink); font: 500 14px/1 var(--font-sans); white-space: nowrap;
+  transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
+}
+.tb-search:hover, .tb-ctl:hover { background: var(--band-ctl-hover); }
+.tb-search { justify-content: flex-start; width: clamp(240px, 22vw, 340px); padding: 0 8px 0 12px; color: var(--band-ink-2); font-weight: 400; }
+.tb-search .icon, .tb-ctl .icon, .tb-unsaved .icon { width: 16px; height: 16px; flex: none; }
+.tb-search__t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.tb-search__w, .tb-search__s { display: none; }
+.tb-search__k { flex: none; padding: 4px 6px; border: 1px solid var(--band-rule); border-radius: 6px; font: 500 12px/1 var(--font-sans); color: var(--band-ink-3); }
+.tb-theme { min-width: 104px; }
+.tb-theme__i { display: inline-grid; place-items: center; }
+.tb-btn__q { font-weight: 600; font-size: 12px; }
+.tb-menu { display: none; }
+.tb-unsaved { background: var(--status-mid); border-color: transparent; color: var(--status-ink-mid); font-weight: 600; }
+.tb-unsaved[hidden] { display: none; }
+.tb-unsaved:hover { filter: brightness(1.06); }
+.brand-band .demo-switch { height: 40px; border-radius: 10px; font-size: 14px; }
+.brand-band .badge--reveal { height: 32px; font: 600 12px/1 var(--font-sans); }
+.brand-band .badge--reveal .badge__more { display: none; }
+.tb-danantara { font-size: 12px; }
+@media (max-width: 1439px) {
+  .tb-search { width: 220px; }
+  /* shorter label and no ⌘K badge (it stays in the tooltip), so the label is never cut */
+  .tb-search__t, .tb-search__k { display: none; }
+  .tb-search__s { display: inline; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .tb-danantara .brand-lockup__t { display: none; }
+  .tb .tb-ctl .tb-ctl__l, .tb .btn__label { display: inline; }
+  .tb .tb-btn { width: auto; }
+}
+/* "Data belum disimpan" takes ~180 px of the band: the search narrows to its short label so the
+   branch name never slides under it (1440 px: the name ran 21 px under the search box) */
+@media (min-width: 1280px) {
+  body.has-unsaved .tb-search { width: 220px; }
+  body.has-unsaved .tb-search__t, body.has-unsaved .tb-search__k { display: none; }
+  body.has-unsaved .tb-search__s { display: inline; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+}
+@media (max-width: 1279px) {
+  .tb-search { width: 40px; padding: 0; justify-content: center; }
+  .tb-search__t, .tb-search__s, .tb-search__k { display: none; }
+  .tb-danantara { display: none; }
+}
+@media (max-width: 1023px) {
+  /* the 1439 px rule shows these words again (.tb .tb-ctl .tb-ctl__l): below 1024 px the 40 px buttons are icons only
+     (their aria-label and title keep the words); at 768–1023 "Bantuan" and "Kunci" spilled over their neighbours */
+  .tb-ctl .tb-ctl__l, .tb-unsaved .tb-ctl__l, .tb .tb-ctl .tb-ctl__l, .tb .tb-unsaved .tb-ctl__l { display: none; }
+  .tb-ctl, .tb-unsaved { width: 40px; min-width: 40px; padding: 0; }
+  .tb-theme { min-width: 40px; }
+  .brand-band .demo-switch .demo-switch__label { display: none; }
+  .brand-band .demo-switch { padding: 0 10px; }
+  .brand__title { display: flex !important; }
+  .brand__product, .brand__long { display: none; }
+  .brand__short { display: inline; font: 600 14px/18px var(--font-sans); color: var(--band-ink); }
+  .brand__div { display: block !important; }
+}
+@media (max-width: 599px) {
+  .brand-band .tb { grid-template-columns: minmax(0, 1fr) auto; }
+  .tb-theme, .tb-help, .tb-lock, .tb-demo, .tb-unsaved { display: none !important; }
+  .tb-menu { display: inline-flex; width: auto; min-width: 44px; height: 40px; padding: 0 10px; }
+  .tb-menu .tb-ctl__l { display: inline; }
+  .tb-search { width: 44px; height: 40px; }
+  .brand-band .brand__logo { height: 20px; }
+}
+
+/* Section row: icon · label, a 3 px accent under the active one; the data status at the right end */
+.nav { gap: 4px; }
+.nav__btn { height: 40px; padding: 0 12px 0 6px; gap: 8px; font: 500 14px/1 var(--font-sans); }
+.nav__icon { width: 28px; height: 28px; }
+.nav__label, .nav__btn[aria-current="page"] .nav__label { font-weight: 600; }
+.nav__here, .nav__key { display: none !important; }
+.nav__btn[aria-current="page"]::after { bottom: -4px; }
+.tb-status { height: 32px; font: 500 13px/1 var(--font-sans); border-radius: 16px; padding: 0 12px; border-color: var(--rule-strong); }
+.tb-status:not(.is-empty):not(.is-demo) .tb-status__dot { background: var(--status-ok); }
+.tb-status.is-empty { color: var(--text-2); }
+.tb-status.is-empty .tb-status__dot { background: var(--status-none); box-shadow: none; }
+.tb-status.is-demo { color: var(--status-mid-text); border-color: var(--demo-tag-rule); }
+@media (max-width: 1279px) { .navrow__end { display: flex; } .tb-status { display: inline-flex; } }
+@media (max-width: 1023px) { .navrow__end { display: none; } }
+
+/* Demo banner: one 32 px line */
+.demo-banner { gap: 8px; }
+.demo-banner__t { font: 500 13px/18px var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-banner__t strong { font-weight: 600; }
+.demo-banner__off { display: inline-flex; align-items: center; gap: 6px; height: 26px; font: 600 12px/1 var(--font-sans); }
+
+/* Section header: breadcrumb + filter chips · title [?] · Sederhana | Detail · ⋯ */
+.pg-head { margin-bottom: 16px; }
+.pg-crumbrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 18px; margin-bottom: 6px; }
+.pg-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font: 500 12px/16px var(--font-sans); color: var(--text-3); }
+.pg-crumbs__i.is-last { color: var(--text-2); font-weight: 600; }
+.pg-crumbs__sep { color: var(--text-3); }
+.pg-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pg-chips[hidden] { display: none; }
+.pg-chip { height: 32px; gap: 6px; padding: 0 8px 0 10px; }
+.pg-chip .chip__x { width: 12px; height: 12px; margin: 0; }
+.pg-chips__all { height: 32px; padding: 0 8px; font: 600 13px/1 var(--font-sans); color: var(--text-2); }
+.pg-title-row { flex-wrap: wrap; gap: 8px 10px; }
+.pg-title { font: 400 26px/32px var(--font-serif); }
+.tipbtn { font: 600 16px/1 var(--font-sans); }
+.pg-head__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.pg-vswitch { padding: 2px; border-radius: 10px; }
+.pg-vswitch .vswitch__opt { height: 36px; min-width: 0; padding: 0 14px; font: 600 14px/1 var(--font-sans); border-radius: 8px; }
+.pg-more {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+  font: 600 20px/1 var(--font-sans); color: var(--text-1);
+}
+.pg-more:hover, .pg-more[aria-expanded="true"] { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+.pg-lede { font: 400 14px/20px var(--font-sans); }
+/* Sederhana guide: breadcrumb left, Sederhana | Detail and ⋯ right on one 40 px line, then the title */
+.pg-head--guide .pg-crumbrow { min-height: 40px; margin-bottom: 4px; }
+.pg-head--guide .pg-head__tools { margin-left: auto; }
+.pg-head--guide .pg-lede { margin-top: 6px; }
+
+/* Shared tabs (ctx.tabs): 40 px, 3 px accent under the active one, edge fades when the strip scrolls */
+.pg-tabs { position: relative; margin: 4px 0 16px; border-bottom: 1px solid var(--rule); }
+.pg-tabs__list { display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.pg-tabs__list::-webkit-scrollbar { display: none; }
+.pg-tabs__tab {
+  position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
+  border-radius: 8px 8px 0 0; font: 500 14px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.pg-tabs__tab:hover { color: var(--text-1); background: var(--surface-hover); }
+.pg-tabs__tab[aria-selected="true"] { color: var(--text-1); font-weight: 600; }
+.pg-tabs__tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 2px; background: var(--grad-accent); }
+.pg-tabs__tab:focus-visible { outline: 2px solid var(--glass-focus); outline-offset: -2px; }
+.pg-tabs__n { padding: 2px 6px; border-radius: 10px; background: var(--surface-raised); font: 500 12px/1 var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pg-tabs::before, .pg-tabs::after { content: ""; position: absolute; top: 0; bottom: 1px; width: 28px; pointer-events: none; opacity: 0; transition: opacity var(--dur-hover) var(--ease-standard); z-index: 1; }
+.pg-tabs::before { left: 0; background: linear-gradient(to right, var(--glass-sticky), transparent); }
+.pg-tabs::after { right: 0; background: linear-gradient(to left, var(--glass-sticky), transparent); }
+.pg-tabs.has-left::before, .pg-tabs.has-right::after { opacity: 1; }
+/* Narrow panels (Merchant and Sekolah in Detail at 1280–1439 px): tighter tabs, so the last tab
+   ("Info & cara hitung", "Tindak lanjut") is never hidden under the fade. Still ≥ 12 px and 40 px tall. */
+.pg-tabs__list { container: pgtabs / inline-size; flex: 1 1 100%; min-width: 0; }   /* .pg-tabs is a flex row: the contained list must take its full width */
+@container pgtabs (max-width: 680px) {
+  .pg-tabs__tab { padding: 0 8px; font-size: 13px; }
+  .pg-tabs__tab[aria-selected="true"]::after { left: 4px; right: 4px; }
+}
+@container pgtabs (max-width: 560px) {               /* Merchant Detail at 1280 px: 528 px for five tabs */
+  .pg-tabs__tab { padding: 0 6px; }
+  .pg-tabs__tab[aria-selected="true"]::after { left: 3px; right: 3px; }
+}
+
+/* Ringkasan and Data & Privasi (layout 'page', A-03): a full-width page; the map, its legend, its controls
+   and its credits are hidden (the map stays initialised underneath for the next map section) */
+body[data-layout="page"] #map, body[data-layout="page"] #map-vignette, body[data-layout="page"] #map-grid,
+body[data-layout="page"] .legend, body[data-layout="page"] .mapctl, body[data-layout="page"] .telemetry,
+body[data-layout="page"] .map-toggle, body[data-layout="page"] #map .maplibregl-control-container { visibility: hidden !important; }
+body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="page"] .mk { display: none !important; }
+.pg-page {
+  position: absolute; top: var(--bars-h); left: 0; right: 0; bottom: 0; z-index: var(--z-sheet);
+  display: flex; flex-direction: column;
+}
+.pg-page__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scroll-padding-top: 16px; }
+.pg-page__inner { box-sizing: border-box; max-width: 1280px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: var(--gutter); }
+.pg-page .pg-head { margin-bottom: 0; }
+.pg-page .pg-cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.pg-page .pg-foot { padding: 0; border-top: 0; background: transparent; }
+.pg-page .pg-actions { justify-content: flex-start; }
+.pg-page .pg-actions .btn { flex: 0 0 auto; }
+.pg-actions[hidden] { display: none; }
+/* Full-width pages (Data & Privasi Sederhana): the one primary action stays in view at the bottom of the page,
+   so "Simpan salinan terenkripsi" is never below the fold at 1366×768 */
+@media (min-width: 600px) {
+  .pg-page .pg-foot:has(.pg-actions:not([hidden])) {
+    position: sticky; bottom: 0; z-index: 2; margin: 0 -24px -48px; padding: 12px 24px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px;
+    background: var(--glass-solid); border-top: 1px solid var(--glass-border-card);
+  }
+  .pg-page .pg-foot:has(.pg-actions:not([hidden])) .pg-prov { flex: 1 1 280px; }
+}
+
+/* Map controls (A-12, D5): one bottom-right column of 40 px buttons; icons only in a narrow strip */
+.mapctl { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; width: auto; max-width: none; }
+.mapctl__col { display: flex; flex-direction: column; gap: 6px; }
+.mapctl__pair { display: flex; gap: 6px; }
+.mapctl__pair .mapctl__btn { flex: 1 1 0; justify-content: center; }
+.mapctl__btn { justify-content: flex-start; height: 40px; padding: 0 12px; font: 500 14px/1 var(--font-sans); }
+.mapctl__btn .icon { width: 16px; height: 16px; flex: none; }
+.mapctl__chev { margin-left: auto; width: 12px !important; height: 12px !important; }
+.mapctl__scale { align-self: flex-end; min-height: 20px; padding: 0 4px; font: 500 12px/1 var(--font-sans); }
+.mapctl.is-compact .mapctl__label, .mapctl.is-compact .mapctl__chev { display: none; }
+.mapctl.is-compact .mapctl__btn { width: 40px; padding: 0; justify-content: center; }
+.mapctl.is-compact .mapctl__pair { flex-direction: column; }
+.mapctl.is-compact { position: absolute; }
+/* item 43: under "Warna asli" with little height (the drawer at half, 1366 × 768) the place buttons go (they are in the
+   "Peta" menu too); still too tall, the controls line up in a row of icons (app.js fitControlsHeight) */
+.mapctl.is-short .mapctl__btn--place { display: none; }
+.mapctl.is-row { flex-direction: row; align-items: center; }
+.mapctl.is-row .mapctl__col, .mapctl.is-row .mapctl__pair { flex-direction: row; }
+.mapctl.is-row .mapctl__label, .mapctl.is-row .mapctl__chev { display: none; }
+.mapctl.is-row .mapctl__btn { width: 40px; padding: 0; justify-content: center; }
+.mapctl.is-row .mapctl__scale { position: static; align-self: center; }
+.mapctl.is-compact .mapctl__scale {               /* beside the column, on its own chip: the column stays 52 px wide */
+  position: absolute; right: calc(100% + 8px); bottom: 0; min-height: 28px; padding: 4px 10px; border-radius: 999px;
+  background: var(--glass-bg-chip); border: 1px solid var(--glass-border); box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); white-space: nowrap;
+}
+.mapctl[hidden] { display: none; }
+
+/* Popover menus (Peta, ⋯, ☰): 40 px rows, scroll inside when tall */
+.popover.menu { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); overflow-y: auto; overscroll-behavior: contain; }
+.popover.menu .popover__item { min-height: 40px; font: 500 14px/18px var(--font-sans); }
+.popover.menu .menu__title { padding: 10px 12px 4px; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+
+/* Drawer: "Buka di Google Maps" under the title (item 22) */
+.dd-gmaps { display: grid; gap: 6px; margin-top: 10px; }
+.dd-gmaps .gmaps-link { justify-self: start; }
+.dd-gmaps__note { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.gmaps-link { height: 40px; padding: 0 14px; gap: 8px; font: 600 14px/1 var(--font-sans); text-decoration: none; }
+.gmaps-link .icon { width: 14px; height: 14px; }
+.gmaps-link--icon { width: 40px; padding: 0; }
+
+/* Edge tab of a closed slide-over (A-05): 40 px wide, on the right edge, 600–1279 px only */
+.edge-tab {
+  position: fixed; right: 0; top: 50%; z-index: var(--z-drawer); transform: translateY(-50%);
+  display: flex; align-items: center; gap: 8px; width: 40px; padding: 14px 0; border-radius: 10px 0 0 10px;
+  writing-mode: vertical-rl; background: var(--btn-primary-bg); color: var(--btn-primary-ink);
+  font: 600 14px/1 var(--font-sans); box-shadow: var(--glass-shadow-sm);
+}
+.edge-tab .icon { width: 14px; height: 14px; transform: rotate(90deg); }
+.edge-tab[hidden] { display: none; }
+@media (max-width: 599px), (min-width: 1280px) { .edge-tab { display: none; } }
+
+/* Bantuan: "Saya ingin…" first */
+.help__h { margin: 16px 0 8px; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.help__tasks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.help__task { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); }
+.help__task-t { flex: 1 1 auto; display: grid; gap: 2px; min-width: 0; }
+.help__task-t b { font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+.help__task-where { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.help__go { height: 40px; flex: none; }
+.modal__actions--wrap { flex-wrap: wrap; justify-content: flex-end; }
+
+/* Palette ("Cari") */
+.palette__label { display: grid; gap: 2px; min-width: 0; }
+.palette__sub { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.palette__foot { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.palette__g { font: 500 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* Slide-overs (A-05): closed panels are hidden from view as well as from the keyboard (app.js sets inert) */
+@media (min-width: 600px) and (max-width: 1279px) {
+  .rail--r:not(.is-open), [data-slideover]:not(.is-open) { visibility: hidden; transition: transform var(--dur-panel-in) var(--ease-enter), visibility 0s linear var(--dur-panel-in); }
+  .rail--r.is-open, [data-slideover].is-open { visibility: visible; transition: transform var(--dur-panel-in) var(--ease-enter), visibility 0s; }
+}
+
+/* Phones (< 600 px, A-15): a fixed bottom tab bar with the five sections; the section row is hidden; the page
+   flows under a map hero (no hero on Ringkasan and Data & Privasi); the primary action sticks to the bottom */
+#tabbar { display: none; }
+@media (max-width: 599px) {
+  #navrow { display: none !important; }
+  #section-root { margin-top: calc(var(--banner-h) + var(--topbar-h) + var(--map-h-xs)); padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px)); }
+  /* a panel sliding in from the right (sec-slide) must not widen the page for a moment: clip, no scroll container,
+     so the sticky main button still sticks to the viewport */
+  #section-root { overflow-x: clip; }
+  body[data-layout="page"] { --map-h-xs: 0px; }
+  #tabbar {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: calc(var(--z-bars) + 2);
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--glass-solid); border-top: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
+  }
+  .tabbar__list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
+  .tabbar__btn {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    width: 100%; height: var(--tabbar-h); padding: 0 2px; font: 500 12px/14px var(--font-sans); color: var(--text-2);
+  }
+  .tabbar__btn .icon { width: 20px; height: 20px; }
+  .tabbar__l { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar__btn[aria-current="page"] { color: var(--text-1); font-weight: 600; }
+  .tabbar__btn[aria-current="page"]::before { content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 3px; border-radius: 0 0 2px 2px; background: var(--grad-accent); }
+  .pg-page { position: relative; inset: auto; top: auto; z-index: auto; }
+  .pg-page__scroll { overflow: visible; }
+  .pg-page__inner { padding: 16px 0 24px; }
+  /* the one primary action sticks above the tab bar; a footer with only the source line stays in the flow */
+  .pg-foot:has(.pg-actions:not([hidden])) { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); z-index: 2; }
+  .guide .pg-foot:has(.pg-actions:not([hidden])), .sheet .pg-foot:has(.pg-actions:not([hidden])), .pg-page .pg-foot:has(.pg-actions:not([hidden])) {
+    background: var(--glass-solid); padding: 12px 16px; border-top: 1px solid var(--glass-border-card);
+  }
+  .pg-page .pg-foot:has(.pg-actions:not([hidden])) { margin: 0 -16px; }
+  /* the panels flow with the page here: no clipping, so the sticky action bar sticks to the viewport */
+  #section-root .guide, #section-root .sheet, #section-root .pg-page { overflow: visible; }
+  .pg-title { font-size: 24px; line-height: 30px; }
+  .pg-head__tools:has(.pg-vswitch) { width: 100%; margin-left: 0; justify-content: space-between; }
+  .pg-vswitch { flex: 1 1 auto; }
+  .pg-vswitch .vswitch__opt { flex: 1 1 0; height: 40px; }
+  .pg-more { width: 44px; height: 44px; }
+  /* pinned to the map hero like the legend: the furniture host flows here (position: static), so an absolute column
+     would sit below the hero, behind the panel (found in the v4 QA at 390 px) */
+  .mapctl, .mapctl.is-compact { position: fixed; top: calc(var(--banner-h) + var(--topbar-h) + 8px); bottom: auto; right: 8px; }
+  /* Detail: the satellite's "Warna asli" switch (map.js) takes the hero's top-right corner; the column starts below it */
+  body[data-view="deep"] .mapctl, body[data-view="deep"] .mapctl.is-compact { top: calc(var(--banner-h) + var(--topbar-h) + 56px); }
+  .mapctl__btn { height: 44px; }
+  .mapctl.is-compact .mapctl__btn { width: 44px; }
+  .mapctl { gap: 4px; padding: 4px; }
+  .mapctl__col { gap: 4px; }
+  .mapctl__pair { gap: 4px; }
+  /* a narrow column on the map hero: the places and the scale live in the "Peta" menu and the legend */
+  .mapctl__btn--place, .mapctl__scale { display: none !important; }
+  /* the status line (import done, saved, …) sits under the top bar: at the bottom it covered the sticky main button */
+  .toast { top: calc(var(--banner-h) + var(--topbar-h) + 8px); bottom: auto; left: 12px; right: 12px; max-width: none; transform: translate(0, -6px); }
+  .toast.is-on { transform: translate(0, 0); }
+  .demo-banner__t { white-space: normal; overflow: visible; font-size: 12px; line-height: 16px; }
+  .popover.menu .popover__item { min-height: 44px; }
+  .errtoast { bottom: calc(var(--tabbar-h) + 16px); }
+  .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
+    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px);
+  }
+}
+
+/* ── 13 · Motion (COPY_STYLE_EN item 38, 16 Oct 2026) ─────────────────────────────────────────────
+ * One language with MCD.motion (assets/js/motion.js) and the tokens --ease-out / --ease-in-out / --dur-fast /
+ * --dur-base / --dur-slow (tokens.css). Opacity and transforms only (the individual translate / scale properties,
+ * so a panel's own transform, such as a closed slide-over, stays its own). Reduced motion: every duration is cut
+ * (tokens.css, base.css) and the rules below switch off.
+ *
+ * Section switch and Sederhana ⇄ Detail: the new section's panels fade in and rise 10 px (--dur-base, ease-out; the
+ * right rail and the KPI strip a step later); the old host fades out and lifts 4 px (--dur-fast, ease-in-out) while
+ * app.js keeps it that long (leaveHost): a cross-fade on the compositor. The furniture host (legend, map controls)
+ * stays put. Ringkasan and Data & Privasi have no map: the map fades out under them and back in after them.        */
+.section-host:not(.section-host--furniture):not(.is-leaving) > * { animation: mo-sec-in var(--dur-base) var(--ease-out) backwards; }
+.section-host:not(.section-host--furniture):not(.is-leaving) > .rail--r { animation-delay: 40ms; }
+.section-host:not(.section-host--furniture):not(.is-leaving) > .kpi-strip { animation-delay: 60ms; }
+.section-host.is-leaving > * { animation: mo-sec-out var(--dur-fast) var(--ease-in-out) both; }
+@keyframes mo-sec-in  { from { opacity: 0; translate: 0 10px; } }
+@keyframes mo-sec-out { to { opacity: 0; translate: 0 -4px; } }
+body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) var(--ease-in-out), visibility 0s linear var(--dur-fast); }
+
+/* Section row: one underline slides to the chosen section (app.js syncNavInk: translateX, scaleX while moving) */
+.nav { position: relative; }
+.nav__ink {
+  position: absolute; left: 0; top: 0; width: 0; height: 3px; border-radius: 2px; list-style: none; pointer-events: none;
+  background: var(--grad-accent); transform-origin: 0 50%; opacity: 0;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.nav.has-ink .nav__ink { opacity: 1; }
+.nav.has-ink .nav__btn[aria-current="page"]::after { opacity: 0; }
+/* phones: the tab bar's marker moves one column per step (its own width = one column) */
+.tabbar__list { position: relative; }
+.tabbar__ink { position: absolute; left: 0; top: 0; width: 20%; height: 3px; list-style: none; pointer-events: none; opacity: 0; transition: transform var(--dur-base) var(--ease-out); }
+.tabbar__ink::before { content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 3px; border-radius: 0 0 2px 2px; background: var(--grad-accent); }
+.tabbar__list.has-ink .tabbar__ink { opacity: 1; }
+.tabbar__list.has-ink .tabbar__btn[aria-current="page"]::before { opacity: 0; }
+
+/* Sederhana | Detail: a thumb slides under the chosen option (app.js placeThumb). Until it is measured, the chosen
+   option keeps its own pressed look (.vswitch__opt[aria-checked="true"] above). */
+.pg-vswitch { position: relative; isolation: isolate; }
+.pg-vswitch .vswitch__opt { position: relative; z-index: 1; }
+.vswitch__thumb {
+  position: absolute; left: 0; top: 2px; bottom: 2px; width: 0; z-index: 0; border-radius: 8px; pointer-events: none; opacity: 0;
+  background: var(--surface-solid); box-shadow: inset 0 0 0 1px var(--metal-rule), 0 1px 0 var(--hairline-hi), var(--shadow-panel);
+  transform-origin: 0 50%; transition: transform var(--dur-base) var(--ease-out);
+}
+.pg-vswitch.has-thumb .vswitch__thumb { opacity: 1; }
+.pg-vswitch.has-thumb .vswitch__opt[aria-checked="true"] { background: transparent; box-shadow: none; }
+
+/* Legend: the opened panel's body fades in and rises. The legend itself (furniture host) comes back with the map
+   in the same entrance as the section's panels (it replaces sections.css sec-rise / --dur-panel-in). */
+.legend.is-open .legend__body { animation: mo-rise-in var(--dur-base) var(--ease-out) backwards; }
+.section-host .legend { animation: mo-sec-in var(--dur-base) var(--ease-out) backwards; }
+
+/* A page without a breadcrumb (ctx.page({crumbs: false}), V3_REPORT §4.5): the line shows only with filter chips */
+.pg-crumbrow[hidden], .pg-crumbs[hidden] { display: none; }
+
+/* ── 14 · Details as a bottom sheet on phones (< 768 px; items 36 and 38) ──────────────────────────────────
+ * The drawer over the whole screen hid the map, so a route line was never seen on a phone. Below 768 px the
+ * drawer is a sheet along the bottom (app.js sheetLayout): always full height under the top bar, slid down by
+ * --sheet-y so only its content shows ("peek", at most 55 % of the screen), --sheet-y-mini for the handle and the
+ * title only ("mini"), none for the whole height ("full", .is-expanded). Transforms and opacity only; it rises
+ * 32 px and fades in like the drawer. While it peeks, the body gets the hidden amount (--sheet-pad) as extra end
+ * padding, so every line can be scrolled into view. The handle (a button: tap, Enter or Space) and the title can
+ * be dragged; the sheet follows the finger without a transition (.is-dragging).                                */
+.drawer__grab { display: none; }
+@media (max-width: 767px) {
+  .drawer {
+    top: calc(var(--bars-h) + 8px); left: 8px; right: 8px; bottom: 0; width: auto;
+    border-bottom: 0; border-radius: var(--r-glass) var(--r-glass) 0 0;
+    transform: translateY(calc(var(--sheet-y, 45vh) + 32px));
+  }
+  .drawer.is-open { transform: translateY(var(--sheet-y, 45vh)); }
+  .drawer.is-sheet.is-mini { transform: translateY(calc(var(--sheet-y-mini, 60vh) + 32px)); }
+  .drawer.is-sheet.is-mini.is-open { transform: translateY(var(--sheet-y-mini, 60vh)); }
+  .drawer.is-sheet.is-expanded { transform: translateY(32px); }
+  .drawer.is-sheet.is-expanded.is-open { transform: none; }
+  .drawer.is-sheet.is-dragging { transition: none; }
+  .drawer__grab {
+    display: flex; align-items: center; justify-content: center; flex: none;
+    width: 100%; height: 28px; padding: 0; border: 0; background: transparent;
+    cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none;
+  }
+  .drawer.is-dragging .drawer__grab { cursor: grabbing; }
+  .drawer__grab:focus-visible { outline: 2px solid var(--signal); outline-offset: -4px; box-shadow: none; }
+  .drawer__grip { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--rule-strong); }
+  .drawer.is-sheet .drawer__head { padding-top: var(--s-2); touch-action: none; }
+  .drawer.is-sheet:not(.is-expanded) .drawer__body { padding-bottom: calc(var(--s-4) + var(--sheet-pad, 0px)); }
+  .drawer.is-sheet .drawer__prov { padding-bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 599px) {
+  .drawer { top: calc(var(--banner-h) + var(--topbar-h) + 8px); left: 0; right: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-host:not(.section-host--furniture):not(.is-leaving) > *, .section-host.is-leaving > *,
+  .section-host .legend, .legend.is-open .legend__body { animation: none; }
+  .nav__ink, .tabbar__ink, .vswitch__thumb, body[data-layout="page"] #map { transition: none; }
+}
+
+/* ── 14 · Phones: the Keterangan pill keeps above the bottom sheet (item 43) ──────────────────────────────────────
+ * app.js writes --sheet-cover (the px of the screen bottom the details sheet covers: its peek or mini height, 0 when
+ * closed). The pill stays where it was unless the sheet would cover it; then it sits 8 px above the sheet's edge. */
+@media (max-width: 599px) {
+  .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
+    bottom: max(calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px), calc(var(--sheet-cover, 0px) + 8px));
+  }
+}
+@media (min-width: 600px) and (max-width: 767px) {
+  .legend, body[data-view="deep"] .legend { bottom: max(calc(var(--free-b) + var(--credits-h, 20px) + 4px), calc(var(--sheet-cover, 0px) + 8px)); }
+}

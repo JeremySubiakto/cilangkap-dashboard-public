@@ -1,0 +1,83 @@
+/* ==========================================================================
+ * Cilangkap Command · charts (§B.7)
+ * Hand-built D3/SVG and canvas. Transparent on .panel--sheet; horizontal
+ * gridlines only; no y-axis line; mono 10 axes; 1.5 px lines with 8 % area;
+ * gold dashed target lines; signal crosshair; inline legends; no titles in
+ * the SVG (the block header carries them). Bars and lines grow 420 ms with a
+ * 12 ms stagger, set by charts.js; nothing animates under reduced motion.
+ * ========================================================================== */
+
+.chart { position: relative; width: 100%; min-height: 120px; }
+.chart > svg, .chart > canvas { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart text { font-family: var(--font-sans); font-size: 12px; fill: var(--text-3); font-feature-settings: normal;; font-variant-numeric: tabular-nums; }
+
+/* Axes and grid */
+.chart .grid line, .chart .gridline { stroke: var(--rule); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .baseline { stroke: var(--rule-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .axis path, .chart .axis .domain { display: none; }
+.chart .axis line { stroke: var(--rule); shape-rendering: crispEdges; }
+.chart .axis text { fill: var(--text-3); }
+.chart .axis--x text { text-anchor: middle; }
+
+/* Marks */
+.chart .bar { fill-opacity: .9; transition: fill-opacity var(--dur-xhl) var(--ease-standard); }
+.chart .bar.is-hover { fill-opacity: 1; }
+.chart.is-hovering .bar:not(.is-hover) { fill-opacity: .3; }
+.chart .line { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart .area { stroke: none; fill-opacity: .08; }
+.chart .dot  { r: 3; }
+.chart .series { transition: opacity var(--dur-xhl) var(--ease-standard); }
+.chart.is-hovering .series:not(.is-hover) { opacity: .3; }
+.chart .mark--plat { fill: var(--plat-3); }
+.chart .mark--neg  { fill: var(--neg); fill-opacity: .7; }
+.chart .mark--gold { fill: var(--gold); }
+
+/* Target line and label (§B.7) */
+.chart .target { stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 3; shape-rendering: crispEdges; fill: none; }
+.chart .target-label { fill: var(--gold-soft); text-anchor: end; }
+.chart .ghost { fill: none; stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 3 3; }      /* pace ghost (§C.4.5) */
+.chart .diag { stroke: var(--text-3); stroke-width: 1; }
+.chart .region-neg { fill: var(--neg-a06); }
+
+/* Crosshair (signal) */
+.chart .crosshair { stroke: var(--signal); stroke-width: 1; shape-rendering: crispEdges; pointer-events: none; }
+
+/* Sparkline (KPI tile §C.8.1.4) */
+.spark { display: block; width: 100%; height: 100%; overflow: visible; }
+.spark .line { fill: none; stroke: var(--text-2); stroke-width: 1.25; }
+.spark .area { fill: var(--text-2); fill-opacity: .08; }
+.spark .dot  { fill: var(--text-2); }
+
+/* Inline legend: glyph + label, 12 px, top-left in the header row, never boxed */
+.chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font: 500 var(--fs-chip)/16px var(--font-sans); color: var(--text-2); }
+.chart-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend__swatch { width: 8px; height: 8px; border-radius: 1px; background: currentColor; }
+.chart-legend__dash { width: 14px; height: 0; border-top: 1px dashed var(--gold); }
+
+/* Mono summary line under a chart */
+.chart-summary { margin-top: 8px; font: 400 var(--fs-mono)/var(--lh-mono) var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.chart-summary b { font-weight: 500; color: var(--text-1); }
+
+/* Matrix cells (§C.4.3): 72 × 44, heat ramp at 85 % */
+.matrix { border-collapse: separate; border-spacing: 2px; }
+.matrix td.cell {
+  width: 72px; height: 44px; padding: 4px 6px; border-radius: 1px; text-align: right; vertical-align: top;
+  font: 400 12px/16px var(--font-mono); color: var(--text-1); cursor: pointer;
+}
+.matrix td.cell small { display: block; font: 400 12px/16px var(--font-mono); color: var(--text-2); }
+.matrix td.cell.is-on-gold, .matrix td.cell.is-on-gold small { color: var(--text-on-gold); }
+.matrix th { font: 600 var(--fs-eyebrow)/var(--lh-eyebrow) var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); padding: 0 6px; }
+
+/* Accessibility: "Lihat tabel" toggle (§L.5) */
+.chart-table-toggle { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.chart-table-toggle:hover { color: var(--text-1); }
+
+/* Loading (§L.3): baseline plus three gridlines and an eyebrow */
+.chart-sk { position: relative; height: var(--h, 180px); }
+.chart-sk > i { position: absolute; left: 0; right: 0; height: 1px; background: var(--rule); }
+.chart-sk > i:nth-child(1) { top: 0; }
+.chart-sk > i:nth-child(2) { top: 33%; }
+.chart-sk > i:nth-child(3) { top: 66%; }
+.chart-sk > i:nth-child(4) { bottom: 0; background: var(--rule-strong); }
+.chart-sk--bars { display: flex; align-items: flex-end; gap: 6px; padding: 0 2px; }
+.chart-sk--bars > b { flex: 1 1 0; display: block; height: var(--b, 40%); background: var(--rule); border-radius: 1px 1px 0 0; }

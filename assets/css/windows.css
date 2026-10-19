@@ -1,0 +1,534 @@
+/* ==========================================================================
+ * Progressive cards ("Kartu bertahap", COPY_STYLE_EN items 39 and 43): the callout, the cards (the app drawer as the
+ * active card, pins), the tray, the slim summary rail and the bottom drawer "Daftar & grafik". assets/js/windows.js.
+ * Loads after shell.css and before the section stylesheets. Tokens only (tokens.css §6, brand.css glass).
+ * Motion (item 38): opacity and the individual translate / scale properties; the position of a callout or a card is
+ * its own transform or inline box, so the entrances never fight it. Reduced motion: tokens.css cuts every duration.
+ * ========================================================================== */
+
+/* ── 0 · Shared bits ───────────────────────────────────────────────────── */
+.ws-demo { flex: none; padding: 0 6px; border: 1px solid var(--rule-gold); border-radius: 4px; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; color: var(--gold); }
+html[data-theme="day"] .ws-demo { color: var(--text-1); border-color: var(--gold); background: var(--gold-a16); }
+.ws-demo[hidden] { display: none; }
+.ws-tool {
+  flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer;
+}
+.ws-tool:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--glass-card-hover); color: var(--text-1); }
+.ws-tool:disabled, .ws-tool[aria-disabled="true"] { opacity: .45; cursor: default; }   /* aria-disabled stays focusable: its refusal is said */
+.ws-tool[hidden] { display: none; }
+.ws-tool .icon { width: 15px; height: 15px; }
+.ws-tool.is-on { color: var(--gold); border-color: var(--rule-gold); background: var(--gold-a10); }
+html[data-theme="day"] .ws-tool.is-on { color: var(--text-1); background: var(--gold-a16); border-color: var(--gold); }
+.ws-tool--text { width: auto; padding: 0 10px; gap: 6px; display: inline-flex; align-items: center; font: 500 13px/1 var(--font-sans); white-space: nowrap; }
+.ws-tool--close { color: var(--text-1); }
+.ws-link { border: 0; padding: 0; background: none; color: var(--signal); font: 500 13px/18px var(--font-sans); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* focus rings only from the keyboard; a title focused by code shows none */
+.ws-co:focus, .ws-win .dd-title:focus, .ws-co__title:focus { outline: none; }
+.ws-co :focus-visible, .ws-win :focus-visible, .ws-slim :focus-visible, .ws-drawer__bar :focus-visible, .ws-tray :focus-visible, .ws-edge:focus-visible {
+  outline: 2px solid var(--glass-focus); outline-offset: 2px;
+}
+.ws-win .dd-title:focus-visible { outline: 2px solid var(--glass-focus); outline-offset: 2px; border-radius: 4px; }
+
+/* numbers: up to three, the first set large when it is a number */
+.ws-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 4px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.ws-nums[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }   /* as many columns as numbers */
+.ws-nums[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+.ws-num { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 1px; padding: 8px 8px 0 0; min-width: 0; margin: 0; }
+.ws-num + .ws-num { padding-left: 10px; border-left: 1px solid var(--rule); }
+.ws-num__v { margin: 0; font: 600 15px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-num.is-long .ws-num__v { white-space: normal; text-wrap: balance; overflow: visible; }   /* breaks only at its "·" (windows.js) */
+.ws-num.is-big .ws-num__v { font: 400 22px/26px var(--font-serif); }
+.ws-num__k { font: 400 12px/15px var(--font-sans); color: var(--text-2); }
+.ws-num.is-ok .ws-num__v { color: var(--status-ok); }
+.ws-num.is-mid .ws-num__v { color: var(--status-mid-text); }
+.ws-num.is-bad .ws-num__v { color: var(--status-bad); }
+html[data-theme="day"] .ws-num.is-ok .ws-num__v, html[data-theme="day"] .ws-num.is-bad .ws-num__v { color: var(--text-1); }
+.ws-nums.is-list { grid-template-columns: minmax(0, 1fr); }
+.ws-nums.is-list .ws-num { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0 0; }
+.ws-nums.is-list .ws-num + .ws-num { padding-left: 0; border-left: 0; }
+.ws-nums.is-list .ws-num__v { text-align: right; font-size: 13.5px; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+.ws-nums.is-list .ws-num.is-big { flex-direction: column-reverse; align-items: flex-start; gap: 0; }
+.ws-nums.is-list .ws-num.is-big .ws-num__v { text-align: left; font: 400 24px/28px var(--font-serif); }
+.ws-chiptag { font-size: 12px; }
+.ws-chiptag.is-ok { border-color: var(--status-ok); }
+.ws-chiptag.is-mid { border-color: var(--status-mid); }
+.ws-chiptag.is-bad { border-color: var(--status-bad); }
+
+/* ── 1 · Callout: the first, small answer to a map click ───────────────── */
+.ws-co {
+  position: fixed; left: 0; top: 0; z-index: var(--z-ws-callout);
+  width: var(--ws-callout-w); min-width: 260px; max-width: min(340px, calc(100vw - 24px));
+  padding: 8px 14px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start;
+  background: var(--glass-bg-pop); border: 1px solid var(--glass-border); border-radius: var(--r-glass);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
+  overflow: visible; will-change: transform;
+  opacity: 0; translate: -6px 0;
+  transition: opacity var(--dur-fast) var(--ease-in-out), translate var(--dur-fast) var(--ease-in-out);
+}
+.ws-co[data-side="left"], .ws-co[data-side="top-left"], .ws-co[data-side="bottom-left"] { translate: 6px 0; }
+.ws-co[data-side="top"] { translate: 0 6px; }
+.ws-co[data-side="bottom"] { translate: 0 -6px; }
+.ws-co[data-side="parked"] { translate: 0 6px; }
+.ws-co.is-in { opacity: 1; translate: 0 0; transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out); }
+.ws-co.is-out, .ws-co.is-leaving { opacity: 0 !important; pointer-events: none; }
+.ws-co.is-leaving { transition: opacity var(--dur-fast) var(--ease-in-out); }
+/* out of the free map (the edge chip stands in) or waiting for the app's camera to land: out of the Tab order too */
+.ws-co.is-out { visibility: hidden; transition: opacity var(--dur-fast) var(--ease-in-out), visibility 0s linear var(--dur-fast); }
+.ws-co.is-held { visibility: hidden; pointer-events: none; transition: none; }
+.ws-co__head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+/* the eyebrow keeps its kota: two lines before it is cut ("KECAMATAN · JAKARTA TIMUR" beside CONTOH) */
+.ws-co__eyebrow { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.ws-co__icon {
+  flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -4px 0;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer;
+}
+.ws-co__x { margin-right: -6px; color: var(--text-1); }
+.ws-co__icon:hover { background: var(--glass-card-hover); color: var(--text-1); }
+.ws-co__icon .icon { width: 14px; height: 14px; }
+.ws-co__title {
+  margin: 0; font: 400 19px/24px var(--font-serif); color: var(--text-1); letter-spacing: -.005em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+.ws-co__chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* a chip is a line of text: it wraps to the next row before it is cut, and a chip longer than the card ends in "…" */
+.ws-co__chips > * { font-size: 12px; flex: 0 1 auto; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-co__chips > .tag, .ws-co__chips > .ws-chiptag { display: inline-block; height: auto; line-height: 16px; padding-top: 0; padding-bottom: 0; }
+.ws-co__chips > * > * { vertical-align: middle; }
+.ws-co__note { margin: 0; display: flex; gap: 6px; align-items: baseline; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ws-co__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--status-none); translate: 0 1px; }
+.ws-co__dot.is-ok { background: var(--status-ok); } .ws-co__dot.is-mid { background: var(--status-mid); } .ws-co__dot.is-bad { background: var(--status-bad); }
+.ws-co__acts { display: flex; gap: 8px; align-items: stretch; }
+.ws-co .ws-nums { margin-top: 0; }
+.ws-co .ws-num { padding-top: 6px; }
+.ws-co__acts .btn { min-height: 34px; padding: 5px 12px; gap: 6px; white-space: normal; line-height: 16px; text-align: center; justify-content: center; }
+.ws-co__acts .btn .icon { width: 14px; height: 14px; }
+.ws-co__main { flex: 1 1 auto; min-width: 0; }
+.ws-co__detail { flex: 0 0 auto; }
+.ws-co__acts > :only-child { flex: 1 1 auto; }
+.ws-co__links { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.ws-co__link { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; font: 500 12px/16px var(--font-sans); color: var(--signal); text-decoration: none; white-space: nowrap; }
+.ws-co__link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.ws-co__link .icon { width: 12px; height: 12px; }
+.ws-co__srcline { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; }
+.ws-co__srcline[hidden] { display: none; }
+.ws-co__tail {
+  position: absolute; width: 12px; height: 12px; margin: -6px 0 0 0;
+  background: var(--glass-bg-pop); border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  rotate: 45deg; pointer-events: none;
+}
+.ws-co__tail[hidden] { display: none; }
+.ws-co[data-side="right"] .ws-co__tail { left: -7px; border-top-color: transparent; border-right-color: transparent; }
+.ws-co[data-side="left"] .ws-co__tail { right: -7px; border-bottom-color: transparent; border-left-color: transparent; }
+.ws-co[data-side="bottom"] .ws-co__tail { top: -1px; margin: -6px 0 0 -6px; border-bottom-color: transparent; border-right-color: transparent; }
+.ws-co[data-side="top"] .ws-co__tail { top: auto; bottom: -7px; margin: 0 0 0 -6px; border-top-color: transparent; border-left-color: transparent; }
+
+/* the edge chip: the anchor left the free map */
+.ws-edge {
+  position: fixed; left: 0; top: 0; z-index: var(--z-ws-callout);
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; max-width: 220px; padding: 0 12px 0 8px;
+  border: 1px solid var(--glass-border); border-radius: 999px; background: var(--glass-bg-chip); color: var(--text-1);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 13px/1 var(--font-sans); cursor: pointer;
+  animation: ws-fade-in var(--dur-fast) var(--ease-out) backwards;
+}
+.ws-edge[hidden] { display: none; }
+.ws-edge__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-edge__arrow { width: 14px; height: 14px; flex: none; }
+.ws-edge[data-edge="right"] .ws-edge__arrow { rotate: 180deg; }
+.ws-edge[data-edge="top"] .ws-edge__arrow { rotate: 90deg; }
+.ws-edge[data-edge="bottom"] .ws-edge__arrow { rotate: -90deg; }
+@keyframes ws-fade-in { from { opacity: 0; } }
+
+/* ── 2 · Cards: the active sheet (the app drawer) and pins ─────────────── */
+.ws-bar { display: none; }
+.ws-rz { display: none; }
+body.ws-on .drawer.ws-win, .ws-pin {
+  position: fixed; top: auto; right: auto; bottom: auto;
+  display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  border-radius: var(--r-glass);
+}
+body.ws-on .drawer.ws-win {
+  z-index: var(--z-ws-col);
+  transform: none; translate: 24px 0; opacity: 0; pointer-events: none;
+  transition: translate var(--dur-fast) var(--ease-in-out), opacity var(--dur-fast) var(--ease-in-out);
+}
+body.ws-on .drawer.ws-win[data-dock="left"] { translate: -24px 0; }
+body.ws-on .drawer.ws-win[data-dock="float"] { translate: 0 10px; }
+body.ws-on .drawer.ws-win.is-open {
+  translate: 0 0; opacity: 1; pointer-events: auto;
+  transition: translate var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.ws-pin {
+  z-index: var(--z-ws-float);
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
+  transition: opacity var(--dur-fast) var(--ease-in-out), translate var(--dur-fast) var(--ease-in-out);
+}
+.ws-pin.is-entering { opacity: 0; translate: 0 10px; }
+.ws-pin:not(.is-entering) { transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-base) var(--ease-out); }
+.ws-pin.is-out { opacity: 0; translate: 0 6px; pointer-events: none; }
+.ws-win.is-min { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+.ws-win.is-minning { pointer-events: none !important; }     /* flying into its chip (windows.js setMin) */
+.ws-win.is-pinned::after {
+  content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 2px; border-radius: 0 0 2px 2px;
+  background: var(--gold); pointer-events: none;
+}
+.ws-win.is-dragging { transition: none !important; will-change: transform; }
+.ws-win.is-dragging, .ws-win.is-resizing { user-select: none; }
+/* a drag or resize in progress: one transparent sheet over the page carries the cursor (toggling a class on the body
+   restyled every element of the page inside pointermove, §12.4) */
+.ws-shield { position: fixed; inset: 0; z-index: var(--z-pop); cursor: grabbing; user-select: none; background: transparent; }
+.ws-shield[hidden] { display: none; }
+
+/* Detail › Terang over the satellite: the stronger tint, so text is never grey on grey */
+html[data-theme="day"] body[data-view="deep"].ws-on .drawer.ws-win,
+html[data-theme="day"] body[data-view="deep"] .ws-pin,
+html[data-theme="day"] body[data-view="deep"] .ws-co,
+html[data-theme="day"] body[data-view="deep"] .ws-co__tail { background: var(--ws-glass-strong); }
+
+/* the bar: grip, eyebrow, CONTOH, Sematkan · Kecilkan · Tutup */
+body.ws-on:not(.ws-tablet) .drawer.ws-win > .ws-bar, .ws-pin > .ws-bar {
+  flex: none; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 8px 0 8px;
+  cursor: grab; touch-action: none;
+}
+body[data-view="overview"] .ws-bar { cursor: default; }
+.ws-bar__eyebrow { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; line-height: 15px; letter-spacing: .04em; }
+/* a card's bar is narrow beside CONTOH and three tools: the eyebrow keeps the kota on its second line */
+.ws-bar__tools { flex: none; display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.ws-grip {
+  flex: none; display: inline-grid; place-items: center; width: 24px; height: 32px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-3); cursor: grab; touch-action: none;
+}
+.ws-grip[hidden] { display: none; }
+.ws-grip:hover { color: var(--text-1); background: var(--glass-card-hover); }
+.ws-grip .icon { width: 14px; height: 14px; }
+/* the card head: the eyebrow sits in the bar; the big Tutup is the bar's Tutup (tablet keeps the big one) */
+body.ws-on:not(.ws-tablet) .drawer.ws-win .drawer__titles > .t-eyebrow, .ws-pin .drawer__titles > .t-eyebrow { display: none; }
+body.ws-on:not(.ws-tablet) .drawer.ws-win .drawer__close { display: none; }
+body.ws-on .drawer.ws-win .drawer__head, .ws-pin .drawer__head { flex: none; padding: 2px var(--s-5) 8px; }
+/* a pin keeps its head at its natural height (title on one line, the numbers, the quick action); its body gives way
+   (down to nothing in a half column) and scrolls */
+.ws-pin .drawer__head { flex: none; max-height: 60%; overflow: hidden; }
+body.ws-on .drawer.ws-win .drawer__titles, .ws-pin .drawer__titles { gap: 3px; }
+body.ws-on .drawer.ws-win .drawer__titles .ws-num.is-big .ws-num__v, .ws-pin .drawer__titles .ws-num.is-big .ws-num__v { font-size: 20px; line-height: 24px; }
+body.ws-on .drawer.ws-win .drawer__titles .ws-num__k, .ws-pin .drawer__titles .ws-num__k { line-height: 14px; }
+body.ws-tablet .drawer.ws-win .drawer__head { padding-top: var(--s-4); max-height: none; }
+body.ws-on .drawer.ws-win .dd-title, .ws-pin .dd-title { font-size: 20px; line-height: 24px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ws-pin .dd-title { -webkit-line-clamp: 1; overflow-wrap: anywhere; }      /* the full name is its title (tooltip) */
+body.ws-on .drawer.ws-win .drawer__titles .ws-nums, .ws-pin .drawer__titles .ws-nums { margin: 0; }
+body.ws-on .drawer.ws-win .drawer__titles .ws-num, .ws-pin .drawer__titles .ws-num { padding-top: 6px; }
+.ws-pin .drawer__titles { display: grid; gap: 4px; min-width: 0; }
+.ws-pin .drawer__body { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 0 var(--s-5) var(--s-4); }
+body.ws-on .drawer.ws-win .drawer__body { padding-top: 0; }
+.ws-bar .ws-crumb { flex: 0 1 auto; min-width: 0; margin: 0; max-width: 60%; }
+.ws-bar .ws-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-bar.has-crumb .ws-bar__eyebrow { display: none; }
+.ws-crumb {
+  justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 8px 0 4px; margin: 0 0 2px -4px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--signal); font: 500 13px/18px var(--font-sans); cursor: pointer;
+}
+.ws-crumb:hover { background: var(--glass-card-hover); }
+.ws-crumb .icon { width: 13px; height: 13px; }
+.ws-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
+.ws-quick__btn { min-height: 34px; padding: 4px 12px; font-weight: 600; }
+.ws-quick__done { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/18px var(--font-sans); color: var(--status-ok); }
+html[data-theme="day"] .ws-quick__done { color: var(--text-1); }
+.ws-quick__done .icon { width: 14px; height: 14px; color: var(--status-ok); }
+.ws-quick__note { font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ws-quick__err { flex-basis: 100%; margin: 0; font: 400 12px/16px var(--font-sans); color: var(--status-bad); }
+/* the phone's sticky row: done reads on one line, "✓ Di tindak lanjut · Ubah"; the stage note sits in the sheet head */
+.ws-quick.is-compact { flex-wrap: nowrap; gap: 6px; white-space: nowrap; min-width: 0; }
+.ws-quick.is-compact .ws-quick__done { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ws-quick__sep { color: var(--text-3); }
+.ws-sticky__note { margin: 6px 0 0; }
+.ws-sticky__note[hidden] { display: none; }
+.ws-quick__err[hidden] { display: none; }
+.ws-hint { margin: var(--s-3) 0 0; padding: 8px 10px; border: 1px solid var(--glass-border-card); border-radius: var(--r-ctl); background: var(--glass-card-flat); font: 400 12.5px/17px var(--font-sans); color: var(--text-2); }
+.ws-gone { display: grid; gap: 8px; justify-items: start; padding: var(--s-4) 0; color: var(--text-2); }
+
+/* folding sections: a button in each heading, a one-line preview when folded; headings are not sticky */
+.ws-fold { padding: 0; }
+.ws-fold + .ws-fold { border-top: 1px solid var(--rule); }
+.ws-fold > .dd-blk__t { margin: 0; }
+.ws-fold > .dd-blk__t.has-tools { display: flex; align-items: center; gap: 6px; }
+.ws-fold > .dd-blk__t.has-tools .ws-fold__btn { flex: 1 1 auto; min-width: 0; }
+.ws-fold__t > * { margin-left: 6px; vertical-align: middle; }
+.ws-fold__btn {
+  display: flex; align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 0;
+  border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; text-align: left;
+}
+.ws-fold__btn:hover { color: var(--text-1); }
+/* a long title wraps instead of being cut (final integration); the preview only takes the room that is left */
+.ws-fold__t { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ws-fold__pv { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-3); }
+.ws-fold:not(.is-folded) .ws-fold__pv { visibility: hidden; }
+.ws-fold__chev { width: 14px; height: 14px; flex: none; margin-left: auto; transition: rotate var(--dur-fast) var(--ease-out); }
+.ws-fold.is-folded .ws-fold__chev { rotate: -90deg; }
+.ws-fold__body { padding: 0 0 var(--s-4); }
+.ws-fold__body[hidden] { display: none; }
+
+/* the footer: the Google links in words, then ⓘ Sumber (sticky: only the body scrolls) */
+.ws-foot { flex: none; display: grid; gap: 6px; padding: 8px var(--s-5) 10px; border-top: 1px solid var(--rule); white-space: normal; }
+.ws-foot[hidden] { display: none; }
+.ws-foot__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ws-foot__acts > .ws-src { display: contents; }
+.ws-foot__acts .ws-src__btn { margin-left: auto; }
+.ws-foot__acts .ws-src__text { flex: 1 1 100%; }
+.ws-link-btn, .ws-foot__acts .gmaps-link, .ws-foot__acts .btn { min-height: 32px; padding: 4px 8px; font-size: 12px; line-height: 16px; gap: 5px; margin: 0; width: auto; }
+.ws-foot__acts .btn .icon { width: 12px; height: 12px; }
+.ws-link-btn .icon { width: 12px; height: 12px; }
+/* a pin's footer is one row: the links shrink ("…"), Sumber is its icon and opens its lines above the footer */
+.ws-pin .ws-foot { position: relative; padding: 6px var(--s-5) 8px; }
+.ws-pin .ws-foot__acts { flex-wrap: nowrap; min-width: 0; }
+.ws-pin .ws-foot__acts > a, .ws-pin .ws-foot__acts > .btn { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.ws-pin .ws-foot__acts > a > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-pin .ws-foot__acts .ws-src__btn { flex: none; }
+.ws-pin .ws-foot__acts .ws-src__btn > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ws-pin .ws-foot__acts .ws-src__text {
+  position: absolute; left: var(--s-4); right: var(--s-4); bottom: calc(100% + 4px); z-index: 3; padding: 8px 10px;
+  border-radius: var(--r-ctl); background: var(--glass-bg-pop); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
+}
+.ws-src { display: grid; gap: 6px; }
+.ws-src__btn { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 6px; margin-left: -6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font: 500 12px/16px var(--font-sans); cursor: pointer; }
+.ws-src__btn:hover { color: var(--text-1); background: var(--glass-card-hover); }
+.ws-src__btn .icon { width: 13px; height: 13px; }
+.ws-src__text { display: grid; gap: 4px; font: 400 12px/16px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; max-height: 140px; overflow-y: auto; }
+.ws-src__text[hidden] { display: none; }
+.ws-src__text p { margin: 0; }
+.ws-src__notes { margin: 0; padding-left: 16px; }
+
+/* resize handles: edges 8 px (16 on touch), corners 16 px; a docked card shows its inner edge only */
+body.ws-on:not(.ws-tablet) .ws-win .ws-rz { display: block; position: absolute; z-index: 4; touch-action: none; }
+.ws-rz--n, .ws-rz--s { left: 16px; right: 16px; height: 8px; cursor: ns-resize; }
+.ws-rz--n { top: -4px; } .ws-rz--s { bottom: -4px; }
+.ws-rz--e, .ws-rz--w { top: 16px; bottom: 16px; width: 8px; cursor: ew-resize; }
+.ws-rz--e { right: -4px; } .ws-rz--w { left: -4px; }
+.ws-rz--ne, .ws-rz--nw, .ws-rz--se, .ws-rz--sw { width: 16px; height: 16px; }
+.ws-rz--ne { top: -4px; right: -4px; cursor: nesw-resize; } .ws-rz--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.ws-rz--nw { top: -4px; left: -4px; cursor: nwse-resize; } .ws-rz--se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.ws-win[data-dock="float"] .ws-rz--se::after {
+  content: ""; position: absolute; right: 7px; bottom: 7px; width: 8px; height: 8px;
+  border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3); border-radius: 0 0 3px 0;
+}
+body.ws-on .ws-win[data-dock="right"] .ws-rz:not(.ws-rz--w), body.ws-on .ws-win[data-dock="left"] .ws-rz:not(.ws-rz--e) { display: none; }
+.ws-win[data-dock="right"] .ws-rz--w::before, .ws-win[data-dock="left"] .ws-rz--e::before {
+  content: ""; position: absolute; top: 50%; left: 2px; width: 4px; height: 36px; margin-top: -18px; border-radius: 2px;
+  background: var(--rule-strong); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
+}
+.ws-win[data-dock]:hover .ws-rz--w::before, .ws-win[data-dock]:hover .ws-rz--e::before { opacity: 1; }
+@media (pointer: coarse) {
+  .ws-rz--n, .ws-rz--s { height: 16px; } .ws-rz--n { top: -8px; } .ws-rz--s { bottom: -8px; }
+  .ws-rz--e, .ws-rz--w { width: 16px; } .ws-rz--e { right: -8px; } .ws-rz--w { left: -8px; }
+}
+/* below 1280 px and in Sederhana: no drag, float or pin (the grip and Sematkan are hidden by windows.js) */
+body[data-view="overview"] .ws-win .ws-rz:not(.ws-rz--w) { display: none !important; }
+body[data-view="overview"] .ws-tool, body[data-view="overview"] .ws-co__icon { width: 40px; height: 40px; }
+body[data-view="overview"] .ws-co__acts .btn, body[data-view="overview"] .ws-quick__btn { min-height: 40px; }
+
+/* snap preview while dragging (hidden attribute, never only transparent) */
+.ws-ghost {
+  position: fixed; z-index: var(--z-ws-float); pointer-events: none; border-radius: var(--r-glass);
+  border: 2px dashed var(--signal); background: var(--signal-a20);
+  animation: ws-fade-in var(--dur-fast) var(--ease-out) backwards;
+}
+.ws-ghost[hidden] { display: none; }
+
+/* ── 3 · Tray: chips of the cards made small ──────────────────────────── */
+.ws-tray { display: flex; align-items: center; gap: 6px; }
+.ws-tray:empty { display: none; }
+.ws-tray--float {
+  position: fixed; z-index: var(--z-ws-tray); translate: -50% 0;
+  padding: 6px; max-width: calc(100vw - 32px); overflow-x: auto;
+  border-radius: 999px; background: var(--glass-bg-chip); border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+}
+.ws-tray--float[hidden] { display: none; }
+.ws-chipwrap { display: inline-flex; align-items: center; flex: none; border: 1px solid var(--glass-border); border-radius: 999px; background: var(--glass-card-flat); }
+.ws-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; max-width: 200px; padding: 0 4px 0 10px;
+  border: 0; background: transparent; color: var(--text-1); font: 500 12.5px/1 var(--font-sans); cursor: pointer; border-radius: 999px 0 0 999px;
+}
+.ws-chip:hover { background: var(--glass-card-hover); }
+.ws-chip .icon { width: 13px; height: 13px; color: var(--text-2); flex: none; }
+.ws-chip.is-pinned .icon { color: var(--gold); }
+.ws-chip__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-chip__x { display: inline-grid; place-items: center; width: 28px; height: 30px; border: 0; background: transparent; color: var(--text-2); cursor: pointer; border-radius: 0 999px 999px 0; }
+.ws-chip__x:hover { color: var(--text-1); background: var(--glass-card-hover); }
+.ws-chip__x .icon { width: 11px; height: 11px; }
+
+/* ── 4 · Adopted workspace: the summary rail (slim 76 px · full 360 px · overlay) ─ */
+body.ws-adopted .ws-rail {
+  transition: transform var(--dur-base) var(--ease-out), visibility 0s;
+  z-index: var(--z-rails);
+}
+body.ws-adopted .ws-rail.is-slimmed {
+  visibility: hidden; pointer-events: none;
+  transition: transform var(--dur-fast) var(--ease-in-out), visibility 0s linear var(--dur-fast);
+}
+body.ws-adopted .ws-rail.is-overlay { z-index: 25; box-shadow: var(--glass-hl), var(--glass-shadow); }
+.ws-rail__fold { position: absolute; top: 10px; right: 10px; z-index: 5; background: var(--glass-card-flat); border-color: var(--glass-border-card); }
+body.ws-adopted .ws-rail .pg-head { padding-right: 40px; }
+
+.ws-slim {
+  position: absolute; left: var(--ws-inset); width: var(--ws-rail-slim); z-index: calc(var(--z-rails) - 1);   /* under the full rail as it slides in */
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 6px 12px;
+  border-radius: var(--r-glass); cursor: pointer; overflow: hidden;
+  transition: opacity var(--dur-base) var(--ease-out), visibility 0s;
+}
+.ws-slim.is-away { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur-fast) var(--ease-in-out), visibility 0s linear var(--dur-fast); }
+.ws-slim__open {
+  display: grid; justify-items: center; gap: 2px; width: 64px; min-height: 48px; padding: 6px 2px;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); color: var(--text-1); cursor: pointer;
+}
+.ws-slim__open:hover { background: var(--glass-card-hover); }
+.ws-slim__open .icon { width: 16px; height: 16px; }
+.ws-slim__open-t { font: 500 12px/14px var(--font-sans); }
+.ws-slim__sec { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-top: 2px; border-radius: 10px; background: var(--btn-primary-bg); color: var(--btn-primary-ink); }
+.ws-slim__sec .icon { width: 18px; height: 18px; }
+.ws-slim__lbl { font: 600 12px/14px var(--font-sans); color: var(--text-1); text-align: center; overflow-wrap: anywhere; }
+.ws-slim__badge { padding: 2px 6px; border-radius: 999px; background: var(--gold-a16); color: var(--text-1); font: 600 12px/14px var(--font-sans); white-space: nowrap; }
+.ws-slim__badge[hidden] { display: none; }
+.ws-slim__kpis { display: grid; gap: 8px; width: 100%; padding-top: 10px; border-top: 1px solid var(--rule); }
+.ws-slim__kpi { display: grid; justify-items: center; gap: 2px; padding: 8px 2px; border-radius: 10px; background: var(--glass-card-flat); text-align: center; }
+.ws-slim__kpi:hover { background: var(--glass-card-hover); }
+.ws-slim__v { font: 600 16px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap; }
+.ws-slim__k { font: 400 12px/14px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; }
+.ws-slim__kpi.is-ok .ws-slim__v::before, .ws-slim__kpi.is-bad .ws-slim__v::before, .ws-slim__kpi.is-mid .ws-slim__v::before, .ws-slim__kpi.is-potential .ws-slim__v::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 4px 2px 0; border-radius: 50%; background: var(--status-ok); vertical-align: middle;
+}
+.ws-slim__kpi.is-bad .ws-slim__v::before { background: var(--status-bad); }
+.ws-slim__kpi.is-mid .ws-slim__v::before { background: var(--status-mid); }
+.ws-slim__kpi.is-potential .ws-slim__v::before { background: var(--status-potential); }
+
+/* ── 5 · Adopted workspace: the bottom drawer "Daftar & grafik" (peek · half · full) ─ */
+body.ws-adopted .ws-drawer {
+  position: fixed !important; z-index: var(--z-ws-drawer);
+  display: flex !important; flex-direction: column; overflow: hidden; visibility: visible !important;
+  border-radius: var(--r-glass); max-width: none !important; min-width: 0 !important;
+  transition: none; animation: none;
+}
+body.ws-adopted .ws-drawer.is-dragging { will-change: transform; }
+.ws-drawer__bar { flex: none; position: relative; height: var(--ws-bar-h); padding: 6px 10px 0 12px; border-bottom: 1px solid var(--rule); touch-action: none; }
+.ws-drawer.is-peek .ws-drawer__bar { border-bottom-color: transparent; }
+.ws-drawer__grab {
+  position: absolute; left: 50%; top: 0; translate: -50% 0; width: 72px; height: 14px; padding: 0;
+  display: grid; place-items: center; border: 0; background: transparent; cursor: ns-resize; z-index: 2;
+}
+.ws-drawer__grip { width: 40px; height: 4px; border-radius: 2px; background: var(--rule-strong); transition: background var(--dur-fast) var(--ease-out); }
+.ws-drawer__grab:hover .ws-drawer__grip, .ws-drawer__grab:focus-visible .ws-drawer__grip { background: var(--text-2); }
+.ws-drawer__row { display: flex; align-items: center; gap: 12px; height: 44px; min-width: 0; }
+.ws-drawer__legend { flex: none; width: 150px; height: 40px; }
+body.ws-adopted:not(.ws-legend-on) .ws-drawer__legend { display: none; }
+.ws-drawer__title { flex: none; font: 600 12px/15px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); max-width: 120px; cursor: ns-resize; }
+.ws-drawer__tabwrap { position: relative; flex: 1 1 auto; min-width: min(184px, 40%); display: flex; }   /* about two tabs, always */
+.ws-drawer__tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ws-drawer__tabs::-webkit-scrollbar { display: none; }
+/* tabs past the bar: the strip fades at the edge it continues past, and ‹ › scroll it (windows.js tabCue) */
+.ws-drawer__tabs.is-over:not(.at-end) [role="tablist"] { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
+.ws-drawer__tabs.is-over:not(.at-start) [role="tablist"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px); mask-image: linear-gradient(90deg, transparent, #000 44px); }
+.ws-drawer__tabs.is-over:not(.at-start):not(.at-end) [role="tablist"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); }
+.ws-tabscroll {
+  position: absolute; top: 50%; translate: 0 -50%; z-index: 2; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 1px solid var(--glass-border-card); border-radius: 999px; background: var(--glass-bg-pop); color: var(--text-1); cursor: pointer;
+  box-shadow: var(--glass-shadow-sm);
+}
+.ws-tabscroll[hidden] { display: none; }
+.ws-tabscroll:hover { background: var(--glass-card-hover); }
+.ws-tabscroll .icon { width: 13px; height: 13px; }
+.ws-tabscroll--prev { left: 0; } .ws-tabscroll--next { right: 0; }
+.ws-drawer__tabs > * { position: static !important; padding: 0 !important; margin: 0 !important; border: 0 !important; background: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.ws-drawer__tabs .pg-tabs, .ws-drawer__tabs [role="tablist"] { margin: 0; border-bottom: 0; flex-wrap: nowrap; }
+/* the tray gives way before the tabs do: its chips shrink (… in their names) */
+.ws-drawer__tray { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; }
+.ws-drawer__tray .ws-chipwrap { flex: 0 1 auto; min-width: 0; }
+.ws-drawer__tray .ws-chip { max-width: 140px; min-width: 0; }
+.ws-drawer__tray .ws-chipwrap--more { flex: none; }
+.ws-traymore { border-radius: 999px; padding: 0 12px 0 10px; }
+.ws-traypop {
+  position: fixed; z-index: var(--z-pop); display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px;
+  max-width: min(320px, calc(100vw - 32px)); border-radius: var(--r-glass);
+  background: var(--glass-bg-pop); border: 1px solid var(--glass-border); box-shadow: var(--glass-hl), var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  animation: ws-fade-in var(--dur-fast) var(--ease-out) backwards;
+}
+.ws-traypop .ws-chip { max-width: none; flex: 1 1 auto; }
+.ws-drawer__tools { flex: none; display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.ws-drawer__srcline { position: absolute; right: 12px; bottom: calc(100% + 6px); max-width: 420px; margin: 0; padding: 8px 10px; border-radius: var(--r-ctl); background: var(--glass-bg-pop); border: 1px solid var(--glass-border); font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.ws-drawer__srcline[hidden] { display: none; }
+.ws-drawer.is-narrow .ws-drawer__title, .ws-drawer.is-tight .ws-drawer__title { display: none; }
+.ws-drawer.is-narrow .ws-tool--text span, .ws-drawer.is-tight .ws-tool--text span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ws-drawer.is-narrow .ws-tool--text, .ws-drawer.is-tight .ws-tool--text { padding: 0 8px; }
+.ws-drawer.is-peek > :not(.ws-drawer__bar) { visibility: hidden; }
+
+/* the legend pill sits at the left end of the drawer bar and opens upward from there (§4.4) */
+@media (min-width: 1024px) {
+  body.ws-adopted .legend, body.ws-adopted[data-view="deep"] .legend, body.ws-adopted.is-map-narrow .legend, body.ws-adopted.is-map-narrow[data-view="deep"] .legend {
+    left: calc(var(--ws-drawer-l, 104px) + 8px);
+    bottom: calc(var(--ws-inset) + var(--ws-drawer-vis, 56px) - var(--ws-bar-h) + 8px);
+    z-index: 24; max-height: min(60vh, calc(100vh - var(--free-t) - 120px));
+  }
+  body.ws-adopted .legend.is-open { width: 288px; }
+  /* a drawer bar under 700 px (a card and two pins at 1366): the folded pill shows its icon only (the word stays its
+     accessible name and tooltip), so the tabs and the tray keep their room */
+  body.ws-adopted.ws-bar-narrow .ws-drawer__legend { width: 52px; }
+  body.ws-adopted.ws-bar-narrow .legend:not(.is-open) .legend__title, body.ws-adopted.ws-bar-narrow .legend:not(.is-open) .legend__chev {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  body.ws-adopted.ws-bar-narrow .legend:not(.is-open) .legend__toggle { padding: 0 14px; }
+  body.ws-adopted[data-view="deep"] #section-root .telemetry { bottom: calc(var(--free-b) + var(--credits-h, 20px) + 4px); }
+}
+
+/* map furniture follows the free map area (the app writes --free-* from MCD.windows.padding) */
+@media (min-width: 768px) {
+  body.ws-on.is-drawer-open .mapctl { right: var(--free-r); }
+  body.ws-on.is-drawer-open #map .maplibregl-ctrl-bottom-right { right: calc(var(--free-r) - 8px); }
+}
+
+/* the KPR calculator is open (its own full sheet): the cards wait */
+body.ws-suspended .ws-win, body.ws-suspended .ws-co, body.ws-suspended .ws-tray--float, body.ws-suspended .ws-edge { visibility: hidden !important; pointer-events: none !important; }
+
+/* Sederhana ≤ 1440 px with a card open: the guide folds away so the map is wider */
+@media (min-width: 1024px) {
+  body.ws-guide-fold .section-host > .guide { translate: calc(-100% - 24px) 0; visibility: hidden; transition: translate var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); }
+}
+
+/* ── 6 · Phones: the brief and the sticky action row in the app's bottom sheet ─ */
+.ws-brief { display: grid; gap: 8px; padding: 2px 0 8px; }
+.ws-brief .ws-nums { border-top: 0; margin: 0; }
+.ws-sticky {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; gap: 8px; padding: 8px 0 10px; margin: 0 calc(-1 * var(--s-5));
+  padding-left: var(--s-5); padding-right: var(--s-5);
+  background: var(--glass-sticky); border-bottom: 1px solid var(--rule);
+}
+.ws-sticky .btn { flex: 1 1 0; min-height: 44px; justify-content: center; text-align: center; white-space: normal; line-height: 18px; }
+.ws-sticky .ws-quick { flex: 1 1 0; margin: 0; }
+.ws-sticky .ws-quick__btn { width: 100%; min-height: 44px; }
+.ws-sticky__more .icon { width: 14px; height: 14px; }
+@media (min-width: 768px) { .ws-brief, .ws-sticky, .ws-sticky__note { display: none; } }
+
+/* ── 7 · Static card (Ringkasan, Data & Privasi: MCD.windows.card) ────── */
+.ws-card {
+  display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-card);
+  background: var(--glass-card); border: 1px solid var(--glass-border-card); box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+}
+
+/* ── 8 · Fallbacks ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ws-co, .ws-co.is-in, .ws-pin, .ws-slim, .ws-edge, .ws-ghost, .ws-traypop, body.ws-adopted .ws-rail, body.ws-on .drawer.ws-win, body.ws-on .drawer.ws-win.is-open { transition: none !important; animation: none !important; }
+  .ws-co, .ws-co.is-in { translate: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ws-co, .ws-co__tail, .ws-tray--float, .ws-edge, .ws-pin { background: var(--glass-solid); }
+  html[data-theme="day"] body[data-view="deep"].ws-on .drawer.ws-win, html[data-theme="day"] body[data-view="deep"] .ws-pin,
+  html[data-theme="day"] body[data-view="deep"] .ws-co, html[data-theme="day"] body[data-view="deep"] .ws-co__tail { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ws-co, .ws-co__tail, .ws-tray--float, .ws-edge, .ws-pin,
+  html[data-theme="day"] body[data-view="deep"].ws-on .drawer.ws-win, html[data-theme="day"] body[data-view="deep"] .ws-pin,
+  html[data-theme="day"] body[data-view="deep"] .ws-co, html[data-theme="day"] body[data-view="deep"] .ws-co__tail { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

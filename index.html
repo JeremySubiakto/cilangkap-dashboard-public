@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="id" class="mcd-locked">
+<head>
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Content-Security-Policy: docs/BUILD_SPEC.md §K.2, plus one origin, https://places.googleapis.com, for the live Google rating check
+       (COPY_STYLE_EN item 33; nothing calls it until the branch saves its own key in the encrypted copy). It is the exfiltration
+       barrier; never relax it further. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' file: 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' file: data: blob: https://server.arcgisonline.com; connect-src https://server.arcgisonline.com https://tiles.openfreemap.org https://places.googleapis.com data: blob:; worker-src blob:; child-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#05080F">
+  <title>Dashboard Akuisisi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2305080F'/%3E%3Crect x='3' y='7.5' width='10' height='1' fill='%23F2B705'/%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..600;1,8..60,400&family=Inter+Tight:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
+
+  <!-- BUILD_SPEC §J.2 sheets -->
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/brand.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/layout.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/map.css">
+  <link rel="stylesheet" href="assets/css/charts.css">
+  <!-- Chart kit for the merchant acquisition exhibits: combo, donut / pie, heatmap, status bar, big number -->
+  <link rel="stylesheet" href="assets/css/charts-plus.css">
+  <link rel="stylesheet" href="assets/css/sections.css">
+  <!-- Shell: band, section row, section headers (Sederhana | Detail), Terang / Gelap, map controls, pages without a map (16 Oct 2026) -->
+  <link rel="stylesheet" href="assets/css/shell.css">
+  <!-- Progressive cards (COPY_STYLE_EN item 43): callouts, cards, tray, summary rail and bottom drawer -->
+  <link rel="stylesheet" href="assets/css/windows.css">
+  <!-- Section sheets (5 sections, keys 1–5) -->
+  <link rel="stylesheet" href="assets/css/section-overview.css">
+  <link rel="stylesheet" href="assets/css/section-merchants.css">
+  <link rel="stylesheet" href="assets/css/section-schools.css">
+  <link rel="stylesheet" href="assets/css/section-property.css">
+  <link rel="stylesheet" href="assets/css/section-data.css">
+  <!-- Password gate (auth gate addendum §2.1): after the BUILD_SPEC sheets -->
+  <link rel="stylesheet" href="assets/css/gate.css">
+  <link rel="stylesheet" href="assets/css/public-banner.css">
+</head>
+<body data-section="overview">
+  <div class="public-proto-note" role="note"><b>Prototipe internal ODP 358</b> · bukan situs resmi Bank Mandiri · data publik saja</div>
+  <noscript>
+    <div class="boot-block"><div class="boot-block__card"><p class="boot-block__title">Dashboard ini perlu JavaScript.</p><p class="boot-block__body">Nyalakan JavaScript di browser, lalu muat ulang halaman.</p></div></div>
+  </noscript>
+  <a class="skip-link" href="#section-root">Langsung ke panel</a>
+
+  <!-- Sprite (§B.5): 16 px grid, 1.25 px stroke, currentColor. Product glyphs are filled 10 px symbols. -->
+  <svg hidden aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4L14 14"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 16 16"><path d="M2 4h3M8 4h6M2 8h7M12 8h2M2 12h2M7 12h7"/><circle cx="6.5" cy="4" r="1.5"/><circle cx="10.5" cy="8" r="1.5"/><circle cx="5.5" cy="12" r="1.5"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 16 16"><path d="M3.5 8a4.5 4.5 0 1 0 1.3-3.2"/><path d="M3.5 2.5v2.8h2.8"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+    <symbol id="i-chev-u" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 16 16"><path d="M10 4L6 8l4 4"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 16 16"><path d="M8 2.5l6 3-6 3-6-3z"/><path d="M2 8.5l6 3 6-3"/><path d="M2 11.5l6 3 6-3"/></symbol>
+    <symbol id="i-legend" viewBox="0 0 16 16"><path d="M6.5 4h7.5M6.5 8h7.5M6.5 12h7.5"/><path d="M2.5 3.25h1.5v1.5H2.5zM2.5 7.25h1.5v1.5H2.5zM2.5 11.25h1.5v1.5H2.5z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/><path d="M8 9.5v1.5"/></symbol>
+    <symbol id="i-id" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9" rx="1"/><circle cx="5.5" cy="7.25" r="1.5"/><path d="M3.25 10.75c.5-1.1 1.3-1.6 2.25-1.6s1.75.5 2.25 1.6M9.5 6.75h3M9.5 9.25h2"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></symbol>
+    <symbol id="i-veil" viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.75"/><path d="M3 13.5L13 2.5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.5M5 5.5l3-3 3 3M2.5 10.5v3h11v-3"/></symbol>
+    <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v8M5 7.5l3 3 3-3M2.5 10.5v3h11v-3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.25V11M8 5h.01"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.5l6 10.75H2z"/><path d="M8 6.5v3M8 11.4h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></symbol>
+    <symbol id="i-external" viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5L7.5 8.5M11.5 9.5v4h-9v-9h4"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="8" rx="1"/><path d="M4 6.75h.01M6.5 6.75h.01M9 6.75h.01M11.5 6.75h.01M5 9.5h6"/></symbol>
+    <symbol id="i-sort-asc" viewBox="0 0 16 16"><path d="M8 13V3M4.5 6.5L8 3l3.5 3.5"/></symbol>
+    <symbol id="i-sort-desc" viewBox="0 0 16 16"><path d="M8 3v10M4.5 9.5L8 13l3.5-3.5"/></symbol>
+    <symbol id="i-collapse-l" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M6 2.5v11M10.5 6l-2 2 2 2"/></symbol>
+    <symbol id="i-collapse-r" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M10 2.5v11M5.5 6l2 2-2 2"/></symbol>
+    <symbol id="i-map" viewBox="0 0 16 16"><path d="M1.75 3.75l4-1.5 4.5 1.5 4-1.5v10l-4 1.5-4.5-1.5-4 1.5z"/><path d="M5.75 2.25v10M10.25 3.75v10"/></symbol>
+    <symbol id="i-satellite" viewBox="0 0 16 16"><path d="M5.25 6.75l3-3 4 4-3 3z"/><path d="M4.5 6l-2.25-2.25 1.5-1.5L6 4.5M10 11.5l2.25 2.25 1.5-1.5L11.5 10"/><path d="M2.5 10.5a3 3 0 0 0 3 3M2.5 13.5h.01"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5v1.75M8 12.75v1.75M1.5 8h1.75M12.75 8h1.75M3.4 3.4l1.25 1.25M11.35 11.35l1.25 1.25M3.4 12.6l1.25-1.25M11.35 4.65l1.25-1.25"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13.25 9.75A5.5 5.5 0 0 1 6.25 2.75a5.5 5.5 0 1 0 7 7z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 16 16"><path d="M8 14.5s4.5-4.25 4.5-7.75a4.5 4.5 0 0 0-9 0C3.5 10.25 8 14.5 8 14.5z"/><circle cx="8" cy="6.75" r="1.6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3 8h10"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 16 16"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></symbol>
+    <!-- Progressive cards (item 43): the card grip and the pin tack -->
+    <symbol id="i-grip" viewBox="0 0 16 16"><path d="M6 3.5h.01M10 3.5h.01M6 8h.01M10 8h.01M6 12.5h.01M10 12.5h.01" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-tack" viewBox="0 0 16 16"><path d="M9.75 2.25l4 4-1.6.55-2.4 2.4.35 2.9-1.1 1.1-6.2-6.2 1.1-1.1 2.9.35 2.4-2.4z"/><path d="M5.6 10.4 2.5 13.5"/></symbol>
+    <!-- Section icons (section row) -->
+    <symbol id="i-sec-overview" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.25l1.5 3.75L8 11.75 6.5 8z"/></symbol>
+    <symbol id="i-sec-merchants" viewBox="0 0 16 16"><path d="M2.5 6.5L3.5 3h9l1 3.5zM3.5 6.5v7h9v-7M6.5 13.5v-3.5h3v3.5"/></symbol>
+    <symbol id="i-sec-property" viewBox="0 0 16 16"><path d="M2 7.5l6-5 6 5M3.5 6.25v7.25h9V6.25M6.5 13.5v-4h3v4"/></symbol>
+    <symbol id="i-sec-schools" viewBox="0 0 16 16"><path d="M8 4.5C6.5 3.3 4.3 3 2 3.2v9.3c2.3-.2 4.5.1 6 1.3 1.5-1.2 3.7-1.5 6-1.3V3.2c-2.3-.2-4.5.1-6 1.3zM8 4.5v9.3"/></symbol>
+    <symbol id="i-sec-data" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 1 2.2 1.75 5 1.75s5-.75 5-1.75V4M3 8c0 1 2.2 1.75 5 1.75s5-.75 5-1.75"/></symbol>
+    <!-- Glyphs (filled; colour from .g-* classes) -->
+    <symbol id="g-ksm" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4.2"/></symbol>
+    <symbol id="g-kpr" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8"/></symbol>
+    <symbol id="g-kkb" viewBox="0 0 10 10"><path d="M5 .4L9.6 5 5 9.6.4 5z"/></symbol>
+    <symbol id="g-cc" viewBox="0 0 10 10"><path d="M5 .8L9.5 9H.5z"/></symbol>
+    <symbol id="g-mg" viewBox="0 0 10 10"><path d="M5 .5l4 2.3v4.4L5 9.5 1 7.2V2.8z"/></symbol>
+    <symbol id="g-pen" viewBox="0 0 10 10"><path d="M5 .3l1.2 3.5L9.7 5 6.2 6.2 5 9.7 3.8 6.2.3 5l3.5-1.2z"/></symbol>
+    <symbol id="g-oth" viewBox="0 0 10 10"><rect x="1" y="4" width="8" height="2"/></symbol>
+    <symbol id="g-kur" viewBox="0 0 10 10"><path d="M1 2.8h8v1.6H1zM1 5.6h8v1.6H1z"/></symbol>
+    <symbol id="g-ws" viewBox="0 0 10 10"><path fill-rule="evenodd" d="M5 .6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8zm0 1.6a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z"/></symbol>
+    <symbol id="g-pr" viewBox="0 0 10 10"><path fill-rule="evenodd" d="M5 .4L9.6 5 5 9.6.4 5zM5 2.6L2.6 5 5 7.4 7.4 5z"/></symbol>
+    <symbol id="g-merchant" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8"/></symbol>
+    <symbol id="g-merchant-off" viewBox="0 0 10 10"><path fill-rule="evenodd" d="M1 1h8v8H1zM2.6 2.6v4.8h4.8V2.6z"/></symbol>
+  </svg>
+
+  <div id="map" role="application" aria-label="Peta sekitar Mabes TNI Cilangkap dan KCP Cilangkap"></div>
+  <div id="map-grid" aria-hidden="true"></div><div id="map-vignette" aria-hidden="true"></div>
+  <header id="topbar"></header><nav id="navrow" aria-label="Bagian"></nav><div id="readout" aria-live="polite"></div>
+  <main id="section-root"></main>
+  <div id="overlay-root"></div>
+
+  <!-- Pinned CDN libraries with SRI (§J.3). The mirror fallback loader (§J.3 boot step 1) is in app.js. -->
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.0.41/dist.min.js" integrity="sha384-paGNIdvc5jHDlOq9Lcg+VKOSmOzm82uTvGpZhDNwTtNu7l5EONhLnqs9skE1bP2w" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs" crossorigin="anonymous"></script>
+
+  <!-- Password gate (auth gate addendum §2.1): after the CDN libraries, before config.js -->
+  <script src="assets/js/vault.js"></script>
+  <script src="assets/js/gate.js"></script>
+  <script src="data/vault.js"></script>
+
+  <!-- Public reference data (non-personal; a vault payload may override any MCD_* global) -->
+  <script src="data/sme-pois.js"></script>
+  <!-- Open-data signals per public business (category, ticket size, website / phone / chain), same order as sme-pois.js (item 32) -->
+  <script src="data/sme-pois-extra.js"></script>
+  <script src="data/sme-clusters.js"></script>
+  <script src="data/sme-plays.js"></script>
+  <script src="data/property-projects.js"></script>
+  <script src="data/property-market.js"></script>
+  <script src="data/kpr-config.js"></script>
+  <script src="data/tni-schools.js"></script>
+  <!-- Kemendagri kecamatan / kelurahan boundaries (OSM + BPS). territory-hex.js is an internal spatial index only:
+       it counts the public merchants per kecamatan and is never drawn (no hexagons on screen, UX fix plan D1). -->
+  <script src="data/admin-areas.js"></script>
+  <script src="data/territory-hex.js"></script>
+  <!-- Distance and travel time from KCP (items 27-28): our own road grid (100 m cells over ±16 km, normal traffic, 1.1 MB)
+       and the OSRM table per kelurahan / kecamatan (free flow, up to ~39 km). MCD.distance picks the best one. -->
+  <script src="data/travel-grid.js"></script>
+  <script src="data/travel-times.js"></script>
+  <!-- SMA students and the estimate aged 17+ (item 26, Dapodik; counts only, no personal data) -->
+  <script src="data/sma-students.js"></script>
+  <!-- Daya beli area (item 37): purchasing-power proxy per kelurahan / kecamatan, thirds rendah / sedang / tinggi,
+       "perkiraan"; public aggregates only (BPS, property prices, OSM, Overture). MCD_AREA_WEALTH.at(id) / levelAt(id). -->
+  <script src="data/area-wealth.js"></script>
+  <!-- NOT linked, loaded once by MCD.app.lazy after sign-in:
+       data/street-index.js (3.6 MB, the offline address geocoder's streets): 'street-index', when LVM data needs placing;
+       data/travel-routes.js (1.2 MB, the road trees of the route lines, item 36): 'travel-routes', the first time
+       MCD.distance.route() draws a route. -->
+
+  <!-- Core modules (§J.2). data-synthetic.js is not loaded: real information only; the "Demo data"
+       switch injects it on demand and the tests load it directly. -->
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/util.js"></script>
+  <!-- Motion language (item 38): easing, durations, flight time, count-up, stagger; the same numbers as tokens.css -->
+  <script src="assets/js/motion.js"></script>
+  <script src="assets/js/data-reference.js"></script>
+  <script src="assets/js/state.js"></script>
+  <script src="assets/js/importer.js"></script>
+  <script src="assets/js/map.js"></script>
+  <script src="assets/js/charts.js"></script>
+  <script src="assets/js/charts-plus.js"></script>
+  <script src="assets/js/kpr-math.js"></script>
+  <!-- Territory map per kecamatan (fills, borders, labels, popup, one "where to go" ranking) and the Livin' Merchant / EDC engine
+       (Rev LVM parser, matcher, per-kecamatan aggregates). Before sme.js and every section. -->
+  <script src="assets/js/territory.js"></script>
+  <script src="assets/js/lvm.js"></script>
+  <!-- Distance (MCD.travel → MCD.distance), the offline address geocoder (MCD.geocodeLocal) and the live Google rating
+       check (MCD.places, inactive until a key is saved). Pure modules; before the section engines and sections. -->
+  <script src="assets/js/travel.js"></script>
+  <script src="assets/js/distance.js"></script>
+  <script src="assets/js/geocode-local.js"></script>
+  <script src="assets/js/google-places.js"></script>
+  <!-- Progressive cards (item 43): MCD.windows — callouts, cards, pins, tray, summary rail, bottom drawer, map padding -->
+  <script src="assets/js/windows.js"></script>
+  <!-- Section engines (data, derived blocks, map layers): merchants, schools -->
+  <script src="assets/js/sme.js"></script>
+  <script src="assets/js/schools-core.js"></script>
+  <script src="assets/js/schools-map.js"></script>
+
+  <!-- Sections (keys 1–5) -->
+  <script src="assets/js/section-overview.js"></script>
+  <script src="assets/js/section-merchants.js"></script>
+  <script src="assets/js/section-schools.js"></script>
+  <script src="assets/js/section-property.js"></script>
+  <script src="assets/js/section-data.js"></script>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

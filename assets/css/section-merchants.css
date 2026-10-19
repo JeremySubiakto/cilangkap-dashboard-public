@@ -1,0 +1,529 @@
+/* ==========================================================================
+ * Section 2 · Merchant (LVM & EDC) — assets/js/section-merchants.js (panels) and
+ * assets/js/sme.js (map). Prefix .mx-. Tokens only (tokens.css / brand.css), both
+ * themes, both views. Status colours only through --status-* (hijau = sudah diakuisisi /
+ * sepertiga terkuat, kuning = sepertiga tengah / tidak aktif, merah = belum ada di LVM /
+ * sepertiga terlemah, abu-abu = tidak ada data, biru = potensi sebelum file LVM diimpor).
+ * Type floor 12 px, weights 400 / 500 / 600, mono only for codes and file names (plan §2.4).
+ * Charts come from charts-plus (.mcp-*); exhibits from brand.css (.exhibit).
+ * ========================================================================== */
+
+/* ── Shared bits ───────────────────────────────────────────────────────── */
+.mx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* colour swatch of a ranked third: a rounded square (one shape per kecamatan on the map) */
+.mx-sw { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--status-none); }
+.mx-sw--ok { background: var(--status-ok); }
+.mx-sw--mid { background: var(--status-mid); }
+.mx-sw--bad { background: var(--status-bad); }
+.mx-sw--none { background: var(--status-none); }
+.mx-sw--potential { background: var(--status-potential); }
+.mx-dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--status-none); }
+.mx-dot--notYet { background: var(--status-bad); }
+.mx-dot--acquired { background: var(--status-ok); }
+.mx-dot--inactive { background: var(--status-mid); }
+.mx-dot--potential { background: var(--status-potential); }
+.mx-code, .mx-file { font: 400 var(--fs-mono)/1.4 var(--font-mono); color: var(--text-1); overflow-wrap: anywhere; }
+.mx-note { margin: 10px 0 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); max-width: 78ch; }
+.mx-note--assume { color: var(--text-3); }
+.mx-none { margin: 0; padding: 16px 12px; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.mx-num { font-variant-numeric: tabular-nums; }
+.mx-btn { flex: none; }
+.mx-btn40 { min-height: 40px; }
+.mx-more { justify-self: start; margin-top: 8px; color: var(--text-2); }
+.mx-more[hidden], .mx-clear[hidden] { display: none; }
+.mx-x[hidden], .mx-panel[hidden], .mx-filters[hidden], .mx-fchips[hidden], .mx-status-empty[hidden] { display: none; }
+.mx-pill {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 14px;
+  border: 1px solid var(--rule-strong); font: 600 12px/1.2 var(--font-sans); color: var(--text-1);
+}
+.mx-pill--gold { border-color: var(--rule-gold); background: var(--gold-a10); color: var(--gold-soft); }
+.mx-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; margin-left: 6px; border: 1px solid var(--rule-strong); border-radius: var(--r-ctl);
+  font: 500 12px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.mx-link {
+  min-width: 0; min-height: 32px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer;
+  font: 500 14px/20px var(--font-sans); color: var(--text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
+}
+.mx-link:hover, .mx-link:focus-visible { text-decoration-color: var(--text-2); }
+
+/* "Buka di Google Maps" (item 22): a secondary link button; icon-only 40 × 40 in list rows */
+.mx-gm { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; text-decoration: none; white-space: nowrap; }
+.mx-gm .icon { flex: none; }
+.mx-gm--icon { width: 40px; height: 40px; min-width: 40px; padding: 0; }
+.mx-dd-gm { display: grid; justify-items: start; gap: 6px; margin: 0 0 4px; }
+
+/* status chip in the drawer */
+.mx-chipstat { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 13px; font: 600 12px/1.2 var(--font-sans); color: var(--status-ink); background: var(--status-none); }
+.mx-chipstat--acquired, .mx-chipstat--lvmOnly { background: var(--status-ok); }
+.mx-chipstat--inactive { background: var(--status-mid); color: var(--status-ink-mid, var(--status-ink)); }
+.mx-chipstat--notYet { background: var(--status-bad); }
+.mx-chipstat--potential { background: var(--status-potential); }
+.mx-dd-p { margin: 0 0 6px; font: 400 14px/20px var(--font-sans); color: var(--text-1); }
+.mx-dd-p.c-2 { color: var(--text-2); }                 /* notes in a drawer (the EDC rule, an area point) read as secondary */
+.mx-dd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+/* empty state inside a tab (one card per tab before the import) */
+.mx-empty {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: start;
+  padding: 16px; border: 1px dashed var(--rule-strong); border-radius: var(--r-panel); background: var(--status-potential-a20);
+}
+.mx-empty__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--surface-raised); color: var(--status-potential); }
+.mx-empty__t { margin: 0 0 4px; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.mx-empty__p { display: grid; gap: 6px; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.mx-empty__p p { margin: 0; }
+.mx-empty__a { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* missing files */
+.mx-missing__in { padding: 24px; }
+.mx-missing .t-empty { margin-top: 10px; font: 400 14px/21px var(--font-sans); color: var(--text-2); }
+
+/* ── Sederhana (guide column) ──────────────────────────────────────────── */
+.mx-ov { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; container: mxov / inline-size; }   /* v4: fits 1366 × 768 with Data contoh */
+.mx-ov > * { min-width: 0; }
+.mx-ov__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.mx-ov__grid--n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mx-ov__card { min-width: 0; }
+.mx-ov__card .mcp-bn { height: 100%; padding: 10px 12px 8px; gap: 2px; }
+.mx-ov__card .mcp-bn.is-sm .mcp-bn__value { font-size: 26px; line-height: 30px; }
+.mx-ov__grid--n3 .mcp-bn__label { font-size: 12px; line-height: 16px; }
+.mx-ov__grid--n3 .mcp-bn.is-sm .mcp-bn__value { font-size: 22px; line-height: 28px; }
+.mx-ov__card .mcp-bn__meta { margin-top: 2px; }
+.mx-ov__card .mcp-bn__meta { display: none; }   /* the coloured rule, the label and the colour key carry the status; no chip */
+.mx-ov__card .mcp-bn__note { margin-top: 2px; font-size: 12px; line-height: 17px; }
+.mx-ov__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.mx-ov__sub[hidden] { display: none; }
+.mx-ov__more { display: grid; gap: 6px; }
+.mx-ov__h {
+  margin: 0; font: 600 var(--fs-eyebrow)/var(--lh-eyebrow) var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);
+}
+.mx-ov__link { justify-self: start; gap: 6px; margin: 0 -8px; }
+.mx-after {
+  display: grid; gap: 6px; padding: 12px 14px;
+  border: 1px solid var(--status-potential); border-radius: var(--r-panel); background: var(--status-potential-a20);
+}
+.mx-after__t { margin: 0; font: 600 15px/21px var(--font-sans); color: var(--text-1); }
+.mx-after__list { display: grid; gap: 2px; margin: 0; padding: 0 0 0 18px; font: 400 13px/19px var(--font-sans); color: var(--text-1); }
+.mx-after__p { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.mx-prio--compact .mx-prio__row { min-height: 40px; padding: 0 2px; gap: 4px 10px; }
+.mx-prio--compact .mx-prio__go { min-height: 40px; padding: 0; gap: 0 8px; }
+.mx-prio--compact .mx-prio__why { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container mxov (max-width: 300px) {
+  .mx-ov__grid--n3 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* one-line colour key */
+.mx-key { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.mx-key__i { display: inline-flex; align-items: center; gap: 6px; }
+.mx-key__i--note { color: var(--text-3); }
+.mx-key__l { color: var(--text-3); }
+
+/* ── Prioritas kunjungan rows (Sederhana top 3, Detail top 10) ─────────── */
+.mx-prio { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.mx-prio__row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px 12px;
+  min-height: 56px; padding: 6px 4px; border-bottom: 1px solid var(--rule); cursor: pointer;
+}
+.mx-prio__row:hover { background: var(--surface-hover); }
+.mx-prio__row.is-on { background: var(--gold-a10); }
+.mx-prio__n {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--rule-gold);
+  font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--gold-soft);
+}
+.mx-prio__go {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; min-width: 0; min-height: 44px;
+  padding: 4px 0; border: 0; background: none; text-align: left; color: inherit; cursor: pointer;
+}
+.mx-prio__go:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--r-ctl); }
+.mx-prio__name { grid-column: 1; display: flex; align-items: center; gap: 8px; min-width: 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+/* Long names ("Kec. Cipayung (Jakarta Timur)") wrap instead of being cut: the city tells the two Cipayung apart. */
+.mx-prio__nm { min-width: 0; overflow-wrap: break-word; }
+.mx-prio__why { grid-column: 1; padding-left: 20px; font: 400 12px/17px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.mx-prio__act { display: flex; align-items: center; gap: 8px; }
+
+/* ── Detail frame ──────────────────────────────────────────────────────── */
+.mx { --mx-pad: var(--s-6); display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; container: mx / inline-size; }
+@media (max-width: 1023px) { .mx { --mx-pad: var(--s-4); } }
+.mx > * { min-width: 0; }
+
+/* summary strip: 3 small numbers */
+.mx-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; margin: 0; padding: 12px 16px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card-flat); position: relative; }
+.mx-strip.has-demo-tag--corner { padding-right: 72px; }
+.mx-strip__i { display: grid; gap: 2px; min-width: 0; }
+.mx-strip__k { display: flex; align-items: center; gap: 6px; margin: 0; font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.mx-strip__v { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin: 0; font: 600 20px/26px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.mx-strip__s { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+
+/* tabs (sticky); the shell's ctx.tabs renders inside .mx-tabsbar when it exists */
+.mx-tabsbar {
+  position: sticky; top: 0; z-index: 3;
+  margin: 0 calc(-1 * var(--mx-pad)); padding: 0 var(--mx-pad);
+  background: var(--glass-sticky); border-bottom: 1px solid var(--rule);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.mx-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.mx-tabs::-webkit-scrollbar { display: none; }
+.mx-tab {
+  position: relative; flex: none; min-height: 44px; padding: 0 12px; border: 0; background: none; cursor: pointer;
+  font: 500 14px/20px var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.mx-tab:hover { color: var(--text-1); }
+.mx-tab:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; border-radius: var(--r-ctl); }
+.mx-tab.is-active { font-weight: 600; color: var(--text-1); }
+.mx-tab.is-active::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 2px 2px 0 0; background: var(--grad-accent); }
+
+/* filter row (collapsed) and chips */
+.mx-fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.mx-fbtn { min-height: 40px; gap: 6px; }
+.mx-fbtn.is-on { border-color: var(--rule-gold); background: var(--gold-a10); color: var(--text-1); }
+.mx-fbtn__n { font-variant-numeric: tabular-nums; }
+.mx-fbar__note { flex: 1 1 260px; margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.mx-fchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mx-chipx { min-height: 36px; gap: 6px; padding: 0 10px; }
+.mx-chipx__x { width: 14px; height: 14px; }
+.mx-chipx-all { min-height: 36px; color: var(--text-2); }
+.mx-filters {
+  display: grid; gap: 12px; padding: 16px; scroll-margin-top: 64px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card-flat);
+}
+.mx-clear { justify-self: start; gap: 6px; }
+.mx-frow { display: grid; grid-template-columns: 160px minmax(0, 1fr); align-items: start; gap: 4px 12px; }
+.mx-flabel { padding-top: 10px; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.mx-fctl { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.mx-fhint { grid-column: 2; margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.mx-select { min-height: 40px; max-width: 100%; }
+.mx-seg { flex-wrap: wrap; height: auto; min-height: 40px; }
+.mx-seg .seg__opt { min-height: 36px; }
+.mx-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.mx-chip { min-height: 36px; gap: 6px; }
+
+/* panels and exhibits */
+.mx-panels { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.mx-panels:focus { outline: none; }
+.mx-tabsbar .pg-tabs { margin: 0; border-bottom: 0; }
+.mx-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+.mx-panel:focus { outline: none; }
+.mx-x { display: grid; gap: 0; min-width: 0; scroll-margin-top: 64px; }
+.mx-x:focus { outline: none; }
+.mx-x__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+.mx-x__titles { flex: 1 1 360px; min-width: 0; }
+.mx-x__title { max-width: 62ch; }
+.mx-x__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mx-x__tools:empty { display: none; }
+.mx-x__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.mx-x__body > * { min-width: 0; }
+.mx-x__src:empty { display: none; }
+.mx-h3 { margin: 0 0 6px; font: 600 14px/20px var(--font-sans); color: var(--text-2); }
+.mx-chart { min-width: 0; }
+.mx-chart--combo { min-height: 240px; }
+.mx-chart--react { min-height: 200px; }
+.mx-pair { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: start; }
+.mx-pair__a, .mx-pair__b { min-width: 0; }
+.mx-heat { min-width: 0; }
+.mx-status-empty { min-width: 0; }
+
+/* store counts (Status LVM & EDC) */
+.mx-recon { display: flex; flex-wrap: wrap; gap: 4px 0; margin: 0; font: 600 14px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.mx-recon > span + span::before { content: "·"; margin: 0 10px; color: var(--text-3); font-weight: 400; }
+
+/* tables (merchant list, re-activation list) */
+.mx-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.mx-searchbox { width: 240px; }
+.mx-search { min-height: 40px; }
+.mx-count { font: 500 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.mx-table { display: grid; min-width: 0; border-top: 1px solid var(--rule); }
+.mx-tr {
+  display: grid; align-items: center; gap: 12px; min-height: 48px; padding: 4px 6px;
+  border-bottom: 1px solid var(--rule); font: 400 13px/18px var(--font-sans); color: var(--text-2);
+}
+.mx-tr:not(.mx-tr--head):hover { background: var(--surface-hover); }
+.mx-tr--head { min-height: 36px; font: 600 12px/16px var(--font-sans); color: var(--text-3); }
+.mx-td { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-td__l1, .mx-td__l2 { display: block; overflow: hidden; text-overflow: ellipsis; }
+.mx-td__l2 { font-size: 12px; line-height: 16px; color: var(--text-3); }
+.mx-table--leads .mx-tr { grid-template-columns: 32px minmax(160px, 2fr) 112px minmax(120px, 1.2fr) minmax(128px, 0.9fr) 56px; }
+.mx-table--leads .mx-td--1 { display: flex; align-items: center; gap: 8px; }
+.mx-table--leads .mx-td--0, .mx-table--leads .mx-td--4 { text-align: right; }
+.mx-table--leads .mx-tr--head .mx-td--4, .mx-table--leads .mx-tr--head .mx-td--5 { white-space: normal; text-align: center; }
+.mx-table--leads .mx-tr--head .mx-td--4 { text-align: right; }
+.mx-table--leads .mx-td--5 { display: flex; justify-content: center; }
+.mx-table--leads .mx-td--m { display: none; }
+.mx-table--react .mx-tr { min-height: 44px; grid-template-columns: minmax(150px, 2fr) minmax(90px, 1fr) minmax(90px, 1fr) 96px 92px minmax(128px, 0.9fr) 56px; }
+.mx-table--react .mx-td--r0 { display: flex; align-items: center; gap: 8px; }
+.mx-table--react .mx-td--r4 { text-align: right; }
+.mx-table--react .mx-tr--head .mx-td { white-space: normal; }
+.mx-table--react .mx-td--r6 { display: flex; justify-content: center; }
+.mx-react { display: grid; gap: 12px; }
+
+/* KPI and EDC cards */
+.mx-kpi, .mx-edc { display: grid; gap: 14px; }
+.mx-kpi__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mx-kpi__grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mx-kpi__card { min-width: 0; }
+.mx-kpi__card .mcp-bn { height: 100%; }
+
+/* why Livin' Merchant */
+.mx-x--why::before { background: var(--grad-gold) top / 100% var(--brand-rule) no-repeat; }
+.mx-why { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 0; padding: 0; list-style: none; counter-reset: why; }
+.mx-why__i { position: relative; padding: 2px 0 0 34px; counter-increment: why; }
+.mx-why__i::before {
+  content: counter(why); position: absolute; left: 0; top: 2px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  border: 1px solid var(--rule-gold); font: 600 12px/1 var(--font-sans); color: var(--gold-soft);
+}
+.mx-why__t { margin: 0 0 3px; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+.mx-why__p { margin: 0; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.mx-why__s { margin: 4px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); overflow-wrap: anywhere; }
+
+/* method */
+.mx-dl { display: grid; gap: 10px; margin: 0; }
+.mx-dl__r { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; }
+.mx-dl dt { font: 600 13px/19px var(--font-sans); color: var(--text-1); }
+.mx-dl dd { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+
+/* ── Item 29: the two products, the title icon and the "Sudah pakai Livin' Merchant" badge ─ */
+.mx-prods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.mx-prod {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; padding: 8px 12px 8px 8px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
+}
+.mx-prod__media { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--surface-raised); overflow: hidden; }
+:root:not([data-theme="day"]) .mx-prod--edc .mx-prod__media { background: var(--text-1); }   /* the dark terminals stay visible at night */
+.mx-prod__img { display: block; max-width: 100%; height: auto; }
+.mx-prod__img--lvm { width: 36px; height: 36px; border-radius: 9px; }
+.mx-prod__img--edc { width: auto; height: 40px; }
+.mx-prod__txt { min-width: 0; }
+.mx-prod__t { margin: 0; font: 600 14px/19px var(--font-sans); color: var(--text-1); }
+.mx-prod__p { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+/* Sederhana: compact cards (the guide column must stay short) */
+.mx-prods--compact { gap: 6px; }
+.mx-prods--compact .mx-prod { grid-template-columns: 28px minmax(0, 1fr); gap: 7px; padding: 6px 6px 6px 6px; }
+.mx-prods--compact .mx-prod__media { width: 28px; height: 28px; border-radius: 8px; }
+.mx-prods--compact .mx-prod__img--lvm { width: 24px; height: 24px; border-radius: 6px; }
+.mx-prods--compact .mx-prod__img--edc { height: 26px; }
+.mx-prods--compact .mx-prod__txt { font: 400 12px/15px var(--font-sans); color: var(--text-2); }
+.mx-prods--compact .mx-prod__t, .mx-prods--compact .mx-prod__p { display: inline; font-size: 12px; line-height: 15px; }
+.mx-prods--compact .mx-prod__t::after { content: " · "; font-weight: 400; color: var(--text-3); }
+@container mxov (max-width: 330px) {
+  .mx-prods { grid-template-columns: minmax(0, 1fr); }
+}
+.mx-title-ic { flex: none; width: 28px; height: 28px; border-radius: 7px; align-self: center; }
+/* phones: the title and its "?" stay on one line (the icon plus "Merchant (LVM & EDC)" plus the 40 px "?" is wider
+   than a 390 px screen); the product strip just below still shows the Livin' Merchant icon */
+@media (max-width: 480px) {
+  .mx-title-ic { display: none; }
+}
+@media (max-width: 374px) {
+  .pg-title-row:has(> .mx-title-ic) > .pg-title { font-size: 22px; line-height: 28px; }
+}
+.mx-lvmbadge {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px 0 3px; border-radius: 13px;
+  border: 1px solid var(--rule-strong); background: var(--surface-raised); font: 600 12px/1.2 var(--font-sans); color: var(--text-1);
+}
+.mx-lvmbadge__img { width: 20px; height: 20px; border-radius: 6px; }
+.dd-sub .mx-lvmbadge { margin-left: 6px; }
+
+/* ── Items 27-28: distance from KCP and the shared travel toggles ──────── */
+.mx-dist { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mx-travel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.mx-travel__l { font: 500 12px/16px var(--font-sans); color: var(--text-3); }
+.mx-tog { min-height: 36px; gap: 8px; }
+.mx-tog__box { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--rule-strong); background: transparent; }
+.mx-tog[aria-pressed="true"] { border-color: var(--rule-gold); background: var(--gold-a10); color: var(--text-1); }
+.mx-tog[aria-pressed="true"] .mx-tog__box { border-color: var(--gold-soft); background: var(--gold-soft); box-shadow: inset 0 0 0 2px var(--glass-solid); }
+.mx-recon--loc { font-weight: 500; color: var(--text-2); }
+.mx-recon--loc .mx-recon__k { color: var(--text-1); font-weight: 600; }
+.mx-recon--loc > .mx-recon__k + span::before { content: none; }
+.mx-recon--loc > .mx-recon__k { margin-right: 8px; }
+
+/* ── Item 32: Kandidat EDC ─────────────────────────────────────────────── */
+.mx-tipbtn { width: 36px; height: 36px; font-size: 15px; flex: none; }
+.mx-ec-trow { display: flex; align-items: flex-start; gap: 10px; }
+.mx-ec-trow .mx-x__title { flex: 0 1 auto; min-width: 0; }
+.mx-x--ec .mx-select { width: auto; min-width: 200px; max-width: 280px; }
+.mx-tipbox {
+  margin: 0; padding: 12px 14px; border: 1px solid var(--rule-gold); border-radius: var(--r-panel); background: var(--gold-a10);
+  font: 400 13px/19px var(--font-sans); color: var(--text-1); max-width: 86ch; white-space: pre-line;   /* one idea per line */
+}
+.mx-tipbox[hidden] { display: none; }
+.mx-ec-tiers { min-width: 0; }
+.mx-ec-google .mx-toolbar { gap: 8px 12px; }
+.mx-quiet { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.mx-tier {
+  display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid var(--rule-strong);
+  font: 600 12px/1.2 var(--font-sans); color: var(--text-1); white-space: nowrap;
+}
+.mx-tier--edc { border-color: var(--rule-gold); background: var(--gold-a10); color: var(--gold-soft); }
+.mx-tier--up { border-color: var(--status-ok); background: var(--status-ok-a20); }
+.mx-tier--lvm { color: var(--text-2); }
+/* item 42: "Jaringan nasional" (lewat kantor pusat), no branch target: a quiet dashed chip, never a status colour */
+.mx-tier--nat { border-style: dashed; color: var(--text-2); }
+.mx-table--ec .mx-tr { grid-template-columns: 32px minmax(180px, 2.4fr) 116px 148px minmax(128px, 0.9fr) 56px; }
+.mx-table--ec .mx-td--e1 { display: grid; gap: 2px; }
+.mx-table--ec .mx-td--e1 .mx-td__l1 { display: block; min-width: 0; }
+.mx-table--ec .mx-td--e1 .mx-link { max-width: 100%; }
+.mx-table--ec .mx-td--e0, .mx-table--ec .mx-td--e4 { text-align: right; }
+.mx-table--ec .mx-tr--head .mx-td { white-space: normal; }
+.mx-table--ec .mx-td--e5 { display: flex; justify-content: center; }
+/* item 37: the three factors as three short labelled levels (the reasons sit in the title and in the drawer) */
+.mx-fx3 { display: grid; gap: 1px; min-width: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.mx-fx3__i { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-fx3__k { color: var(--text-3); }
+.mx-fx3__v { font-weight: 600; color: var(--text-1); }
+.mx-td__fx { display: none; }                         /* the levels in words where the factor column does not fit */
+.mx-table--ec .mx-td--e1 .mx-td__l2 { white-space: normal; }   /* the three levels wrap instead of ending in "…" */
+/* drawer: "Nilai belanja | besar — toko furnitur" and the route link */
+.mx-fx { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 4px 0; }
+.mx-fx .dd-kv__v { text-align: left; white-space: normal; font-weight: 400; color: var(--text-2); }
+.mx-fx__lv { font-weight: 600; color: var(--text-1); }
+.mx-fx__note { margin-top: 6px; }
+.mx-dd-route { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* ── Item 33: the list without the map (Google ratings live only here) ── */
+body.mx-gview-open #map, body.mx-gview-open #map-grid, body.mx-gview-open #map-vignette { visibility: hidden; }
+.mx-gview {
+  position: fixed; inset: 0; z-index: var(--z-modal); overflow: auto; overscroll-behavior: contain;
+  background: var(--glass-solid);            /* opaque: nothing of the map shows through */
+}
+.mx-gview__in { display: grid; gap: 14px; max-width: 1180px; margin: 0 auto; padding: 24px 32px 40px; }
+.mx-gview__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.mx-gview__titles { flex: 1 1 360px; min-width: 0; }
+.mx-gview__t { margin: 0; font: 600 22px/28px var(--font-sans); color: var(--text-1); }
+.mx-gview__sub { margin: 4px 0 0; font: 400 14px/20px var(--font-sans); color: var(--text-2); }
+.mx-gview__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.mx-gview__usage { font: 500 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.mx-gview__status { flex-basis: 100%; margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.mx-gview__name { font: 500 14px/20px var(--font-sans); color: var(--text-1); }
+.mx-gview__attr { display: flex; justify-content: flex-end; min-height: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.mx-gview__attr:empty { display: none; }
+.mx-gview__src { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.mx-gr { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; color: var(--text-1); text-decoration: none; white-space: nowrap; font: 500 13px/18px var(--font-sans); }
+.mx-gr:hover .mx-gr__n, .mx-gr:focus-visible .mx-gr__n { text-decoration: underline; }
+.mx-gr__star { color: var(--gold-soft); }
+.mx-gr__v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mx-gr__n { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.mx-gr--none { color: var(--text-3); white-space: normal; font-size: 12px; line-height: 16px; }
+.mx-gview .mx-table--ec .mx-td--e5 { justify-content: flex-start; }
+.mx-gview .mx-table--ec .mx-tr { grid-template-columns: 32px minmax(200px, 2.4fr) 116px 148px minmax(128px, 0.9fr) minmax(150px, 1fr); }
+@media (max-width: 760px) {
+  .mx-gview__in { padding: 12px 16px 24px; }
+  .mx-gview .mx-table--ec .mx-tr--head { display: none; }
+  .mx-gview .mx-table--ec .mx-tr { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "n name g" "n meta g" "n dist g"; row-gap: 4px; padding: 8px 4px; }
+  .mx-gview .mx-table--ec .mx-td--e0 { grid-area: n; align-self: start; padding-top: 2px; }
+  .mx-gview .mx-table--ec .mx-td--e1 { grid-area: name; }
+  .mx-gview .mx-table--ec .mx-td--e2 { grid-area: meta; }
+  .mx-gview .mx-table--ec .mx-td--e3 { display: none; }
+  .mx-gview .mx-table--ec .mx-td__fx { display: inline; }
+  .mx-gview .mx-table--ec .mx-td--e4 { grid-area: dist; text-align: left; font-size: 12px; }
+  .mx-gview .mx-table--ec .mx-td--e5 { grid-area: g; align-self: center; }
+}
+
+/* item 42: the national chains, folded under Kandidat EDC ("Jaringan nasional (…) · n") */
+.mx-nat { display: grid; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule); scroll-margin-top: 64px; }
+.mx-nat[hidden], .mx-nat__body[hidden] { display: none; }
+.mx-nat:focus { outline: none; }
+.mx-nat__h { margin: 0; }
+.mx-nat__btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  font: 600 14px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); text-align: left;
+}
+.mx-nat__btn:hover .mx-nat__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+.mx-nat__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--r-ctl); }
+.mx-nat__chev { flex: none; color: var(--text-2); }
+.mx-nat__body { display: grid; gap: 8px; min-width: 0; }
+
+/* ── v5 workspace (item 43, "Kartu bertahap") ────────────────────────── */
+/* the kecamatan sheet: "Merchant di <kecamatan>: Sasaran EDC dulu, lalu terdekat" (a row opens the merchant in the same sheet) */
+.mx-kl { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.mx-kl__i { border-bottom: 1px solid var(--rule); }
+.mx-kl__row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; width: 100%; min-height: 48px; padding: 4px 2px;
+  border: 0; background: none; text-align: left; color: inherit; cursor: pointer; font: inherit;
+}
+.mx-kl__row:hover { background: var(--surface-hover); }
+.mx-kl__row:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; border-radius: var(--r-ctl); }
+.mx-kl__n { font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); text-align: right; }
+.mx-kl__main { display: grid; gap: 1px; min-width: 0; }
+.mx-kl__name { font: 500 14px/19px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }   /* long names wrap */
+.mx-kl__meta { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.mx-kl__row .mx-tier { min-height: 22px; padding: 0 8px; }
+.mx-kl__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 8px; }
+.mx-kl__count { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.mx-kl__all { gap: 6px; }
+/* the summary rail (workspace(): the header, the product strip, the three numbers and the filters; MCD.windows places it) */
+.mx-wsrail .sheet__head { padding: var(--s-5) var(--s-5) 0; }
+.mx-wsrail__body { --mx-pad: var(--s-5); padding: var(--s-4) var(--s-5) var(--s-5); gap: 12px; }
+.mx-wsrail .mx-filters { padding: 12px; }
+/* the workspace's chips ({text, tone} of model.brief.chips) in Merchant's tier tones */
+body[data-section="merchants"] .ws-chiptag.is-edc { border-color: var(--rule-gold); background: var(--gold-a10); color: var(--gold-soft); }
+body[data-section="merchants"] .ws-chiptag.is-up { border-color: var(--status-ok); }
+body[data-section="merchants"] .ws-chiptag.is-nat { border-style: dashed; }
+/* the long list title of the kecamatan sheet wraps instead of being cut where the workspace folds it */
+body[data-section="merchants"] .dd-blk[data-fold="daftar"] .ws-fold__t { flex: 0 1 auto; min-width: 0; }
+
+/* ── Narrow sheets: 1024 px (full-width sheet) and phones ──────────────── */
+@container mx (max-width: 760px) {
+  .mx-pair { grid-template-columns: minmax(0, 1fr); }
+  .mx-why { grid-template-columns: minmax(0, 1fr); }
+  .mx-table--leads .mx-tr { grid-template-columns: 30px minmax(130px, 2fr) 96px minmax(100px, 1fr) minmax(112px, 1fr) 56px; }
+  .mx-table--react .mx-tr { grid-template-columns: minmax(130px, 2fr) minmax(90px, 1fr) 92px minmax(112px, 1fr) 56px; }
+  .mx-table--react .mx-td--r2, .mx-table--react .mx-td--r3 { display: none; }
+  .mx-table--ec .mx-tr { grid-template-columns: 30px minmax(150px, 2.4fr) 112px minmax(112px, 1fr) 56px; }
+  .mx-table--ec .mx-td--e3 { display: none; }
+  .mx-table--ec .mx-td__fx { display: inline; }
+}
+@container mx (max-width: 560px) {
+  .mx-prods { grid-template-columns: minmax(0, 1fr); }
+  .mx-strip { grid-template-columns: minmax(0, 1fr); padding: 10px 12px; gap: 6px; }
+  .mx-strip__i { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; }
+  .mx-strip__v { font-size: 16px; line-height: 22px; text-align: right; }
+  .mx-frow { grid-template-columns: minmax(0, 1fr); }
+  .mx-flabel { padding-top: 0; }
+  .mx-fhint { grid-column: 1; }
+  .mx-kpi__grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mx-searchbox { width: 100%; }
+  .mx-prio__row { grid-template-columns: 28px minmax(0, 1fr); }
+  .mx-prio__act { grid-column: 2; }
+  .mx-prio__act .mx-gm { width: 40px; min-width: 40px; padding: 0; }
+  .mx-prio__act .mx-gm span { display: none; }   /* icon only on phones; the link keeps its aria-label */
+  /* merchant list: two lines per merchant */
+  .mx-table--leads .mx-tr--head { display: none; }
+  .mx-table--leads .mx-tr {
+    grid-template-columns: 26px minmax(0, 1fr) 44px; grid-template-areas: "n name gm" "n meta gm"; row-gap: 2px; padding: 8px 4px;
+  }
+  .mx-table--leads .mx-td--0 { grid-area: n; align-self: start; padding-top: 6px; }
+  .mx-table--leads .mx-td--1 { grid-area: name; }
+  .mx-table--leads .mx-td--5 { grid-area: gm; }
+  .mx-table--leads .mx-td--2, .mx-table--leads .mx-td--3, .mx-table--leads .mx-td--4 { display: none; }
+  .mx-table--leads .mx-td--m { display: block; grid-area: meta; white-space: normal; color: var(--text-3); font-size: 12px; line-height: 17px; }
+  .mx-table--react .mx-tr--head { display: none; }
+  .mx-table--react .mx-tr { grid-template-columns: minmax(0, 1fr) auto 44px; grid-template-areas: "name trx gm" "kec dist gm"; row-gap: 2px; padding: 8px 4px; }
+  .mx-table--react .mx-td--r0 { grid-area: name; }
+  .mx-table--react .mx-td--r4 { grid-area: trx; }
+  .mx-table--react .mx-td--r6 { grid-area: gm; }
+  .mx-table--react .mx-td--r1 { grid-area: kec; color: var(--text-3); }
+  .mx-table--react .mx-td--r5 { grid-area: dist; text-align: right; }
+  .mx-table--react .mx-td--r5 .mx-td__l2 { display: none; }
+  .mx-table--react .mx-td--r2, .mx-table--react .mx-td--r3 { display: none; }
+  /* EDC candidates: two lines per merchant */
+  .mx-table--ec .mx-tr--head { display: none; }
+  .mx-table--ec .mx-tr { grid-template-columns: 26px minmax(0, 1fr) 44px; grid-template-areas: "n name gm" "n meta gm" "n dist gm"; row-gap: 4px; padding: 8px 4px; }
+  .mx-table--ec .mx-td--e0 { grid-area: n; align-self: start; padding-top: 6px; }
+  .mx-table--ec .mx-td--e1 { grid-area: name; }
+  .mx-table--ec .mx-td--e2 { grid-area: meta; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .mx-table--ec .mx-td--e4 { grid-area: dist; text-align: left; font-size: 12px; line-height: 16px; color: var(--text-2); }
+  .mx-strip.has-demo-tag--corner { padding-right: 12px; padding-top: 34px; }
+  .mx-table--ec .mx-td--e5 { grid-area: gm; }
+  .mx-travel { flex-basis: 100%; }
+  .mx-gview__in { padding: 12px 16px 24px; }
+  .mx-empty { grid-template-columns: minmax(0, 1fr); }
+  .mx-empty__icon { display: none; }
+  .mx-empty__a { grid-column: 1; }
+  .mx-dl__r { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+@container mx (max-width: 400px) {
+  .mx-kpi__grid, .mx-kpi__grid--3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mx-link { transition: none; }
+}
