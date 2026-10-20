@@ -8,8 +8,10 @@
  * 100 m grid. A lookup is a few array reads; nothing is sent over the network, so bank data
  * (LVM merchant locations) never leaves the browser. Method: docs/TRAVEL_GRID.md.
  *
- * PURE: no DOM, no storage, no network. UMD wrapper: MCD.travel in the browser (classic script),
- * module.exports in Node (tests/travel-grid.test.mjs, tests/travel-routes.test.mjs).
+ * PURE: no storage, no network request. The one DOM use is the lazy loader of the OUTER grid (below): it adds a classic
+ * <script> tag for a local file (works from file://; CSP script-src 'self' file:). UMD wrapper: MCD.travel in the
+ * browser (classic script), module.exports in Node (tests/travel-grid.test.mjs, tests/travel-routes.test.mjs,
+ * tests/travel-outer.test.mjs).
  *
  * API
  *   ready() → boolean                 decodes window.MCD_TRAVEL_GRID once (lazy); false if absent
@@ -51,6 +53,24 @@
  *   A cell whose car value is its toll-free value (listed in MCD_TRAVEL_ROUTES.carNoToll) draws its toll-free line
  *   for the car as well, so line and minutes still agree.
  *       null       routes not loaded, routes built from another grid, or no value at the point (precision 'none')
+ *
+ * OUTER GRID, 15-31 km (v6, 18 Oct 2026, COPY_STYLE_EN item 45: schools and campuses to 30 km; docs/TRAVEL_GRID.md §14)
+ *   data/travel-grid-outer.js (window.MCD_TRAVEL_GRID_OUTER, 200 m cells) and data/travel-routes-outer.js
+ *   (window.MCD_TRAVEL_ROUTES_OUTER): the same origin, road rules, speeds, toll choice and jam sibuk factor as the inner
+ *   files, from one search per profile over roads to ±32,5 km. Inside the inner grid's box at() and route() answer
+ *   from the inner grid exactly as before; beyond it, from the outer grid. Neither outer file is in index.html: the
+ *   first at() beyond the inner box (within about 32 km) injects the grid file, the first route() there the routes
+ *   file (only after sign-in when MCD.app exists; never in Node). While the grid loads, at() returns
+ *   {precision: 'none', pending: true, ...} so the UI can show "Menghitung jarak…"; then onOuter() listeners run.
+ *   Outer answers carry grid: 'outer'. Inner answers are unchanged.
+ *   at(lon, lat, {grid: 'inner' | 'outer'}) / route(lon, lat, {grid, noToll})   force one grid (tests, seam checks)
+ *   gridFor(lon, lat) → 'inner' | 'outer' | null    which grid answers the point (null: beyond both)
+ *   outerState() → {grid, routes, files}            each 'idle' | 'loading' | 'ready' | 'error' | 'unavailable'
+ *   onOuter(fn) → off                               fn(outerState()) after each change (loaded, failed)
+ *   loadOuter() / loadOuterRoutes() → Promise<boolean>   load now (shared, never rejects; false: cannot load here)
+ *   outerReady() / outerRoutesReady() → boolean     decode the globals once when present
+ *   useOuter(grid) / useOuterRoutes(obj) → boolean  use these objects (tests)
+ *   outerMeta() → outer grid meta (sources, ring, seam check), or null
  * ========================================================================== */
 (function (root, factory) {
   var api = factory(root);
@@ -62,6 +82,11 @@
   var NULL16 = 65535;
   var NEAR_CELLS = 5;            // 'nearby' search radius in cells (500 m at 100 m cells)
   var NONE = Object.freeze({ km: null, min: null, minPeak: null, precision: 'none', viaToll: false, noToll: null });
+  // beyond the inner grid while the outer grid loads: no value yet, the UI may say "Menghitung jarak…"
+  var PENDING = Object.freeze({ km: null, min: null, minPeak: null, precision: 'none', viaToll: false, noToll: null, pending: true });
+  var OUTER_FILES = { grid: 'data/travel-grid-outer.js', routes: 'data/travel-routes-outer.js' };
+  var OUTER_REACH_KM = 32;       // the outer grid answers to 31,15 km (+ 500 m 'nearby'): never load it for points further
+  var LOAD_TIMEOUT_MS = 30000;
 
   var G = null;                  // decoded grid
   var source = null;             // the grid object G was decoded from
@@ -105,15 +130,16 @@
     return decode(grid);
   }
 
-  function decode(grid) {
-    G = null; source = null;
-    if (!grid || !grid.meta || !isNum(grid.cols) || !isNum(grid.rows)) return false;
+  /** A decoded grid object, or null. outer: the outer grid ('nearby' radius meta.nearM metres; answers carry
+   *  grid: 'outer'). The inner grid keeps its rule: NEAR_CELLS cells. */
+  function decodeGrid(grid, outer) {
+    if (!grid || !grid.meta || !isNum(grid.cols) || !isNum(grid.rows)) return null;
     var bb = grid.meta.bbox;
-    if (!bb || bb.length !== 4 || !(bb[2] > bb[0]) || !(bb[3] > bb[1])) return false;
+    if (!bb || bb.length !== 4 || !(bb[2] > bb[0]) || !(bb[3] > bb[1])) return null;
     var n = grid.cols * grid.rows;
     var mins = u16(grid.minutes, n);
     var kms = u16(grid.km, n);
-    if (!mins || !kms) return false;
+    if (!mins || !kms) return null;
     var toll = grid.toll ? bytesOf(grid.toll) : null;
     if (toll && toll.length < Math.ceil(n / 8)) toll = null;
     var nmin = grid.minutesNoToll ? u16(grid.minutesNoToll, n) : null;
@@ -123,15 +149,32 @@
     var mLat = 111132.954 - 559.822 * Math.cos(2 * midLat) + 1.175 * Math.cos(4 * midLat);
     var mLon = 111412.84 * Math.cos(midLat) - 93.5 * Math.cos(3 * midLat) + 0.118 * Math.cos(5 * midLat);
     var ap = grid.meta.approach || {};
-    G = {
+    var g = {
       meta: grid.meta, cols: grid.cols, rows: grid.rows,
       w: bb[0], s: bb[1], e: bb[2], n: bb[3],
       cw: (bb[2] - bb[0]) * mLon / grid.cols,        // cell width in metres
       ch: (bb[3] - bb[1]) * mLat / grid.rows,        // cell height in metres
       min: mins, km: kms, toll: toll, nmin: nmin, nkm: nkm,
       detour: isNum(ap.detour) ? ap.detour : 1.3,
-      apKmh: isNum(ap.kmh) && ap.kmh > 0 ? ap.kmh : 6
+      apKmh: isNum(ap.kmh) && ap.kmh > 0 ? ap.kmh : 6,
+      outer: !!outer
     };
+    if (outer) {
+      var nearM = isNum(grid.meta.nearM) && grid.meta.nearM > 0 ? grid.meta.nearM : 500;
+      g.nearCells = Math.ceil(nearM / Math.min(g.cw, g.ch));
+      g.lim = nearM + 1e-6;
+    } else {
+      g.nearCells = NEAR_CELLS;
+      g.lim = NEAR_CELLS * Math.min(g.cw, g.ch) + 1e-6;
+    }
+    return g;
+  }
+
+  function decode(grid) {
+    G = null; source = null;
+    var g = decodeGrid(grid, false);
+    if (!g) return false;
+    G = g;
     source = grid;
     return true;
   }
@@ -162,49 +205,227 @@
     return true;
   }
 
-  function result(i, extraM, precision) {
-    var aKm = extraM > 0 ? extraM * G.detour / 1000 : 0;          // extra approach for 'nearby'
-    var aMin = aKm * 1000 / (G.apKmh * 1000 / 60);
+  function result(g, i, extraM, precision) {
+    var aKm = extraM > 0 ? extraM * g.detour / 1000 : 0;          // extra approach for 'nearby'
+    var aMin = aKm * 1000 / (g.apKmh * 1000 / 60);
     var pf = peakFactor();
-    var m = G.min[i] / 10 + aMin, k = G.km[i] / 100 + aKm;
-    var viaToll = !!(G.toll && (G.toll[i >> 3] >> (i & 7)) & 1);
+    var m = g.min[i] / 10 + aMin, k = g.km[i] / 100 + aKm;
+    var viaToll = !!(g.toll && (g.toll[i >> 3] >> (i & 7)) & 1);
     var noToll = null;
-    if (G.nmin && G.nmin[i] !== NULL16 && G.nkm[i] !== NULL16) {
-      var nm = G.nmin[i] / 10 + aMin;
-      noToll = { km: G.nkm[i] / 100 + aKm, min: nm, minPeak: nm * pf };
+    if (g.nmin && g.nmin[i] !== NULL16 && g.nkm[i] !== NULL16) {
+      var nm = g.nmin[i] / 10 + aMin;
+      noToll = { km: g.nkm[i] / 100 + aKm, min: nm, minPeak: nm * pf };
     }
-    return { km: k, min: m, minPeak: m * pf, precision: precision, viaToll: viaToll, noToll: noToll };
+    var r = { km: k, min: m, minPeak: m * pf, precision: precision, viaToll: viaToll, noToll: noToll };
+    if (g.outer) r.grid = 'outer';
+    return r;
   }
 
-  /** The grid cell that answers for (lon, lat): {i, d (extra approach metres), precision}, or null. The grid
-   *  must be ready. Shared by at() and route(), so a route always ends where the minutes were measured. */
-  function locate(lon, lat) {
-    var c = Math.floor((lon - G.w) / (G.e - G.w) * G.cols);
-    var r = Math.floor((G.n - lat) / (G.n - G.s) * G.rows);
-    if (c < 0 || c >= G.cols || r < 0 || r >= G.rows) return null;
-    var i = r * G.cols + c;
-    if (G.min[i] !== NULL16 && G.km[i] !== NULL16) return { i: i, d: 0, precision: 'exact-grid' };
-    var best = -1, bestD = Infinity, lim = NEAR_CELLS * Math.min(G.cw, G.ch) + 1e-6;
-    for (var dr = -NEAR_CELLS; dr <= NEAR_CELLS; dr++) {
+  /** True when (lon, lat) lies in grid g's box (the cell arithmetic of locate). */
+  function inBox(g, lon, lat) {
+    var c = Math.floor((lon - g.w) / (g.e - g.w) * g.cols);
+    var r = Math.floor((g.n - lat) / (g.n - g.s) * g.rows);
+    return c >= 0 && c < g.cols && r >= 0 && r < g.rows;
+  }
+
+  /** The cell of grid g that answers for (lon, lat): {i, d (extra approach metres), precision}, or null. Shared by
+   *  at() and route(), so a route always ends where the minutes were measured. */
+  function locate(g, lon, lat) {
+    var c = Math.floor((lon - g.w) / (g.e - g.w) * g.cols);
+    var r = Math.floor((g.n - lat) / (g.n - g.s) * g.rows);
+    if (c < 0 || c >= g.cols || r < 0 || r >= g.rows) return null;
+    var i = r * g.cols + c;
+    if (g.min[i] !== NULL16 && g.km[i] !== NULL16) return { i: i, d: 0, precision: 'exact-grid' };
+    var best = -1, bestD = Infinity, lim = g.lim, K = g.nearCells;
+    for (var dr = -K; dr <= K; dr++) {
       var r2 = r + dr;
-      if (r2 < 0 || r2 >= G.rows) continue;
-      for (var dc = -NEAR_CELLS; dc <= NEAR_CELLS; dc++) {
+      if (r2 < 0 || r2 >= g.rows) continue;
+      for (var dc = -K; dc <= K; dc++) {
         var c2 = c + dc;
-        if (c2 < 0 || c2 >= G.cols) continue;
-        var j = r2 * G.cols + c2;
-        if (G.min[j] === NULL16 || G.km[j] === NULL16) continue;
-        var d = Math.sqrt(dc * G.cw * dc * G.cw + dr * G.ch * dr * G.ch);
+        if (c2 < 0 || c2 >= g.cols) continue;
+        var j = r2 * g.cols + c2;
+        if (g.min[j] === NULL16 || g.km[j] === NULL16) continue;
+        var d = Math.sqrt(dc * g.cw * dc * g.cw + dr * g.ch * dr * g.ch);
         if (d <= lim && d < bestD) { bestD = d; best = j; }
       }
     }
     return best < 0 ? null : { i: best, d: bestD, precision: 'nearby' };
   }
 
-  /** Distance and time from the branch to (lon, lat). O(1): one cell, or at most 11 × 11 cells. */
-  function at(lon, lat) {
-    if (!isNum(lon) || !isNum(lat) || !ready()) return NONE;
-    var L = locate(lon, lat);
-    return L ? result(L.i, L.d, L.precision) : NONE;
+  /** Straight-line km from the inner grid's origin (the branch), for the outer reach check. */
+  function crowKm(lon, lat) {
+    var o = (G && G.meta && G.meta.origin) || {};
+    var lon0 = isNum(o.lon) ? o.lon : 106.90989, lat0 = isNum(o.lat) ? o.lat : -6.33203;
+    var R = 6371.0088, rad = Math.PI / 180, dp = (lat - lat0) * rad, dl = (lon - lon0) * rad;
+    var h = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(lat0 * rad) * Math.cos(lat * rad) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  /** 'inner' when the inner grid answers (lon, lat), 'outer' beyond its box within the outer grid's reach, else null. */
+  function gridFor(lon, lat) {
+    if (!isNum(lon) || !isNum(lat) || !ready()) return null;
+    if (inBox(G, lon, lat)) return 'inner';
+    if (GO && outerReady()) return inBox(GO, lon, lat) ? 'outer' : null;
+    return crowKm(lon, lat) <= OUTER_REACH_KM ? 'outer' : null;
+  }
+
+  /** Distance and time from the branch to (lon, lat). O(1): one cell, or at most 11 × 11 cells. Inside the inner
+   *  grid's box: the inner grid, exactly as before. Beyond it: the outer grid (loaded on first use; PENDING meanwhile).
+   *  opts.grid 'inner' | 'outer' forces one grid. */
+  function at(lon, lat, opts) {
+    if (!isNum(lon) || !isNum(lat)) return NONE;
+    var want = opts && opts.grid;
+    if (want !== 'outer') {
+      if (!ready()) return NONE;
+      if (want === 'inner' || inBox(G, lon, lat)) {
+        var L = locate(G, lon, lat);
+        return L ? result(G, L.i, L.d, L.precision) : NONE;
+      }
+    }
+    if (!outerReady()) {
+      if (want !== 'outer' && crowKm(lon, lat) > OUTER_REACH_KM) return NONE;
+      if (ostate.grid === 'idle' && canLoad()) loadOuter();
+      return ostate.grid === 'loading' ? PENDING : NONE;
+    }
+    var L2 = locate(GO, lon, lat);
+    return L2 ? result(GO, L2.i, L2.d, L2.precision) : NONE;
+  }
+
+  /* ------------------------------------------------------------ outer grid (v6): state and lazy loading */
+
+  var GO = null;                 // decoded outer grid
+  var osource = null;            // the outer grid object GO was decoded from
+  var oexplicit = false;         // useOuter() was called: keep that grid
+  var ostate = { grid: 'idle', routes: 'idle' };
+  var opending = { grid: null, routes: null };
+  var olisteners = [];
+
+  function outerReady() {
+    var o = root && root.MCD_TRAVEL_GRID_OUTER;
+    if (GO && (oexplicit || !o || o === osource)) return true;
+    if (!o) return false;
+    oexplicit = false;
+    GO = decodeGrid(o, true);
+    osource = GO ? o : null;
+    if (GO) setState('grid', 'ready');
+    return !!GO;
+  }
+
+  /** Use this outer grid object (tests). True when it decodes. */
+  function useOuter(grid) {
+    oexplicit = true;
+    GO = decodeGrid(grid, true);
+    osource = GO ? grid : null;
+    setState('grid', GO ? 'ready' : 'error');
+    return !!GO;
+  }
+
+  function outerMeta() { return outerReady() ? GO.meta : null; }
+
+  function outerState() {
+    return { grid: GO ? 'ready' : ostate.grid, routes: RTO ? 'ready' : ostate.routes,
+      files: { grid: OUTER_FILES.grid, routes: OUTER_FILES.routes } };
+  }
+
+  function setState(k, v) {
+    if (ostate[k] === v) return;
+    ostate[k] = v;
+    var st = outerState();
+    for (var i = 0; i < olisteners.length; i++) {
+      try { olisteners[i](st); } catch (e) { /* one broken listener never stops the others */ }
+    }
+  }
+
+  /** onOuter(fn): fn(outerState()) after each change of the outer grid or routes state; returns off(). */
+  function onOuter(fn) {
+    if (typeof fn !== 'function') return function () {};
+    olisteners.push(fn);
+    return function () { var i = olisteners.indexOf(fn); if (i >= 0) olisteners.splice(i, 1); };
+  }
+
+  /** A page can load the outer files: a document, Promise, and (when the shell exists) after sign-in. */
+  function canLoad() {
+    var d = root && root.document;
+    if (!d || typeof d.createElement !== 'function' || typeof Promise !== 'function') return false;
+    var app = root.MCD && root.MCD.app;
+    if (app && typeof app.isBooted === 'function') {
+      try { return !!app.isBooted(); } catch (e) { return false; }
+    }
+    return true;
+  }
+
+  /** Adds a classic <script> for a local file once; resolves when present() holds after it ran. */
+  function inject(src, present) {
+    return new Promise(function (resolve, reject) {
+      if (present()) { resolve(); return; }
+      var d = root.document, s = null, done = false, timer = null;
+      function finish(err) {
+        if (done) return;
+        done = true;
+        if (timer && typeof clearTimeout === 'function') clearTimeout(timer);
+        if (err) {
+          try { if (s && s.parentNode) s.parentNode.removeChild(s); } catch (e) { /* already gone */ }
+          reject(err);
+        } else resolve();
+      }
+      try {
+        s = d.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = function () { finish(present() ? null : new Error('not usable: ' + src)); };
+        s.onerror = function () { finish(new Error('could not load ' + src)); };
+        (d.head || d.body || d.documentElement).appendChild(s);
+      } catch (e) { finish(e); return; }
+      if (typeof setTimeout === 'function') {
+        timer = setTimeout(function () { finish(new Error('timeout ' + src)); }, LOAD_TIMEOUT_MS);
+        if (timer && typeof timer.unref === 'function') timer.unref();   // Node: never keep a test run alive
+      }
+    });
+  }
+
+  /** Loads data/travel-grid-outer.js once (shared promise); true when the outer grid is ready. Never rejects. A failed
+   *  load may be tried again by the next explicit call; at() itself only starts a load from the 'idle' state. */
+  function loadOuter() {
+    if (outerReady()) return Promise.resolve(true);
+    if (opending.grid) return opending.grid;
+    if (!canLoad()) return Promise.resolve(false);
+    setState('grid', 'loading');
+    var p = inject(OUTER_FILES.grid, function () { return !!(root && root.MCD_TRAVEL_GRID_OUTER); }).then(function () {
+      var ok = outerReady();
+      opending.grid = null;
+      setState('grid', ok ? 'ready' : 'error');
+      return ok;
+    }, function () {
+      opending.grid = null;
+      setState('grid', 'error');
+      return false;
+    });
+    opending.grid = p;
+    return p;
+  }
+
+  /** Loads the outer grid and data/travel-routes-outer.js once; true when outer routes can be drawn. Never rejects. */
+  function loadOuterRoutes() {
+    if (outerReady() && outerRoutesReady()) return Promise.resolve(true);
+    if (opending.routes) return opending.routes;
+    if (!canLoad()) return Promise.resolve(false);
+    var p = loadOuter().then(function (ok) {
+      if (!ok) return false;
+      if (outerRoutesReady()) return true;
+      setState('routes', 'loading');
+      return inject(OUTER_FILES.routes, function () { return !!(root && root.MCD_TRAVEL_ROUTES_OUTER); })
+        .then(function () { return outerRoutesReady(); }, function () { return false; });
+    }).then(function (ok) {
+      opending.routes = null;
+      setState('routes', ok ? 'ready' : 'error');
+      return ok;
+    }, function () {
+      opending.routes = null;
+      setState('routes', 'error');
+      return false;
+    });
+    opending.routes = p;
+    return p;
   }
 
   /* ------------------------------------------------------------ route lines (item 36) */
@@ -253,22 +474,22 @@
     return next;
   }
 
-  function decodeRoutes(obj) {
-    RT = null; rsource = null; rmatch = null;
+  /** A decoded routes object ({meta, cols, rows, points, tree, toll, cells, noToll}), or null. Pure. */
+  function decodeRoutesObj(obj) {
     if (!obj || !obj.meta || !obj.meta.origin || !obj.noToll || !isNum(obj.points) || !isNum(obj.noToll.points) ||
-        !isNum(obj.cols) || !isNum(obj.rows)) return false;
+        !isNum(obj.cols) || !isNum(obj.rows)) return null;
     try {
       var N = obj.points, T = N + obj.noToll.points, ncell = obj.cols * obj.rows, c, v, r;
       var X = new Int32Array(T), Y = new Int32Array(T), P = new Int32Array(T);
       P[0] = -1;
       r = new Varints(obj.tree);
-      if (readChains(r, [[0, r.u()]], X, Y, P, 1, N) !== N || !r.end()) return false;
+      if (readChains(r, [[0, r.u()]], X, Y, P, 1, N) !== N || !r.end()) return null;
       var toll = new Uint8Array(N), at_ = 0;
       r = new Varints(obj.toll || '');
       while (!r.end()) {
         at_ += r.u();
         var len = r.u();
-        if (at_ + len > N) return false;
+        if (at_ + len > N) return null;
         for (var t = at_; t < at_ + len; t++) toll[t] = 1;
         at_ += len;
       }
@@ -276,23 +497,23 @@
       r = new Varints(obj.cells);
       for (c = 0; c < ncell; c++) {
         v = r.u();
-        if (v) { prev += unzz(v - 1); if (prev < 0 || prev >= N) return false; cells[c] = prev; } else cells[c] = -1;
+        if (v) { prev += unzz(v - 1); if (prev < 0 || prev >= N) return null; cells[c] = prev; } else cells[c] = -1;
       }
-      if (!r.end()) return false;
+      if (!r.end()) return null;
       r = new Varints(obj.noToll.tree);
       var next = N, pp = 0, groups = r.u();
       for (var g = 0; g < groups; g++) {
         pp += r.u();
-        if (pp >= N) return false;
+        if (pp >= N) return null;
         next = readChains(r, [[pp, r.u()]], X, Y, P, next, T);
       }
-      if (next !== T || !r.end()) return false;
+      if (next !== T || !r.end()) return null;
       var PT = new Int32Array(P), i = 0;
       r = new Varints(obj.noToll.reparent);
       while (!r.end()) {
         i += r.u();
         var np = i + unzz(r.u());
-        if (i >= N || np < 0 || np >= T) return false;
+        if (i >= N || np < 0 || np >= T) return null;
         PT[i] = np;
       }
       var ntc = new Int32Array(cells);
@@ -301,9 +522,9 @@
       while (!r.end()) {
         c += r.u() + 1;
         v = r.u();
-        if (c >= ncell) return false;
+        if (c >= ncell) return null;
         ntc[c] = v === 0 ? -1 : Math.max(cells[c], 0) + unzz(v - 1);
-        if (ntc[c] >= T || ntc[c] < -1) return false;
+        if (ntc[c] >= T || ntc[c] < -1) return null;
       }
       // cells whose car route is the toll-free one (the toll road saves at most 1 minute there and is not both
       // faster and shorter): 0 in 'cells'
@@ -314,21 +535,27 @@
         c = -1;
         while (!r.end()) {
           c += r.u() + 1;
-          if (c >= ncell || cells[c] !== -1 || ntc[c] < 0) return false;
+          if (c >= ncell || cells[c] !== -1 || ntc[c] < 0) return null;
           carNt[c] = 1;
         }
       }
       var q = obj.meta.quantumDeg > 0 ? Math.round(1 / obj.meta.quantumDeg) : 100000;
-      RT = {
+      return {
         meta: obj.meta, N: N, T: T, X: X, Y: Y, P: P, PT: PT, toll: toll, cells: cells, ntCells: ntc, carNt: carNt, q: q,
         ox: Math.round(obj.meta.origin.lon * q), oy: Math.round(obj.meta.origin.lat * q)
       };
-      rsource = obj;
-      return true;
     } catch (e) {
-      RT = null;
-      return false;
+      return null;
     }
+  }
+
+  function decodeRoutes(obj) {
+    RT = null; rsource = null; rmatch = null;
+    var rt = decodeRoutesObj(obj);
+    if (!rt) return false;
+    RT = rt;
+    rsource = obj;
+    return true;
   }
 
   /** Use a routes object ({meta, cols, rows, points, tree, toll, cells, noToll}). True when it decodes. */
@@ -346,6 +573,31 @@
     return decodeRoutes(o);
   }
 
+  /* outer routes (v6): data/travel-routes-outer.js, the trees of the outer grid's searches */
+  var RTO = null, rosource = null, roexplicit = false, romatch = null;
+
+  function outerRoutesReady() {
+    var o = root && root.MCD_TRAVEL_ROUTES_OUTER;
+    if (RTO && (roexplicit || !o || o === rosource)) return true;
+    if (!o) return false;
+    roexplicit = false;
+    romatch = null;
+    RTO = decodeRoutesObj(o);
+    rosource = RTO ? o : null;
+    if (RTO) setState('routes', 'ready');
+    return !!RTO;
+  }
+
+  /** Use this outer routes object (tests). True when it decodes. */
+  function useOuterRoutes(obj) {
+    roexplicit = true;
+    romatch = null;
+    RTO = decodeRoutesObj(obj);
+    rosource = RTO ? obj : null;
+    setState('routes', RTO ? 'ready' : 'error');
+    return !!RTO;
+  }
+
   /** FNV-1a 32 over the characters of the strings (the grid fingerprint in routes meta.grid.hash). */
   function fnv1a() {
     var h = 0x811c9dc5;
@@ -356,47 +608,77 @@
     return ('0000000' + (h >>> 0).toString(16)).slice(-8);
   }
 
-  /** The routes were built with the grid in use (same cells, same minutes); otherwise no line is drawn. */
+  /** The routes rt were built with grid g (decoded from gsrc): same cells, same minutes; otherwise no line is drawn. */
+  function routesMatch(g, gsrc, rt) {
+    var gm = rt.meta.grid || {};
+    return gm.cols === g.cols && gm.rows === g.rows && (!gm.hash || gm.hash === fnv1a(gsrc.minutes, gsrc.minutesNoToll));
+  }
+
+  /** The inner routes were built with the inner grid in use (cached per pair). */
   function routesMatchGrid() {
     if (rmatch && rmatch.grid === source && rmatch.routes === rsource) return rmatch.ok;
-    var gm = RT.meta.grid || {};
-    var ok = gm.cols === G.cols && gm.rows === G.rows &&
-      (!gm.hash || gm.hash === fnv1a(source.minutes, source.minutesNoToll));
+    var ok = routesMatch(G, source, RT);
     rmatch = { grid: source, routes: rsource, ok: ok };
     return ok;
   }
 
+  function outerRoutesMatchGrid() {
+    if (romatch && romatch.grid === osource && romatch.routes === rosource) return romatch.ok;
+    var ok = routesMatch(GO, osource, RTO);
+    romatch = { grid: osource, routes: rosource, ok: ok };
+    return ok;
+  }
+
   /** The driving route from the branch to (lon, lat), from the same search as at(). opts.noToll: without toll
-   *  roads (motorcycles). Null when the routes are not loaded or the point has no value. */
+   *  roads (motorcycles). Null when the routes are not loaded or the point has no value. Beyond the inner grid's box
+   *  the outer routes answer (loaded on first use; null until then). opts.grid 'inner' | 'outer' forces one grid. */
   function route(lon, lat, opts) {
-    if (!isNum(lon) || !isNum(lat) || !ready() || !routesReady() || !routesMatchGrid()) return null;
-    var L = locate(lon, lat);
+    if (!isNum(lon) || !isNum(lat)) return null;
+    var want = opts && opts.grid;
+    if (want !== 'outer') {
+      if (!ready()) return null;
+      if (want === 'inner' || inBox(G, lon, lat)) {
+        if (!routesReady() || !routesMatchGrid()) return null;
+        return routeOn(G, RT, lon, lat, opts);
+      }
+    }
+    if (!outerReady() || !outerRoutesReady() || !outerRoutesMatchGrid()) {
+      if (ostate.routes === 'idle' && canLoad() && (want === 'outer' || crowKm(lon, lat) <= OUTER_REACH_KM)) loadOuterRoutes();
+      return null;
+    }
+    return routeOn(GO, RTO, lon, lat, opts);
+  }
+
+  function routeOn(g, rt, lon, lat, opts) {
+    var L = locate(g, lon, lat);
     if (!L) return null;
-    var r = result(L.i, L.d, L.precision);
+    var r = result(g, L.i, L.d, L.precision);
     var noToll = !!(opts && opts.noToll);
     var v = noToll ? r.noToll : r;
     if (!v || !isNum(v.km) || !isNum(v.min)) return null;
-    var useNt = noToll || !!(RT.carNt && RT.carNt[L.i]);     // the car takes the toll-free route in this cell
-    var a = (useNt ? RT.ntCells : RT.cells)[L.i];
+    var useNt = noToll || !!(rt.carNt && rt.carNt[L.i]);     // the car takes the toll-free route in this cell
+    var a = (useNt ? rt.ntCells : rt.cells)[L.i];
     if (!(a >= 0)) return null;
-    var par = useNt ? RT.PT : RT.P;
-    var ids = [], guard = RT.T, viaToll = false;
+    var par = useNt ? rt.PT : rt.P;
+    var ids = [], guard = rt.T, viaToll = false;
     for (var i = a; i >= 0; i = par[i]) {
       if (guard-- < 0) return null;            // corrupt data: never loop
       ids.push(i);
-      if (i < RT.N && RT.toll[i]) viaToll = true;
+      if (i < rt.N && rt.toll[i]) viaToll = true;
     }
     if (ids[ids.length - 1] !== 0) return null;
     var n = ids.length, coords = new Array(n);
     for (var j = 0; j < n; j++) {
       var k = ids[n - 1 - j];
-      coords[j] = [(RT.ox + RT.X[k]) / RT.q, (RT.oy + RT.Y[k]) / RT.q];
+      coords[j] = [(rt.ox + rt.X[k]) / rt.q, (rt.oy + rt.Y[k]) / rt.q];
     }
     var end = coords[n - 1];
-    return {
+    var out = {
       coords: coords, connector: [[end[0], end[1]], [lon, lat]],
       km: v.km, min: v.min, minPeak: v.minPeak, viaToll: viaToll, precision: r.precision, noToll: noToll
     };
+    if (g.outer) out.grid = 'outer';
+    return out;
   }
 
   /* ------------------------------------------------------------ text (Bahasa Indonesia) */
@@ -458,6 +740,9 @@
   return {
     ready: ready, load: load, meta: meta, at: at, format: format, sortByTime: sortByTime,
     peakFactor: function () { ready(); return peakFactor(); }, setPeakFactor: setPeakFactor,
-    route: route, routesReady: routesReady, loadRoutes: loadRoutes
+    route: route, routesReady: routesReady, loadRoutes: loadRoutes,
+    gridFor: gridFor, outerState: outerState, onOuter: onOuter, loadOuter: loadOuter, loadOuterRoutes: loadOuterRoutes,
+    outerReady: outerReady, outerRoutesReady: outerRoutesReady, useOuter: useOuter, useOuterRoutes: useOuterRoutes,
+    outerMeta: outerMeta
   };
 });

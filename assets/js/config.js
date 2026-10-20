@@ -7,8 +7,9 @@
  * only when app.js calls MCD.config.loadSettings() inside boot(), i.e.
  * after the password gate has unlocked.
  *
- * Scope (branch decisions 15 and 16 Oct 2026, docs/COPY_STYLE_EN.md items 10–22):
- *   - Five sections on keys 1–5: Ringkasan · Merchant (LVM & EDC) · Sekolah (SMA) · KPR · Data & Privasi.
+ * Scope (branch decisions 15 and 16 Oct 2026, docs/COPY_STYLE_EN.md items 10–22; v6, item 45 and V6_SPEC D10):
+ *   - Six sections on keys 1–6: Ringkasan · Merchant (LVM & EDC) · Sekolah (SMA, SMK, MA) · Kampus · KPR ·
+ *     Data & Privasi. Kampus (id 'campus', hash s=campus) sits between Sekolah and KPR (18 Oct 2026).
  *     Ringkasan and Data & Privasi are full-width pages without a map (layout 'page', UX fix plan A-03).
  *   - UI words in Bahasa Indonesia (item 19); internal ids stay English (overview, merchants, …).
  *   - Every map is flat and north-up: no 2D/3D toggle, no tilt, no orbit, no 3D buildings.
@@ -31,7 +32,8 @@
 
   /* ------------------------------------------------------------ sections */
 
-  // Registry: exactly five sections on keys 1–5 (branch decision 15 Oct 2026, COPY_STYLE_EN item 14).
+  // Registry: six sections on keys 1–6 (branch decision 15 Oct 2026, COPY_STYLE_EN item 14; Kampus added by item 45,
+  // V6_SPEC D10: KPR moved to key 5, Data & Privasi to key 6).
   // layout: 'rails' (§C.3) | 'sheet' (§C.4) | 'sheet-wide' | 'page' (no map: Ringkasan, Data & Privasi)
   // posture.imagery: key of map.postures · posture.camera: key of map.presets or null (keep camera)
   // posture.rings: key of rings.sets · posture.layerSet: the section's layer family · posture.deck: deck layers on
@@ -49,19 +51,28 @@
       file: 'assets/js/section-merchants.js', css: 'assets/css/section-merchants.css',
       layout: 'sheet',
       posture: { imagery: 'merchants', camera: 'sme15', rings: 'merchants', layerSet: 'merchants', deck: true } },
-    { id: 'schools', key: '3', label: 'Sekolah', short: 'Sekolah', title: 'Sekolah (SMA)', titleFull: 'SMA di sekitar Mabes TNI',
+    /* v6 (V6_SPEC §3.2): SMK and MA join SMA; the 15 km / 30 km scope lives in the section (MCD.inst.scope), not here */
+    { id: 'schools', key: '3', label: 'Sekolah', short: 'Sekolah', title: 'Sekolah (SMA, SMK, MA)', titleFull: 'SMA, SMK dan MA di sekitar Mabes TNI',
       help: 'SMA di sekitar Mabes TNI dan KCP Cilangkap.\nLihat SMA yang telah menjadi nasabah Mandiri dan yang masih dapat didekati.\nLihat juga perkiraan siswa berusia 17 tahun ke atas, yang dapat memiliki KTP.',
       sheets: ['3_sekolah'],
       file: 'assets/js/section-schools.js', css: 'assets/css/section-schools.css',
       layout: 'rails',
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'schools', deck: true } },
-    { id: 'property', key: '4', label: 'KPR', short: 'KPR', title: 'KPR dalam 30 km', titleFull: 'Proyek perumahan dan KPR dalam 30 km',
+    /* v6 (V6_SPEC §6.1, D10): universities, institutes, sekolah tinggi, politeknik, akademi, design and course schools
+       within 30 km; engine assets/js/campus-core.js (MCD.campus), data/campuses.js through MCD.app.lazy('campuses') */
+    { id: 'campus', key: '4', label: 'Kampus', short: 'Kampus', title: 'Kampus (perguruan tinggi)', titleFull: 'Perguruan tinggi dalam 30 km: payroll, kantin dan mahasiswa',
+      help: 'Universitas, institut, sekolah tinggi, politeknik, akademi, serta sekolah desain dan kursus dalam 30 km dari Mabes TNI.\nLihat jumlah mahasiswa dan dosen tetap dari PDDikti.\nPayroll melalui kerja sama dengan kampus, Livin’ Merchant untuk kantin dan koperasi, Tabungan untuk mahasiswa.',
+      sheets: [],
+      file: 'assets/js/section-campus.js', css: 'assets/css/section-campus.css',
+      layout: 'rails',
+      posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true } },
+    { id: 'property', key: '5', label: 'KPR', short: 'KPR', title: 'KPR dalam 30 km', titleFull: 'Proyek perumahan dan KPR dalam 30 km',
       help: 'Proyek perumahan baru dalam 30 km dari Mabes TNI.\nIsi penghasilan bersih untuk melihat rumah yang terjangkau.\nHitung angsuran KPR di kalkulator.',
       sheets: [],
       file: 'assets/js/section-property.js', css: 'assets/css/section-property.css',
       layout: 'rails',
       posture: { imagery: 'full', camera: 'ring30', rings: 'property', layerSet: 'property', deck: true } },
-    { id: 'data', key: '5', label: 'Data & Privasi', short: 'Data', title: 'Data & Privasi', titleFull: 'Data & Privasi',
+    { id: 'data', key: '6', label: 'Data & Privasi', short: 'Data', title: 'Data & Privasi', titleFull: 'Data & Privasi',
       help: 'Impor laporan bulanan Rev LVM apa adanya.\nImpor juga file EDC dan SMA dari template permintaan data.\nSimpan salinan terenkripsi agar data terbuka lagi saat masuk.\nFile hanya dibaca di komputer ini.',
       sheets: ['1_lvm', '2_edc', '3_sekolah'],
       file: 'assets/js/section-data.js', css: 'assets/css/section-data.css',
@@ -275,7 +286,10 @@
     // ASSUMPTION shown in legends as words: hijau ≥ 50% · kuning 20–50% · merah < 20%.
     coverageBands: { ok: 0.5, mid: 0.2 },
     // distance: the shared travel-time switches of MCD.distance ("Jam sibuk", "Motor (tanpa tol)"), JSON {peak, noToll}
-    storageKeys: { settings: 'mcd.settings', lastView: 'mcd.lastView', theme: 'mcd.ui.theme', lastDownload: 'mcd.data.lastDownload', distance: 'mcd.distance.v1', windows: 'mcd.ui.windows.v1' },
+    // v6 (V6_SPEC §8.3): scope = sessionStorage {v: 1, schools: 15 | 30, campus: 15 | 30} (numbers only, MCD.inst.scope);
+    // campusUi = the Kampus list sort and the jenis shown (no names); seal = prefix of the encrypted follow-up stores (MCD.seal)
+    storageKeys: { settings: 'mcd.settings', lastView: 'mcd.lastView', theme: 'mcd.ui.theme', lastDownload: 'mcd.data.lastDownload', distance: 'mcd.distance.v1', windows: 'mcd.ui.windows.v1',
+      scope: 'mcd.scope.v1', campusUi: 'mcd.campus.ui.v1', seal: 'mcd.seal.v1.' },
 
     // Global view modes (U6). Stored in state.view and the URL hash (view=deep); default overview.
     views: [

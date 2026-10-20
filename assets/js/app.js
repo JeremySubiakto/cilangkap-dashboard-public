@@ -7,7 +7,7 @@
  * §L.4 (keys) · §C.7 (palette) · §E.8 (drawer) · §K.3–K.5 (privacy,
  * errors) · BUILD_SPEC_AUTH_GATE.md §2.2, §4, §5, §6 (password gate) ·
  * docs/COPY_STYLE_EN.md (English copy and the branch's product decisions:
- * real information only, five sections, a flat north-up map, simple
+ * real information only, six sections (five until v6), a flat north-up map, simple
  * navigation, Overview and Deep dive views, Day and Night themes).
  *
  * GATE CONTRACT
@@ -19,6 +19,12 @@
  *   the console. {key, salt, iter} and the decrypted payload stay in this
  *   closure only (never on window, MCD.*, storage, the URL or the console).
  *   MCD.session exposes functions only (saveEncrypted for "Save encrypted copy").
+ *   v6 (V6_SPEC §7.2, §7.4): the one exception is MCD.seal.init(), called once in
+ *   onUnlock before the first section mounts. It receives {key, salt, iter} and
+ *   only the follow-up part of the payload, keeps them in its own closure and
+ *   refuses a second call; nothing is returned or exposed. saveEncrypted() puts
+ *   MCD.seal.vaultExport() into payload.followups and, once the file is written,
+ *   tells MCD.seal the time it was saved (vaultSeen, D15). Both are guarded.
  *
  * BOOT (inside onUnlock): CDN mirror fallback → settings → vault config →
  *   state.init (hash) → theme → vault datasets → public reference data (no
@@ -33,7 +39,8 @@
  * SHELL (fixed placement, the same on every screen; docs/UX_FIX_PLAN.md §2, owner A)
  *   top bar     brand · Cari · Terang | Gelap · Data contoh · Bantuan · (Data belum disimpan) · Kunci;
  *               phones: Cari and Menu only, sections in a bottom tab bar
- *   section row Ringkasan · Merchant · Sekolah · KPR · Data & Privasi (the active one highlighted)
+ *   section row Ringkasan · Merchant · Sekolah · Kampus · KPR · Data & Privasi (keys 1–6, v6; the active one
+ *               highlighted); phones: the same six in the bottom tab bar
  *   page header breadcrumb + filter chips · title [?] · Sederhana | Detail · ⋯ (Lainnya: masking,
  *               full names, copy link); ctx.tabs for Detail tabs with per-view tab and scroll memory
  *   pages       Ringkasan and Data & Privasi use layout 'page' (no map, body[data-layout="page"])
@@ -104,10 +111,10 @@
     themeSwitchTo: function (t) { return t === 'day' ? 'Ganti ke Terang (tombol N)' : 'Ganti ke Gelap (tombol N)'; },
     help: 'Bantuan',
     search: 'Cari',
-    searchField: 'Cari kecamatan, merchant, SMA atau proyek',
+    searchField: 'Cari kecamatan, merchant, sekolah, kampus atau proyek',
     searchLabel: 'Cari kecamatan, merchant atau SMA',   /* visible in the band; fits without "…" from 1440 px */
     searchShort: 'Cari kecamatan, merchant',            /* 1280–1439 px */
-    searchPlaceholder: 'Ketik nama kecamatan, merchant, SMA, proyek, atau perintah',
+    searchPlaceholder: 'Ketik nama kecamatan, merchant, sekolah, kampus, proyek atau perintah',
     lock: 'Kunci',
     lockAria: 'Kunci dashboard',
     menu: 'Menu',
@@ -485,10 +492,31 @@
   function onUnlock(session) {
     if (S.booted || !session) return;
     SESSION = { key: session.key, salt: session.salt, iter: session.iter, payload: session.payload || {} };
+    initSeal();
     boot().catch(function (e) {
       if (root.console) root.console.error('[MCD.app] boot failed', e && e.name, e && e.message);
       fatal(e && e.code === 'D3' ? T.fatalD3 : T.fatalBoot);
     });
+  }
+
+  /**
+   * v6 (V6_SPEC §7.2–§7.4): the encrypted follow-up stores open with the key the gate derived at this sign-in. Called
+   * once, right after SESSION is set and before the boot mounts the first section. MCD.seal keeps {key, salt, iter} in
+   * its own closure and refuses a second call; it gets only the follow-up copy of the payload (payload.followups,
+   * merged once per save of the encrypted file, D15), never the datasets. Asynchronous: a follow-up written before the
+   * stores are open is applied after the load (the pipeline API). Without MCD.seal (an old page) nothing happens and
+   * the sections keep their follow-ups in memory only.
+   */
+  function initSeal() {
+    var SL = MCD.seal;
+    if (!SL || typeof SL.init !== 'function' || !SESSION) return;
+    var fu = SESSION.payload && SESSION.payload.followups;
+    try {
+      var p = SL.init({ key: SESSION.key, salt: SESSION.salt, iter: SESSION.iter, payload: { followups: fu && typeof fu === 'object' ? fu : null } });
+      if (p && typeof p.then === 'function') p.then(null, function (e) { if (root.console) root.console.warn('[MCD.app] encrypted follow-ups not opened:', e && e.name); });
+    } catch (e) {
+      if (root.console) root.console.warn('[MCD.app] encrypted follow-ups not opened:', e && e.name);
+    }
   }
 
   /* ===================================================================== BOOT */
@@ -600,10 +628,33 @@
       dm[k] = m.source === 'vault' && prevDm[k] ? prevDm[k] : { asOf: m.asOf || null, file: m.file || null, sheet: m.sheet || null, importedAt: m.importedAt || null };
     });
     var next = Object.assign({}, s.payload, { saved: new Date().toISOString(), datasets: datasets, meta: Object.assign({}, s.payload.meta || {}, { datasets: dm }) });
+    // v6 (V6_SPEC §7.5, D8, D15): the follow-up lists (entries and tombstones) travel inside the encrypted copy, so a
+    // password change or another computer keeps them. Without an open seal the copy the payload already carried stays.
+    var fu = followupsExport();
+    if (fu) next.followups = fu;
     return MCD.vault.encryptWithKey(next, s.key, s.salt, s.iter)
       .then(function (v) { return MCD.vault.decryptWithKey(v, s.key).then(function () { return v; }); })
-      .then(function (v) { MCD.gate.downloadVault(v, 'vault.js'); S.savedAt = Date.now(); toast(T.vaultSaved); updateTopStatus(); return true; },
+      .then(function (v) { MCD.gate.downloadVault(v, 'vault.js'); S.savedAt = Date.now(); followupsSaved(fu); toast(T.vaultSaved); updateTopStatus(); return true; },
         function (e) { toast(T.vaultFail, 'warn'); throw e; });
+  }
+  /** MCD.seal.vaultExport() → {v: 1, saved, stores} | null (null: no seal, not open, or nothing to carry). */
+  function followupsExport() {
+    var SL = MCD.seal;
+    if (!SL || typeof SL.vaultExport !== 'function') return null;
+    var fu = safe(SL.vaultExport, SL);
+    return fu && typeof fu === 'object' && fu.stores && typeof fu.stores === 'object' ? fu : null;
+  }
+  /** After the file is written: MCD.seal sets every store's vaultSeen to this copy's `saved` (D15), so the copy is
+      never merged back on this computer. The contract name is vaultSaved(saved); setVaultSeen(saved) is accepted too. */
+  function followupsSaved(fu) {
+    var SL = MCD.seal;
+    if (!fu || !SL) return;
+    var fn = typeof SL.vaultSaved === 'function' ? SL.vaultSaved : (typeof SL.setVaultSeen === 'function' ? SL.setVaultSeen : null);
+    if (!fn) return;
+    try {
+      var p = fn.call(SL, fu.saved || null);
+      if (p && typeof p.then === 'function') p.then(null, function () { /* the next save sets it again */ });
+    } catch (e) { /* the next save sets it again */ }
   }
 
   function exposeSession() {
@@ -679,7 +730,14 @@
    *                   Preloaded when Merchant, Sekolah or KPR opens (item 41, MCD.distance.preload, never on Ringkasan
    *                   or Data & Privasi); MCD.distance.route() still calls it, so a route asked for before the preload
    *                   finished loads it then (that first route fits once more after landing).
-   * Rejects before sign-in, for an unknown name, or when the file cannot load (a later call tries again).
+   *   v6 (item 45, V6_SPEC §9.1), public files for Sekolah, Kampus and Ringkasan; each resolves with its global as it
+   *   is (the adapters live in the lanes: MCD.schools.students, MCD.inst, MCD.campus):
+   *   'school-students'   data/school-students.js → MCD_SCHOOL_STUDENTS (SMA, SMK, MA within 30 km; 1,1 MB)
+   *   'institution-tiers' data/institution-tiers.js → MCD_INSTITUTION_TIERS (kelas biaya; 0,4 MB)
+   *   'school-contacts'   data/school-contacts.js → MCD_SCHOOL_CONTACTS (office contacts; 1,2 MB)
+   *   'campuses'          data/campuses.js → MCD_CAMPUSES (Kampus; 0,8 MB)
+   * Rejects before sign-in, for an unknown name, or when the file cannot load (a later call tries again). A load that
+   * lands fires the document event 'mcd:lazy' {name} (Cari refreshes its results with it).
    */
   var LAZY = {
     'travel-routes': {
@@ -704,8 +762,28 @@
         if (typeof G.ready === 'function' && !G.ready()) throw new Error('street index not usable');
         return G;
       }
-    }
+    },
+    /* v6 (V6_SPEC §1.0, §9.1): never linked in index.html; never fetched (a classic script, so file:// works) */
+    'school-students': dataLazy('data/school-students.js', 'MCD_SCHOOL_STUDENTS'),
+    'institution-tiers': dataLazy('data/institution-tiers.js', 'MCD_INSTITUTION_TIERS'),
+    'school-contacts': dataLazy('data/school-contacts.js', 'MCD_SCHOOL_CONTACTS'),
+    'campuses': dataLazy('data/campuses.js', 'MCD_CAMPUSES')
   };
+  /** A v6 data file: present() = its global is on the page; init() checks only that the file is usable (rows is an
+      array, meta.generated is set) and returns the global untouched (no transformation; adapters live in the lanes). */
+  function dataLazy(src, global) {
+    return {
+      src: src,
+      global: global,
+      present: function () { return !!root[global]; },
+      init: function () {
+        var g = root[global];
+        if (!g || typeof g !== 'object') throw new Error(global + ' not loaded');
+        if (!Array.isArray(g.rows) || !g.meta || !g.meta.generated) throw new Error(global + ' not usable');
+        return g;
+      }
+    };
+  }
   var LAZY_LOADS = {};
   function lazy(name) {
     var spec = Object.prototype.hasOwnProperty.call(LAZY, name) ? LAZY[name] : null;
@@ -714,15 +792,25 @@
     if (LAZY_LOADS[name]) return LAZY_LOADS[name];
     var p = (spec.present() ? Promise.resolve() : injectScript(spec.src)).then(function () { return spec.init(); });
     LAZY_LOADS[name] = p;
-    p.catch(function () { if (LAZY_LOADS[name] === p) delete LAZY_LOADS[name]; });
+    p.then(function () { lazyLanded(name); }, function () { if (LAZY_LOADS[name] === p) delete LAZY_LOADS[name]; });
     return p;
+  }
+  /** 'mcd:lazy' {name} on document once a lazy file is in (Cari shows the names it holds); never throws. */
+  function lazyLanded(name) {
+    try {
+      var d = root.document;
+      if (!d || typeof d.dispatchEvent !== 'function' || typeof root.CustomEvent !== 'function') return;
+      d.dispatchEvent(new root.CustomEvent('mcd:lazy', { detail: { name: name } }));
+    } catch (e) { /* nobody listens */ }
   }
 
   /**
    * MCD.app.focus({section, kind, id, view?, lon?, lat?}) → boolean: opens the section and runs its action
    * 'focus:<kind>:<id>' once it is mounted (the section flies its map to the point, about zoom 16, and opens the
-   * popup). Kinds: 'sma' (npsn, or the app school id), 'poi' (MCD_SME_POIS row), 'lvm' (store id), 'project' (KPR).
-   * With lon / lat, the shell flies to the point itself when the section does not handle the action.
+   * popup). Kinds: 'sma' (npsn, or the app school id; v6: SMK and MA rows too), 'poi' (MCD_SME_POIS row), 'lvm' (store
+   * id), 'project' (KPR), and v6 'pt' with section 'campus' (V6_SPEC §6.11: id = the 6-digit kode PT or the campus row id
+   * 'pt:<kode>' / 'osm:…' / 'ovt:…'; Kampus runs 'focus:pt:<id>'). With lon / lat, the shell flies to the point itself
+   * when the section does not handle the action.
    */
   function focusItem(o) {
     if (!S.booted || !o || !S.byId[o.section]) return false;
@@ -1086,7 +1174,7 @@
     });
   }
 
-  var ICONS = { overview: 'sec-overview', merchants: 'sec-merchants', schools: 'sec-schools', property: 'sec-property', data: 'sec-data' };
+  var ICONS = { overview: 'sec-overview', merchants: 'sec-merchants', schools: 'sec-schools', campus: 'sec-campus', property: 'sec-property', data: 'sec-data' };
 
   /* ----------------------------------------------------------- top bar */
 
@@ -1258,7 +1346,7 @@
       ]);
       b.addEventListener('click', function () { navigate(n.id); });
       list.appendChild(h('li', { class: 'nav__item' }, [b]));
-      // phones (< 600 px): the same five sections in a fixed bottom tab bar (A-15)
+      // phones (< 600 px): the same six sections in a fixed bottom tab bar (A-15; v6: six columns, short labels)
       var tb2 = h('button', { type: 'button', class: 'tabbar__btn', 'data-section': n.id, title: n.label }, [
         icon(ICONS[n.id] || 'target'), h('span', { class: 'tabbar__l', text: n.id === 'data' ? n.short : n.label })
       ]);
@@ -1928,12 +2016,13 @@
    * first route of a session needs one camera flight. Off the mount frame (V4 open item 1): after the frame is on
    * screen, then 500 ms, then an idle moment (requestIdleCallback, timeout 2 s; fallback 600 ms). Never on pages.
    */
-  var PRELOAD_IDS = /^(merchants|schools|property)$/;
+  var PRELOAD_IDS = /^(merchants|schools|campus|property)$/;
   var PRE = { t: 0, cancel: null, done: false };
   function schedulePreload(id) {
     var D = MCD.distance;
     if (PRE.cancel) { PRE.cancel(); PRE.cancel = null; }
     clearTimeout(PRE.t);
+    probeOuter(id, true);                                         /* v6: the roads 16 to 31 km out, when 30 km is on */
     if (PRE.done || !PRELOAD_IDS.test(String(id)) || !D || typeof D.preload !== 'function') return;
     PRE.cancel = afterPaint(function () {
       PRE.cancel = null;
@@ -1948,6 +2037,70 @@
       }, 500);
     });
   }
+
+  /**
+   * v6 (V6_SPEC §1.5, §9.1): the outer road grid and its route trees (16 to 31 km from KCP, about 2,2 MB, loaded by
+   * MCD.travel) come early once a 30 km scope is on screen: Kampus by default, Sekolah after "30 km". One second after
+   * that scope starts, after the frame is on screen and an idle moment: MCD.distance.preload({outer: true}). Once per
+   * session (a failed load is tried again at the next 30 km start); dropped when staff leave for another section before
+   * it runs; never on pages. The scope comes from MCD.inst.scope (the shared memory of the switch), else the section's
+   * summary().scope, else the section default (Kampus 30, Sekolah 15).
+   */
+  var OUTER_IDS = /^(schools|campus)$/;
+  var OUTER = { t: 0, cancel: null, done: false, queued: '', probedAt: 0 };
+  function scopeKm(id, viaSummary) {
+    var I = MCD.inst, def = id === 'campus' ? 30 : 15, v;
+    if (I && I.scope && typeof I.scope.get === 'function') {
+      v = +safe(I.scope.get, I.scope, [id, def]);
+      if (v === 15 || v === 30) return v;
+    }
+    var mod = viaSummary && S.cur && S.cur.id === id ? S.cur.mod : null;
+    if (mod && typeof mod.summary === 'function') {
+      var s = safe(mod.summary, mod);
+      v = s && s.scope ? +s.scope.value : NaN;
+      if (v === 15 || v === 30) return v;
+    }
+    return def;
+  }
+  /** probeOuter(id, viaSummary): queue the outer preload when section `id` is on screen at 30 km. Cheap; safe to call often. */
+  function probeOuter(id, viaSummary) {
+    if (OUTER.done || !S.booted) return;
+    if (OUTER.queued && OUTER.queued !== id) cancelOuter();
+    if (OUTER.queued || !OUTER_IDS.test(String(id))) return;
+    var D = MCD.distance;
+    if (!D || typeof D.preload !== 'function') return;
+    if (!viaSummary && !(MCD.inst && MCD.inst.scope)) {             /* no shared scope memory: ask the section, at most every 400 ms */
+      var t = now();
+      if (t - OUTER.probedAt < 400) return;
+      OUTER.probedAt = t;
+      viaSummary = true;
+    }
+    if (scopeKm(id, viaSummary) !== 30) return;
+    OUTER.queued = id;
+    OUTER.cancel = afterPaint(function () {
+      OUTER.cancel = null;
+      OUTER.t = setTimeout(function () {
+        OUTER.t = 0;
+        var run = function () {
+          var here = S.cur && S.cur.id;
+          if (!S.booted || OUTER.done || here !== id || scopeKm(id, true) !== 30) { OUTER.queued = ''; return; }
+          OUTER.done = true;
+          OUTER.queued = '';
+          Promise.resolve(safe(D.preload, D, [{ outer: true }])).then(function (ok) { if (!ok) OUTER.done = false; }, function () { OUTER.done = false; });
+        };
+        if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(run, { timeout: 2000 });
+        else setTimeout(run, 100);
+      }, 1000);
+    });
+  }
+  function cancelOuter() {
+    if (OUTER.cancel) { OUTER.cancel(); OUTER.cancel = null; }
+    clearTimeout(OUTER.t);
+    OUTER.t = 0;
+    OUTER.queued = '';
+  }
+  /** The switch moved (MCD.inst.scope.on, a 'schools:scope:30' / 'campus:scope:30' action, the slim rail's pair). */
+  function onScopeChange() { if (S.booted && S.cur) probeOuter(S.cur.id, true); }
 
   /* ----------------------------------------------- section error boundary */
   // Coordinator request 1: a section that throws in mount, update or unmount shows a calm
@@ -2627,6 +2780,9 @@
     if (cfg().onChange) cfg().onChange(function () { schedule(['settings']); });
     /* item 27: "Jam sibuk" / "Motor (tanpa tol)" (MCD.distance) changed: sections get update(derived, ['distance']) */
     root.addEventListener('mcd:distance', function () { if (S.booted) schedule(['distance']); });
+    /* v6: the 15 km / 30 km switch of Sekolah and Kampus (MCD.inst.scope, a view setting, not state; D4) */
+    var I = MCD.inst;
+    if (I && I.scope && typeof I.scope.on === 'function') safe(I.scope.on, I.scope, [onScopeChange]);
   }
 
   function schedule(keys) {
@@ -2656,7 +2812,11 @@
     refreshMapControls();
     updateFurniture();
     runUpdate(S.cur, S.derived, keys);
+    /* v6 §3.6: the slim rail follows numbers a section changes outside MCD.state (the Kampus scope, memory-only filters) */
+    var Wp = winApi();
+    if (Wp && typeof Wp.paintSummary === 'function') safe(Wp.paintSummary, Wp);
     if (S.drawerSel && (keys.indexOf('data') >= 0 || keys.indexOf('privacy.veil') >= 0 || keys.indexOf('privacy.reveal') >= 0 || keys.indexOf('settings') >= 0 || keys.indexOf('distance') >= 0)) showDetail(S.drawerSel, { refresh: true });
+    if (S.cur && !OUTER.done && !OUTER.queued) probeOuter(S.cur.id, false);
   }
 
   /* ========================================================= DETAIL (§E.8) */
@@ -3163,10 +3323,15 @@
     ['merchants', 'Jenis usaha', 'per jenis usaha kategori restoran toko kelontong umkm donut', 'Per jenis usaha'],
     ['merchants', 'Status LVM & EDC', 'status reaktivasi tidak aktif target ureg usak edc cabang'],
     ['merchants', 'Info & cara hitung', 'metode cara hitung rumus mengapa livin merchant', 'Info & metode'],
-    ['schools', 'Daftar SMA', 'sma sekolah daftar yayasan tni ekspor'],
+    /* v6 (V6_SPEC §3.2): "Daftar SMA" became "Daftar sekolah"; the old label still finds the tab */
+    ['schools', 'Daftar sekolah', 'sma smk ma madrasah sekolah daftar yayasan tni ekspor kontak kelas biaya', 'Daftar SMA'],
     ['schools', 'Yayasan', 'yayasan tni sekolah'],
     ['schools', 'Program & kalkulator', 'program kalkulator tabungan sekolah'],
     ['schools', 'Tindak lanjut', 'tindak lanjut pipeline prospek sekolah', 'Pipeline'],
+    /* v6 (V6_SPEC §6.11): Kampus */
+    ['campus', 'Daftar kampus', 'kampus perguruan tinggi universitas institut politeknik akademi daftar mahasiswa dosen ekspor kontak'],
+    ['campus', 'Merchant sekitar', 'kantin koperasi merchant sekitar kampus qris livin fotokopi'],
+    ['campus', 'Tindak lanjut', 'tindak lanjut kampus payroll dosen prospek'],
     ['property', 'Proyek', 'proyek perumahan kpr rumah'],
     ['data', 'Impor', 'impor file lvm rev upload excel xlsx csv'],
     ['data', 'File dimuat', 'file dimuat hapus data'],
@@ -3197,7 +3362,8 @@
     (c.keymap || []).forEach(function (k) { if (k.scope === 'global' || (S.cur && k.scope === S.cur.id)) keyOf[k.action] = k.key; });
     function K(action) { var k = keyOf[action]; if (!k) return null; return k.replace('mod+', IS_MAC ? '⌘' : 'Ctrl+').replace('shift+', '⇧').toUpperCase(); }
     function add(group, label, run, o) { items.push(Object.assign({ group: group, label: label, run: run }, o || {})); }
-    var SYN = { overview: 'ringkasan overview beranda target ureg usak coverage', merchants: 'merchant lvm edc livin qris toko usaha', schools: 'sekolah sma yayasan',
+    var SYN = { overview: 'ringkasan overview beranda target ureg usak coverage', merchants: 'merchant lvm edc livin qris toko usaha', schools: 'sekolah sma smk ma madrasah yayasan',
+      campus: 'kampus perguruan tinggi universitas institut sekolah tinggi politeknik akademi desain mahasiswa dosen payroll kantin',
       property: 'kpr rumah perumahan cicilan kalkulator', data: 'data privasi impor ekspor file vault simpan' };
 
     (c.sections || []).forEach(function (s) { add('Bagian', s.title || s.label, function () { navigate(s.id); }, { key: s.key, pin: true, kw: s.label + ' ' + s.id + ' ' + (s.titleFull || '') + ' ' + (SYN[s.id] || '') }); });
@@ -3315,7 +3481,7 @@
       if (active >= shown.length) active = Math.max(0, shown.length - 1);
       clear(list);
       var lastG = null;
-      if (!shown.length) list.appendChild(h('p', { class: 'palette__empty t-empty', text: 'Tidak ditemukan. Coba nama kecamatan, merchant atau SMA.' }));
+      if (!shown.length) list.appendChild(h('p', { class: 'palette__empty t-empty', text: 'Tidak ditemukan. Coba nama kecamatan, merchant, sekolah atau kampus.' }));
       shown.forEach(function (it, i) {
         if (!q && it.group !== lastG) { list.appendChild(h('div', { class: 'palette__group t-eyebrow', role: 'presentation', text: it.group })); }
         lastG = it.group;
@@ -3340,7 +3506,16 @@
       closePalette();
       if (it) safe(it.run);
     }
-    input.addEventListener('input', function () { active = 0; render(); });
+    input.addEventListener('input', function () { active = 0; render(); wantCampuses(input.value); });
+    /* v6 (V6_SPEC §6.11, §9.1): a query of 3+ letters loads the campus list once; its names join the results when it lands */
+    var tried = false;
+    function wantCampuses(q) {
+      if (tried || String(q || '').replace(/\s+/g, '').length < 3 || !S.byId.campus || !Object.prototype.hasOwnProperty.call(LAZY, 'campuses') || LAZY.campuses.present()) return;
+      tried = true;
+      lazy('campuses').then(null, function () { /* Cari keeps working without campus names */ });
+    }
+    var onLazy = function () { if (S.palette && S.palette.box === box && input.value.trim()) render(); };
+    doc.addEventListener('mcd:lazy', onLazy);
     box.addEventListener('keydown', function (e) {
       if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(shown.length - 1, active + 1); mark(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); mark(); }
@@ -3349,7 +3524,7 @@
     });
     scrim.addEventListener('click', closePalette);
     append(S.overlay, [scrim, box]);
-    S.palette = { scrim: scrim, box: box, input: input };
+    S.palette = { scrim: scrim, box: box, input: input, off: function () { doc.removeEventListener('mcd:lazy', onLazy); } };
     render();
     input.focus();
   }
@@ -3357,6 +3532,7 @@
     var p = S.palette;
     if (!p) return false;
     S.palette = null;
+    if (p.off) p.off();
     exitThenRemove(p.scrim); exitThenRemove(p.box);
     if (focusReturn && focusReturn.focus && focusReturn.isConnected) focusReturn.focus();
     focusReturn = null;
@@ -3369,12 +3545,14 @@
     if (S.help) { closeHelp(); return; }
     closePopover();
     focusReturn = doc.activeElement;
-    /* "Saya ingin…": the six tasks staff come for, each with a button that goes there */
+    /* "Saya ingin…": the tasks staff come for (seven since v6: Kampus), each with a button that goes there */
     var tasks = [
       ['Melihat kecamatan yang perlu dikunjungi', 'Merchant › Detail › Prioritas kunjungan', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
       ['Menyiapkan daftar merchant untuk dikunjungi', 'Merchant › Detail › Prioritas kunjungan, lalu Ekspor daftar (CSV)', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
       ['Memantau target UREG dan USAK', 'Merchant › Detail › Status LVM & EDC', function () { navigate('merchants', { view: 'deep', action: 'tablabel:Status LVM & EDC' }); }],
-      ['Mencari SMA di sekitar Mabes TNI', 'Sekolah › Detail › Daftar SMA', function () { navigate('schools', { view: 'deep', action: 'tablabel:Daftar SMA' }); }],
+      ['Mencari SMA, SMK dan MA di sekitar Mabes TNI', 'Sekolah › Detail › Daftar sekolah', function () { navigate('schools', { view: 'deep', action: 'tablabel:Daftar sekolah|Daftar SMA' }); }],
+      /* v6 (V6_SPEC §6.11) */
+      ['Mencari kampus untuk payroll dan kantin', 'Kampus › Detail › Daftar kampus', function () { navigate('campus', { view: 'deep', action: 'tablabel:Daftar kampus' }); }],
       ['Menghitung kemampuan bayar KPR nasabah', 'KPR › Detail › Kalkulator KPR', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }],
       ['Mengimpor file LVM bulanan', 'Data & Privasi › Detail › Impor', function () { navigate('data', { view: 'deep', action: 'tablabel:Impor' }); }]
     ];
@@ -3384,7 +3562,7 @@
       return h('li', { class: 'help__task' }, [h('span', { class: 'help__task-t' }, [h('b', { text: t[0] }), h('span', { class: 'help__task-where', text: t[1] })]), b]);
     }));
     var steps = [
-      ['Pilih bagian', 'Pilih salah satu dari lima bagian di baris atas.\nBagian yang aktif bergaris bawah.'],
+      ['Pilih bagian', 'Pilih salah satu dari enam bagian di baris atas.\nBagian yang aktif bergaris bawah.'],
       ['Pilih tampilan', 'Sederhana: angka utama dan peta jalan.\nDetail: semua filter, grafik, tabel dan peta satelit.\nTombolnya ada di judul setiap bagian.'],
       ['Gerakkan peta', 'Tombol peta ada di kanan bawah.\nGunakan Atur ulang peta jika peta bergeser terlalu jauh.\nMenu Peta berisi jarak, lapisan dan Warna asli.'],
       /* items 23 and 30: outlines and label chips, no coloured areas; a soft shade outside the 15 km area */
@@ -3392,6 +3570,9 @@
       ['Baca warnanya', 'Hijau: telah diakuisisi atau target tercapai.\nKuning: sebagian atau hampir tercapai.\nMerah: belum diakuisisi atau tertinggal.\nAbu-abu: tidak ada data.\nBiru: potensi, sebelum file LVM diimpor.\nTitik pada label kecamatan: hijau coverage tertinggi, kuning tengah, merah terendah.\nPeta sendiri berwarna abu-abu agar titik berwarna mudah terlihat.'],
       /* items 27 and 28: distance and travel time from the branch (MCD.distance) */
       ['Jarak dari KCP', 'Merchant dan SMA menampilkan jarak dan waktu tempuh dari KCP.\nAngkanya perkiraan untuk lalu lintas normal.\nMenu Peta berisi Jam sibuk dan Motor (tanpa tol).'],
+      /* v6 (V6_SPEC §6.11): the three Kampus plays, then kelas biaya (the entry line and the badge, §4.2–§4.3) */
+      ['Kampus', 'Tawarkan payroll melalui kerja sama dengan pimpinan kampus atau yayasan. Jumlah dosen tetap dari PDDikti.\nAjak kantin dan koperasi menjadi Livin’ Merchant (QRIS).\nTawarkan Tabungan dan Livin’ by Mandiri kepada mahasiswa.'],
+      ['Kelas biaya', 'Kelas biaya menunjukkan besar biaya sekolah atau kuliah: Premium, Atas, Menengah atau Reguler.\nTanda batang di samping titik: batang berisi dari biaya resmi atau jenis sekolah, batang kosong berarti perkiraan.\nKemudahan kerja sama tetap perlu ditanyakan ke sekolah, kampus atau yayasan.'],
       ['Lihat detail', 'Klik kecamatan atau titik di peta.\nDetail muncul di kanan, dengan tombol Buka di Google Maps.\nTekan Tutup untuk menutupnya.'],
       ['Terang atau Gelap', 'Terang untuk ruangan terang. Gelap untuk malam hari atau proyektor.\nPilihan ini diingat di komputer ini.'],
       ['Masukkan data', 'Buka Data & Privasi, lalu tekan Impor file.\nGunakan laporan bulanan Rev LVM atau template permintaan data.\nFile hanya dibaca di komputer ini.'],
@@ -3510,7 +3691,11 @@
       }
       default: {
         var md = S.cur && S.cur.mod;
-        if (md && typeof md.onAction === 'function') return md.onAction(action, e) === true;
+        if (md && typeof md.onAction === 'function') {
+          var done = md.onAction(action, e) === true;
+          if (done && /^(schools|campus):scope:/.test(action)) onScopeChange();   /* v6 §3.6, §6.11 */
+          return done;
+        }
         return false;
       }
     }
@@ -3650,6 +3835,7 @@
   /** mcd:gate-locking — drop app data before the gate reloads the page (§6). */
   function teardown() {
     clearTimeout(S.revealTimer); clearTimeout(S.toastTimer); clearTimeout(S.flashTimer);
+    cancelOuter();
     SESSION = null;
     DEMO.on = false; DEMO.tagged = []; DEMO.guarded = [];
     S.derived = null; S.drawerSel = null;
@@ -3713,7 +3899,8 @@
     /** focus({section, kind, id, view?, lon?, lat?}): open a section on one item (map point + popup). */
     focus: function (o) { return focusItem(o); },
     /** lazy('street-index') → Promise<MCD.geocodeLocal>, lazy('travel-routes') → Promise<MCD.travel>: inject large public
-        data once, after sign-in (route lines: call MCD.distance.route, which loads the routes itself). */
+        data once, after sign-in (route lines: call MCD.distance.route, which loads the routes itself). v6: lazy(
+        'school-students' | 'institution-tiers' | 'school-contacts' | 'campuses') → Promise<the file's global>. */
     lazy: function (name) { return lazy(name); }
   };
 

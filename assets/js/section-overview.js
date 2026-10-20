@@ -64,6 +64,16 @@
  * (charts-plus, MCD.windows.place). Clicks still open sections through MCD.app.focus (schools, merchants) or
  * Sekolah's own 'schools:kec:<id>', so the section opens its detail card directly (no callout).
  *
+ * v6 (COPY_STYLE_EN item 45, docs/V6_SPEC.md D1, D2, D12 and §6.12): "Pintasan" gains a fourth door, "Kampus", built
+ * exactly like the other three (icon, title, one line of numbers, one primary button "Buka Kampus"), shown only when the
+ * shell registers the 'campus' section. Its line is "{n} kampus dalam 30 km · {m} mahasiswa" with the D12 totals from
+ * data/campuses.js: n = perguruan tinggi with a kode PT within 30 km (the design and course schools count apart, D13),
+ * m = their students without the distance-learning rows (`nationwide`) and the rows whose main campus lies outside
+ * 30 km (`mainOutside`), so it equals meta.coverage.studentsTotalLocal. No campus names (D2). The file is asked for
+ * through MCD.app.lazy('campuses') 2 s after the mount, in an idle callback, never in the mount frame; until it is in
+ * (or when it fails) the line reads "Perguruan tinggi dalam 30 km" and Ringkasan shows no error. The Sekolah door keeps
+ * "Sekolah (SMA)" and its 15 km pilot line (D1). Doors: 4 columns from 1200 px, 2 × 2 from 768, stacked on phones.
+ *
  * Data, read-only: MCD.lvm.aggregate('kecamatan'), MCD.territory.stats(MCD.lvm.territoryInput()),
  * MCD.territory.priority (feature-detected, same formula as a fallback), MCD.lvm.summary(),
  * MCD.sme.kpi() / MCD.data.lvm_kpi, MCD.sme.edcCandidates / edcTierCounts / TIERS, MCD.schools.smaCount(15),
@@ -96,6 +106,12 @@
   var SMA_FILE = 'data/sma-students.js';
   var SMA_SEMESTER = '2026/2027 Ganjil';
   var TOP_N = 5;
+  /* v6 Kampus door (V6_SPEC §6.12): 30 km scope, data asked for 2 s after the mount at an idle moment */
+  var CAMPUS_KM = 30;
+  var CAMPUS_WAIT_MS = 2000;
+  var CAMPUS_LINE_WAIT = 'Perguruan tinggi dalam 30 km';
+  var CAMPUS_TITLE = 'Jumlah mahasiswa per perguruan tinggi dari PDDikti, untuk seluruh kampusnya. ' +
+    'Kampus pendidikan jarak jauh dan kampus dengan kampus utama di luar 30 km tidak dihitung.';
   /* The tone of each tier chip (the same colours as Merchant's chips). The words come from MCD.sme.TIERS
      (item 35); these are only the fallback when that module is older or missing. */
   var TIER = {
@@ -138,7 +154,8 @@
   var S = { host: null, ctx: null, page: null, refs: null, model: null, sig: '', drawn: false, ro: null, width: 0,
     donutMode: 'status', barMode: 'ureg', tables: {}, resizeT: 0, uid: 0, mid: 0,
     sma: { metric: 'all', kec: null }, charts: {}, sas: {}, sasCount: null, google: null, googleBusy: false, googleToken: 0, onDist: null,
-    drawKey: {}, kpiSig: '', counted: {}, jobs: [], tipOpen: {}, crumbCss: true, hints: {} };
+    drawKey: {}, kpiSig: '', counted: {}, jobs: [], tipOpen: {}, crumbCss: true, hints: {},
+    campusT: 0, campusIdle: 0, campusIdleFn: null, campusSum: null };
   var ONCE = { schoolsAsked: false, smaAsked: false, smaFailed: false, poi: { ref: null, n: null }, tileCats: { ref: null, by: null }, tni: null };
 
   /* ------------------------------------------------------------------ helpers */
@@ -2085,6 +2102,86 @@
       Promise.resolve(p).then(function () { if (S.ctx && S.model) renderShort(S.model); }, function () { /* the card keeps its fallback line */ });
     }, 1500);
   }
+  /* v6 Kampus door (V6_SPEC D2, D12, §6.12) */
+
+  /** The campus file when it is in (MCD.app.lazy('campuses') or an earlier visit to Kampus), else null. */
+  function campusData() { var c = W.MCD_CAMPUSES; return c && Array.isArray(c.rows) ? c : null; }
+  /** The door shows only when the shell registers the Kampus section (D10), so its button always leads somewhere. */
+  function campusDoorOn() { var by = MCD.config && MCD.config.sectionById; return !!(by && by.campus); }
+  /**
+   * D12 totals within `km` of Mabes TNI: `campuses` = perguruan tinggi with a kode PT (one row each, at its main point);
+   * `students` = their students, leaving out the distance-learning rows (`nationwide`) and the rows whose main campus is
+   * outside 30 km (`mainOutside`); `design` = the design and course schools outside PDDikti, counted apart (D13);
+   * `left` = the rows listed but not summed. Pure: the same numbers in Node and in the browser.
+   */
+  function campusTotals(C, km) {
+    var out = { campuses: 0, students: 0, withStudents: 0, design: 0, left: 0 };
+    var rows = C && Array.isArray(C.rows) ? C.rows : [], lim = isNum(km) ? km : Infinity;
+    rows.forEach(function (r) {
+      if (!r || (isNum(r.km) && r.km > lim)) return;
+      var pt = !!r.kode || /^pt:/.test(String(r.id || ''));
+      if (!pt) { out.design++; return; }
+      out.campuses++;
+      if (r.nationwide || r.mainOutside) { out.left++; return; }
+      if (isNum(r.students)) { out.students += r.students; out.withStudents++; }
+    });
+    return out;
+  }
+  /**
+   * The D12 totals of the door: MCD.campus.summary(30) when the Kampus engine gives them ({n, students}: the same numbers
+   * as the Kampus section), else this file's own count of the same rule.
+   */
+  function campusSum(C) {
+    var K = MCD.campus, s = K && isFn(K.summary) ? safe(K.summary, K, [CAMPUS_KM]) : null;
+    if (s && isNum(s.n) && isNum(s.students)) return { campuses: s.n, students: s.students };
+    return campusTotals(C, CAMPUS_KM);
+  }
+  /** The door line: "{n} kampus dalam 30 km · {m} mahasiswa" once the file is in, else the waiting line (also after a failure). */
+  function campusLine() {
+    var C = campusData();
+    if (!C) return { text: CAMPUS_LINE_WAIT, title: null };
+    if (!S.campusSum || S.campusSum.ref !== C) S.campusSum = { ref: C, v: campusSum(C) };
+    var t = S.campusSum.v;
+    if (!t.campuses) return { text: CAMPUS_LINE_WAIT, title: null };
+    return { text: int(t.campuses) + ' kampus dalam ' + CAMPUS_KM + ' km · ' + int(t.students) + ' mahasiswa', title: CAMPUS_TITLE };
+  }
+  function paintCampusLine() {
+    var p = S.refs && S.refs.campusLine;
+    if (!p) return;
+    var c = campusLine();
+    p.textContent = c.text;
+    if (c.title) p.setAttribute('title', c.title); else p.removeAttribute('title');
+  }
+  function stopCampus() {
+    if (S.campusT) { clearTimeout(S.campusT); S.campusT = 0; }
+    if (S.campusIdle) {
+      if (S.campusIdleFn && isFn(W.cancelIdleCallback)) safe(W.cancelIdleCallback, W, [S.campusIdle]);
+      else clearTimeout(S.campusIdle);
+      S.campusIdle = 0;
+    }
+    S.campusIdleFn = null;
+  }
+  /**
+   * Asks the shell for data/campuses.js 2 s after the mount, at an idle moment (requestIdleCallback with a 2 s
+   * timeout, else the next task), never in the mount frame. One request per mount; the shell shares one promise
+   * per name, so a second mount injects nothing new. A failure keeps the waiting line (no error on Ringkasan).
+   */
+  function askCampuses() {
+    stopCampus();
+    if (campusData() || !campusDoorOn() || !MCD.app || !isFn(MCD.app.lazy)) return;
+    S.campusT = setTimeout(function () {
+      S.campusT = 0;
+      var run = function () {
+        S.campusIdle = 0; S.campusIdleFn = null;
+        if (!S.ctx) return;
+        var p;
+        try { p = MCD.app.lazy('campuses'); } catch (e) { p = null; }
+        Promise.resolve(p).then(function () { if (S.ctx) paintCampusLine(); }, function () { /* the waiting line stays */ });
+      };
+      if (isFn(W.requestIdleCallback)) { S.campusIdleFn = run; S.campusIdle = W.requestIdleCallback(run, { timeout: CAMPUS_WAIT_MS }); }
+      else S.campusIdle = setTimeout(run, 0);
+    }, CAMPUS_WAIT_MS);
+  }
   function projectsCount() {
     var pp = W.MCD_PROPERTY_PROJECTS;
     return pp && Array.isArray(pp.rows) ? pp.rows.filter(function (r) { return !isNum(r.distanceKm) || r.distanceKm <= KPR_KM; }).length : null;
@@ -2111,12 +2208,17 @@
       { id: 'schools', icon: 'sec-schools', t: 'Sekolah (SMA)', line: smaLine, b: 'Buka Sekolah' },
       { id: 'property', icon: 'sec-property', t: 'KPR', line: isNum(np) ? int(np) + ' proyek perumahan dalam ' + KPR_KM + ' km' : 'Proyek perumahan dan simulasi KPR', b: 'Buka KPR' }
     ];
-    var grid = el('div', { class: 'ov-doors' });
+    /* v6: the Kampus door after Sekolah (D2: same anatomy, no campus names) */
+    if (campusDoorOn()) { var cl = campusLine(); cards.splice(2, 0, { id: 'campus', icon: 'sec-campus', t: 'Kampus', line: cl.text, title: cl.title, b: 'Buka Kampus' }); }
+    r.campusLine = null;
+    var grid = el('div', { class: 'ov-doors' + (cards.length === 4 ? ' ov-doors--4' : '') });
     cards.forEach(function (c) {
       var acts = el('div', { class: 'ov-door__act' }, btn(c.b, { after: 'chev-r', run: function () { go(c.id); } }));
-      var main = el('div', { class: 'ov-door__main' }, el('h3', { class: 'ov-door__t', text: c.t }), el('p', { class: 'ov-door__l', text: c.line }));
+      var line = el('p', { class: 'ov-door__l', text: c.line, title: c.title || null });
+      if (c.id === 'campus') r.campusLine = line;
+      var main = el('div', { class: 'ov-door__main' }, el('h3', { class: 'ov-door__t', text: c.t }), line);
       if (c.id === 'property') {
-        /* the second door sits above the primary button, so the three primary buttons share one baseline */
+        /* the second door sits above the primary button, so the primary buttons of every door share one baseline */
         main.appendChild(el('div', { class: 'ov-door__x' }, btn('Hitung kemampuan bayar nasabah', { cls: 'btn--ghost ov-link', icon: 'sliders', title: 'Buka kalkulator KPR',
           run: function () { go('property', { view: 'deep', action: 'property:calculator' }); } })));
       }
@@ -2223,6 +2325,7 @@
       if (W.ResizeObserver && S.refs) { S.ro = new W.ResizeObserver(onResize); S.ro.observe(S.refs.root); }
       askSchools();
       ensureSma();
+      askCampuses();
       /* the shared "Jam sibuk" and "Motor (tanpa tol)" switches change every distance on the page */
       S.onDist = function () { if (S.ctx && S.refs) { renderSma(); renderSasaran(); } };
       if (isFn(W.addEventListener)) W.addEventListener('mcd:distance', S.onDist);
@@ -2267,6 +2370,7 @@
       clearTimeout(S.resizeT);
       if (S.onDist && isFn(W.removeEventListener)) W.removeEventListener('mcd:distance', S.onDist);
       S.onDist = null;
+      stopCampus();
       Object.keys(S.charts).forEach(dropChart);
       stopJobs();
       S.drawKey = {}; S.kpiSig = ''; S.counted = {};
@@ -2290,6 +2394,9 @@
       state: function () { return { crumbCss: S.crumbCss, counted: Object.keys(S.counted), drawKey: S.drawKey, jobs: S.jobs.length, model: S.model ? S.model.id : null }; } },
     /* v5 (items 39e, 42, 43) for tests/overview-data-v5.test.mjs */
     _v5: { natTally: natTally, natInLvm: natInLvm, natLine: natLine, hintOnce: hintOnce, cardEl: cardEl, smaKecStats: smaKecStats, openSasaran: openSasaran,
-      state: function () { return { hints: S.hints, dotsKeyIn: S.dotsKeyIn, cardKec: S.sma.cardKec, nat: S.model && S.model.sas ? S.model.sas.nat : null }; } }
+      state: function () { return { hints: S.hints, dotsKeyIn: S.dotsKeyIn, cardKec: S.sma.cardKec, nat: S.model && S.model.sas ? S.model.sas.nat : null }; } },
+    /* v6 (V6_SPEC §6.12) for tests/overview-data-v6.test.mjs */
+    _v6: { campusTotals: campusTotals, campusLine: campusLine, campusDoorOn: campusDoorOn, CAMPUS_TITLE: CAMPUS_TITLE, CAMPUS_LINE_WAIT: CAMPUS_LINE_WAIT,
+      CAMPUS_WAIT_MS: CAMPUS_WAIT_MS, state: function () { return { waiting: !!S.campusT, idle: !!S.campusIdle, line: S.refs ? S.refs.campusLine : null }; } }
   };
 })(window.MCD = window.MCD || {});

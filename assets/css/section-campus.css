@@ -1,0 +1,444 @@
+/* ==========================================================================
+ * Section 4 · Kampus (body[data-section="campus"], .cp-*)  docs/V6_SPEC.md §6
+ * The panel (Sederhana guide and Detail summary rail): scope, Jenis chips, "Filter lain", three cards and the
+ * PDDikti source line; the drawer "Daftar & grafik kampus" (four tabs, "Belum di peta"); the card folds (contacts,
+ * route list, merchants around the campus, products with the Kopra and QRIS marks, the Tindak lanjut editor);
+ * the map symbol chips. Calm: one accent rule per card, quiet chips, text 12 px or larger, numbers tabular.
+ * Tokens only (tokens.css, brand.css). Source and product marks sit on a white rounded tile in both themes and
+ * are never recoloured or stretched (COPY_STYLE_EN items 46–47); the tile colour is the token --logo-tile once
+ * tokens.css carries it, plain white until then. Day and Night; 1440 / 1366 / 1024 / 390.
+ * ========================================================================== */
+
+body[data-section="campus"] {
+  --cp-work-w: clamp(460px, 37vw, 620px);
+}
+
+/* ── shared bits ─────────────────────────────────────────────────────────── */
+.cp-link {
+  display: inline; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
+}
+.cp-link:hover { text-decoration-color: var(--text-1); }
+.cp-link:focus-visible, .cp-ext:focus-visible, .cp-copy:focus-visible, .cp-morebtn:focus-visible, .cp-unplaced__btn:focus-visible,
+.cp-mini__row:focus-visible, .cp-plist__row:focus-visible, .cp-step:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.cp-note { margin: 6px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
+.cp-note.is-strong { color: var(--text-2); font-weight: 500; }
+.cp-line { margin: 4px 0 0; font: 400 13px/19px var(--font-sans); color: var(--text-1); }
+.cp-line b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cp-line--lead { color: var(--text-2); font-weight: 500; }
+.cp-muted { color: var(--text-3); font: 400 12.5px/18px var(--font-sans); }
+.cp-mono { font: 500 12.5px/18px var(--font-mono); letter-spacing: .02em; color: var(--text-1); }
+.cp-h4 { margin: 14px 0 6px; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.cp-empty-line { margin: 8px 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.cp-bul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.cp-bul b { color: var(--text-1); font-weight: 600; }
+.cp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.cp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.cp-tools > .cp-search { flex: 1 1 180px; min-width: 0; }
+.cp-search .input { width: 100%; height: 40px; }
+/* segmented controls (two short options: "Mahasiswa | Dosen tetap", "12 teratas | Semua"): the shared .seg look at a
+   tappable size (§10, LAYOUT_V5C): 32 px in Detail, 40 px in the Sederhana guide, 44 px on phones */
+.cp-seg { height: auto; max-width: 100%; }
+.cp-seg .seg__opt { min-height: 32px; padding: 0 12px; }
+.guide .cp-seg .seg__opt { min-height: 40px; }
+/* radio chips (long option names: "Kampus untuk dikunjungi", Produk sasaran): quiet chips that wrap, never a squeezed
+   segmented control; checked = the soft tint and edge of the Jenis chips */
+.cp-rchips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+body[data-section="campus"] .cp-rchips .chip { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: left;
+  border-color: var(--rule); background: transparent; color: var(--text-2); font: 500 12.5px/16px var(--font-sans); cursor: pointer; }
+body[data-section="campus"] .cp-rchips .chip:hover { background: var(--surface-hover); color: var(--text-1); }
+body[data-section="campus"] .cp-rchips .chip[aria-checked="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); font-weight: 600; cursor: default; }
+.cp-rchips .chip:focus-visible, .cp-seg .seg__opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+body[data-section="campus"] .guide .cp-rchips .chip { min-height: 40px; }
+.cp-fg { display: grid; gap: 6px; }
+.cp-fg--inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cp-fg__head { display: flex; align-items: center; gap: 6px; }
+.cp-fg__l { margin: 0; font: 600 12px/16px var(--font-sans); color: var(--text-2); }
+.cp-hint { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* external links: host or label, the external icon, a hidden ", terbuka di tab baru" */
+.cp-ext { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; color: var(--text-1); font: 600 13px/18px var(--font-sans);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.cp-ext:hover { text-decoration-color: var(--text-1); }
+.cp-ext .icon { flex: none; width: 12px; height: 12px; color: var(--text-3); }
+.cp-host { font: 400 12px/18px var(--font-sans); color: var(--text-3); }
+
+/* the white tile of a source or product mark: never recoloured, height set per place, width from the picture */
+.cp-logo {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 3px 6px;
+  border-radius: 6px; background: var(--logo-tile, white); box-shadow: inset 0 0 0 1px var(--rule);
+}
+.cp-logo img { display: block; height: 18px; width: auto; max-width: 96px; object-fit: contain; }
+.cp-logo--pddikti img { height: 22px; }
+.cp-logo--md img { height: 22px; }
+.cp-logo--sm { padding: 2px 5px; }
+.cp-logo--sm img { height: 18px; }
+.cp-logo--xs { padding: 1px 4px; border-radius: 4px; }
+.cp-logo--xs img { height: 12px; }
+.cp-logo--lvm img { height: 20px; }
+.cp-logo--lvm.cp-logo--sm img { height: 18px; }
+.cp-logo[hidden] { display: none; }
+.cp-prodlogos { display: inline-flex; align-items: center; gap: 6px; }
+
+/* map symbol chip (the picture of MCD.campus.sym; a CSS stand-in without a canvas) */
+.cp-sym { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; vertical-align: middle; }
+.cp-sym img, .cp-sym svg { display: block; width: 16px; height: 16px; overflow: visible; }
+.cp-sym__p { fill: var(--status-mid); stroke: var(--surface-solid); stroke-width: 1.4; stroke-linejoin: round; paint-order: stroke; }
+.cp-sym.is-negeri .cp-sym__p { fill: var(--chart-3); }
+.cp-sym.is-kedinasan .cp-sym__p { fill: var(--status-none); }
+.cp-sym.is-hollow .cp-sym__p { fill: none; stroke: var(--status-mid); stroke-width: 1.8; }
+.cp-sym.is-hollow.is-negeri .cp-sym__p { stroke: var(--chart-3); }
+.cp-sym.is-hollow.is-kedinasan .cp-sym__p { stroke: var(--status-none); }
+.cp-sym > i { display: block; width: 11px; height: 11px; background: var(--status-mid); border: 1.5px solid var(--surface-solid); }
+.cp-sym.is-negeri > i { background: var(--chart-3); }
+.cp-sym.is-kedinasan > i { background: var(--status-none); }
+.cp-sym--shield > i { border-radius: 2px 2px 50% 50%; }
+.cp-sym--triangle > i { width: 0; height: 0; border: 0; background: none; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 11px solid var(--status-mid); }
+.cp-sym--triangle.is-negeri > i { border-bottom-color: var(--chart-3); }
+.cp-sym--triangle.is-kedinasan > i { border-bottom-color: var(--status-none); }
+.cp-symlabel { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 600 12px/16px var(--font-sans); color: var(--text-1); }
+
+/* kelas biaya chip: signal bars (count, not hue: filled = biaya or jenis, outline = perkiraan) + word */
+.cp-tier { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; max-width: 100%;
+  border: 1px solid var(--rule-strong); border-radius: 11px; background: var(--surface-raised);
+  font: 600 12px/1 var(--font-sans); color: var(--text-1); white-space: nowrap; }
+.cp-bars { flex: none; display: block; color: var(--brand-navy); }
+html[data-theme="night"] .cp-bars { color: var(--text-1); }
+.cp-bars .is-on { fill: currentColor; }
+.cp-bars .is-est { fill: none; stroke: currentColor; stroke-width: 1; }
+.cp-bars .is-off { fill: currentColor; opacity: .18; }
+.cp-tierline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.cp-tierline__w { font: 500 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-quote { margin: 6px 0 0; padding: 4px 0 4px 10px; border-left: 2px solid var(--rule-strong); font: italic 400 12.5px/18px var(--font-serif); color: var(--text-2); }
+
+/* small tags: "seluler", "tanpa kode area", "Jaringan nasional", merchant tiers */
+.cp-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--r-ctl);
+  font: 600 12px/1 var(--font-sans); color: var(--text-2); white-space: nowrap; }
+.cp-tag.is-ok { border-color: var(--status-ok); background: var(--status-ok-a20); color: var(--text-1); }
+.cp-tag.is-mid { border-color: var(--status-mid); background: var(--status-mid-a20); color: var(--text-1); }
+.cp-tag.is-potential { border-color: var(--status-potential); background: var(--status-potential-a20); color: var(--text-1); }
+.cp-tag.is-none { border-color: var(--status-none); background: var(--status-none-a20); color: var(--text-1); }
+.cp-tag[hidden] { display: none; }
+
+/* loading and failed */
+.cp-load { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px; border: 1px dashed var(--rule-strong); border-radius: var(--r-panel); background: var(--surface-well); }
+.cp-load[hidden] { display: none; }
+.cp-load__t { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.cp-load.is-error { border-style: solid; border-color: var(--status-bad); }
+.cp-load.is-error .cp-load__t { color: var(--text-1); }
+.cp-load .btn { justify-self: start; }
+.cp-load__bar { position: relative; display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--rule-strong); }
+.cp-load__bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 34%; background: var(--platinum); animation: cp-load 1.2s var(--ease-standard) infinite; }
+@keyframes cp-load { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+
+/* ── the panel ───────────────────────────────────────────────────────────── */
+.cp-panel { display: grid; gap: 12px; margin: 0 0 14px; }
+.cp-openwork { justify-self: stretch; }
+.cp-row { display: grid; gap: 6px; }
+.cp-row__l { font: 600 12px/16px var(--font-sans); color: var(--text-2); letter-spacing: .02em; }
+.cp-scope, .cp-row .scope.seg { display: flex; width: 100%; height: auto; }
+.cp-scope .seg__opt, .cp-row .scope .seg__opt { flex: 1 1 0; min-height: 36px; font-weight: 600; }
+.guide .cp-scope .seg__opt, .guide .cp-row .scope .seg__opt { min-height: 40px; }
+
+.cp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* quiet chips: pressed = a soft tint and a navy edge (three filled blue chips by default would shout) */
+body[data-section="campus"] .cp-chips .chip { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: left;
+  border-color: var(--rule); color: var(--text-3); background: transparent; }
+body[data-section="campus"] .cp-chips .chip[aria-pressed="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); }
+body[data-section="campus"] .cp-chips .chip[aria-pressed="true"] .chip__count { color: var(--text-2); opacity: 1; }
+body[data-section="campus"] .cp-chips .chip[aria-disabled="true"] { cursor: default; }
+body[data-section="campus"] .cp-chips .chip:disabled { opacity: .55; cursor: progress; }
+.cp-chip__t { font: 500 12.5px/16px var(--font-sans); }
+body[data-section="campus"] .guide .cp-chips .chip { min-height: 40px; }
+
+.cp-morebtn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 6px 10px;
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); background: transparent; cursor: pointer;
+  font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.cp-morebtn:hover { background: var(--surface-hover); }
+.cp-morebtn .icon { transition: transform var(--dur-fast) var(--ease-out); }
+.cp-morebtn[aria-expanded="true"] .icon { transform: rotate(180deg); }
+.guide .cp-morebtn { min-height: 40px; }
+.cp-more { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--rule); border-radius: var(--r-ctl); background: var(--surface-well); }
+.cp-more[hidden] { display: none; }
+.cp-entry { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.cp-tierstate { display: grid; gap: 6px; }
+.cp-tierstate:empty { display: none; }
+.cp-clear { justify-self: start; }
+
+.cp-cards { display: grid; gap: 12px; }
+.cp-cards[hidden] { display: none; }
+.cp-card { position: relative; overflow: hidden; border: 1px solid var(--glass-border-card); border-radius: var(--r-card);
+  background: var(--grad-card); box-shadow: inset 0 3px 0 var(--plat-2), var(--glass-shadow-card); }
+.cp-card--count { box-shadow: inset 0 3px 0 var(--chart-3), var(--glass-shadow-card); }
+.cp-card--pay { box-shadow: inset 0 3px 0 var(--gold), var(--glass-shadow-card); }
+.cp-card__body { display: grid; gap: 8px; padding: 14px 16px 14px; }
+.cp-card__t { margin: 0; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.cp-card__v { margin: 0; font: 400 34px/38px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.cp-card__lines { display: grid; gap: 6px; min-width: 0; }
+.cp-card__lines > * { min-width: 0; }
+.cp-card__line { margin: 0; font: 400 13px/18px var(--font-sans); color: var(--text-1); }
+.cp-card__line b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cp-card__line--quiet { color: var(--text-3); font-size: 12px; }
+.cp-card__foot { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-empty { display: grid; gap: 8px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-empty p { margin: 0; }
+.cp-empty .btn { justify-self: start; }
+
+/* negeri / swasta / kedinasan bar: the map's colours */
+.cp-split { display: grid; gap: 6px; }
+.cp-split__bar { display: flex; height: 10px; overflow: hidden; border-radius: 5px; background: var(--rule); }
+.cp-split__bar i { display: block; height: 100%; }
+.cp-split__bar i + i { box-shadow: inset 2px 0 0 var(--surface-solid); }
+.cp-split .is-negeri { background: var(--chart-3); }
+.cp-split .is-swasta { background: var(--status-mid); }
+.cp-split .is-kedinasan { background: var(--status-none); }
+.cp-split__keys { display: flex; flex-wrap: wrap; gap: 2px 12px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-split__k { display: inline-flex; align-items: center; gap: 5px; }
+.cp-split__k b { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.cp-split__sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+
+/* "Kampus untuk dikunjungi" */
+.cp-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cp-mini__row { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; padding: 7px 6px;
+  border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
+.cp-mini__row:hover { background: var(--surface-hover); }
+.cp-mini__row .cp-sym { margin-top: 1px; }
+.cp-mini__txt { display: grid; gap: 1px; min-width: 0; }
+.cp-mini__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-mini__meta { font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cp-mini__empty { padding: 6px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-distsw:empty { display: none; }
+.cp-card .dist-ctl, .cp-tools .dist-ctl { flex-wrap: wrap; row-gap: 4px; }
+.guide .cp-mini__row { min-height: 44px; }
+
+.cp-src { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* ── the drawer "Daftar & grafik kampus" ─────────────────────────────────── */
+/* Detail ≥ 1280 without MCD.windows: a column on the right (as the Sekolah workbench); below 1280 a slide-over with
+   a large Tutup; adopted by MCD.windows it is the bottom drawer (body.ws-adopted .ws-drawer positions it) */
+.cp-work {
+  position: absolute; top: var(--stage-t); right: var(--inset); bottom: var(--inset); width: var(--cp-work-w); z-index: var(--z-sheet);
+  display: flex; flex-direction: column; min-height: 0;
+  transition: transform var(--dur-sheet) var(--ease-enter);
+}
+body.rail-r-collapsed .cp-work:not(.ws-drawer) { transform: translateX(calc(100% + var(--inset))); }
+.cp-work.ws-drawer { visibility: visible; }
+.cp-work.ws-drawer .cp-work__body { padding-top: 12px; }
+.cp-work__close { display: none; }
+.cp-openwork { display: none; width: 100%; justify-content: center; }
+.cp-work__titles { flex: 1 1 auto; min-width: 0; }
+.cp-work__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; }
+.cp-work__eyebrow { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.cp-work__lede { margin: 2px 0 0; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.cp-work__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
+.cp-work__foot { padding: 8px 16px 12px; border-top: 1px solid var(--rule); font: 400 12px/16px var(--font-sans); }
+.cp-tabhost { padding: 0 16px; }
+.cp-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--rule); scrollbar-width: none; }
+.cp-tab { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer;
+  font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.cp-tab[aria-selected="true"] { color: var(--text-1); border-bottom-color: var(--signal); }
+.cp-ex { display: grid; gap: 6px; }
+.cp-ex__eyebrow { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.cp-ex__title { margin: 0; font: 600 15px/21px var(--font-sans); color: var(--text-1); }
+.cp-ex__sub { margin: 0 0 6px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-ex__src { margin: 8px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-ex__body { display: grid; gap: 8px; min-width: 0; }
+/* inside the shell's bottom drawer the tab already names the panel: no eyebrow, tighter tools */
+.cp-work.ws-drawer .cp-ex__eyebrow { display: none; }
+.cp-work.ws-drawer .cp-tools { margin-bottom: 8px; }
+.cp-tools--list { gap: 8px 12px; }
+.cp-tools--list > .cp-search { flex: 1 1 160px; }
+.cp-sortf { flex-wrap: nowrap; }
+.cp-sortf .cp-sortsel { width: auto; height: 40px; min-width: 196px; }
+.cp-table .cp-tier { padding: 0 6px; gap: 4px; }
+.cp-work.ws-drawer .cp-ex__sub { display: none; }
+.cp-work.ws-drawer .cp-ex__title { font-size: 14px; line-height: 20px; }
+.cp-tools .dist-ctl { margin: 0; }
+.cp-fg--inst .scope-field, .cp-row .scope-field { width: 100%; }
+.cp-chart { min-width: 0; }
+
+/* list cells; the virtual table needs a definite height (what the drawer leaves after the header and notes) */
+.cp-table { min-width: 0; }
+.cp-ex--fill .cp-table { flex: none; height: max(300px, calc(100vh - 600px)); min-height: 0; }
+.cp-work.ws-drawer .cp-ex--fill .cp-table { height: max(260px, calc(100vh - 520px)); }
+.cp-table .mc-table th { background: var(--glass-sticky); white-space: normal; text-overflow: clip; vertical-align: bottom; line-height: 16px; }
+.cp-tools .seg, .cp-panel .seg { height: auto; }
+body[data-section="campus"] .btn--bar { min-height: 36px; }
+.cp-ent { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; min-width: 0; }
+.cp-ent__sym { margin-top: 2px; }
+.cp-ent__txt { display: grid; min-width: 0; }
+.cp-ent__name { font: 600 13px/18px var(--font-sans); color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-ent__sub { font: 400 12px/16px var(--font-sans); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-ent__sub.is-off { font-style: italic; }
+/* phones: one column; the name takes up to two lines, mahasiswa and the way from KCP under it (§4.2, §10) */
+.cp-ent--phone { align-items: center; }
+.cp-ent--phone .cp-ent__txt { gap: 2px; }
+.cp-ent--phone .cp-ent__name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.cp-ent--phone .cp-ent__sub { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cp-num2 { display: grid; justify-items: end; }
+.cp-num2__a { font: 600 13px/18px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.cp-num2__a.is-off { color: var(--text-3); }
+.cp-num2__b { font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cp-plain__row { display: block; width: 100%; padding: 6px 8px; border: 0; background: none; text-align: left; cursor: pointer; font: 400 13px/18px var(--font-sans); color: var(--text-1); }
+
+/* "Belum di peta ({n})" */
+.cp-unplaced { margin-top: 6px; }
+.cp-unplaced__btn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 6px 10px;
+  border: 1px solid var(--rule); border-radius: var(--r-ctl); background: transparent; cursor: pointer; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.cp-unplaced__btn[aria-expanded="true"] .icon { transform: rotate(180deg); }
+.cp-unplaced__body { padding: 8px 2px 0; }
+.cp-unplaced__body[hidden] { display: none; }
+.cp-unplaced__list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.cp-unplaced__row { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+.cp-unplaced__name { font: 600 12.5px/18px var(--font-sans); color: var(--text-1); }
+.cp-unplaced__why { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-unplaced__row .cp-ext { font-size: 12.5px; }
+
+/* Tindak lanjut tab */
+.cp-pstatehost:empty { display: none; }
+.cp-pstate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--r-ctl); border: 1px solid var(--rule);
+  font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-pstate p { margin: 0; flex: 1 1 200px; }
+.cp-pstate.is-warn { border-color: var(--status-mid); background: var(--status-mid-a20); color: var(--text-1); }
+.cp-pstate--card { margin-bottom: 10px; }
+.cp-steps { display: grid; gap: 4px; }
+.cp-step__li { display: block; min-width: 0; }
+.cp-step { width: 100%; min-height: 32px; display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) 36px; align-items: center; gap: 8px; padding: 4px 6px;
+  border: 1px solid transparent; border-radius: var(--r-ctl); background: none; cursor: pointer; text-align: left; color: var(--text-1); }
+.cp-step:hover { background: var(--surface-hover); }
+.cp-step.is-on { border-color: var(--rule-signal); background: var(--signal-a20); }
+.cp-step__l { font: 500 12.5px/18px var(--font-sans); }
+.cp-step__bar { height: 8px; border-radius: 4px; background: var(--rule); overflow: hidden; }
+.cp-step__bar i { display: block; height: 100%; background: var(--status-none); }
+.cp-step--ok .cp-step__bar i { background: var(--status-ok); }
+.cp-step--mid .cp-step__bar i { background: var(--status-mid); }
+.cp-step--bad .cp-step__bar i { background: var(--status-bad); }
+.cp-step__n { font: 600 12.5px/18px var(--font-sans); text-align: right; font-variant-numeric: tabular-nums; }
+.cp-next { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cp-next__row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 8px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-next__step { grid-column: 2; color: var(--text-3); }
+.cp-plist { display: grid; gap: 4px; }
+.cp-plist__g { margin: 10px 0 2px; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.cp-plist__row { display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-left-width: 3px; border-radius: var(--r-ctl);
+  background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
+.cp-plist__row:hover { background: var(--surface-hover); }
+.cp-plist__row--ok { border-left-color: var(--status-ok); }
+.cp-plist__row--mid { border-left-color: var(--status-mid); }
+.cp-plist__row--bad { border-left-color: var(--status-bad); }
+.cp-plist__row--none { border-left-color: var(--status-none); }
+.cp-plist__row.is-gone { opacity: .7; border-style: dashed; }
+.cp-plist__name { font: 600 13px/18px var(--font-sans); }
+.cp-plist__meta, .cp-plist__next { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-tools--prod .cp-logo { align-self: center; }
+.cp-tools--prod[hidden] { display: none; }
+.cp-fg--prod { width: 100%; }
+.cp-prodrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.cp-prodrow .cp-rchips { flex: 0 1 auto; }
+
+/* ── card folds ──────────────────────────────────────────────────────────── */
+.cp-dd .dd-kv { gap: 12px; }
+.cp-crow { display: grid; grid-template-columns: minmax(84px, 108px) minmax(0, 1fr); gap: 2px 10px; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+.cp-crow:last-child { border-bottom: 0; }
+.cp-crow__k { font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-crow__v { min-width: 0; font: 500 13px/18px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.cp-crow__src { grid-column: 2; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-crow--id .cp-ident { display: grid; gap: 0; }
+.cp-phones { display: grid; gap: 4px; }
+.cp-phone, .cp-code, .cp-webv { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cp-webv { display: grid; gap: 2px; justify-items: start; }
+.cp-tel, .cp-mail { color: var(--text-1); font: 600 13px/18px var(--font-sans); font-variant-numeric: tabular-nums;
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; }
+.cp-tel.is-plain { text-decoration: none; font-weight: 500; }
+.cp-mail { overflow-wrap: anywhere; }
+.cp-copy { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--rule); border-radius: var(--r-ctl);
+  background: transparent; cursor: pointer; font: 500 12px/1 var(--font-sans); color: var(--text-2); }
+.cp-copy:hover { background: var(--surface-hover); color: var(--text-1); }
+.cp-copy .icon { width: 12px; height: 12px; }
+
+.cp-rts { display: grid; gap: 2px; }
+.cp-rt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+.cp-rt__n { font: 600 13px/18px var(--font-sans); color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+.cp-rt__d { grid-column: 1; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cp-rt__go, .cp-rt__on { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 12.5px; }
+.cp-rt__on { font: 600 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-rt.is-on .cp-rt__n::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: middle; }
+
+.cp-near { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cp-near__row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+.cp-near__name { flex: 1 1 140px; min-width: 0; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.cp-near__meta { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.cp-near__go { margin-left: auto; font-size: 12.5px; }
+
+.cp-prod { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.cp-prod:last-of-type { border-bottom: 0; }
+.cp-prod__h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
+.cp-prod__t { margin: 3px 0 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.cp-progs { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.cp-prog b { color: var(--text-1); font-weight: 600; }
+.cp-prog.is-ended { color: var(--text-3); }
+
+/* the Tindak lanjut editor */
+.cp-pgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cp-pf { display: grid; gap: 4px; margin-top: 8px; }
+.cp-pgrid .cp-pf { margin-top: 0; }
+.cp-pf__l { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.cp-pf .input, .cp-pf .select { width: 100%; min-width: 0; }
+.cp-ta { min-height: 64px; resize: vertical; }
+.cp-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.cp-check { display: inline-flex; align-items: center; gap: 6px; font: 400 12.5px/18px var(--font-sans); color: var(--text-1); }
+.cp-pmsg { margin: 8px 0 0; font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.cp-pmsg.is-warn { color: var(--status-bad); }
+
+/* the kecamatan card list (list first) */
+.cp-kl { display: grid; gap: 4px; }
+.cp-kl__row.has-sym { grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; }
+.cp-kl__row.has-sym > .cp-sym { grid-row: 1 / span 2; margin-top: 2px; }
+.cp-kl__row.has-sym > .dd-list__name, .cp-kl__row.has-sym > .dd-list__meta { grid-column: 2; min-width: 0; }
+.cp-kl__row .dd-list__name { font-size: 13.5px; line-height: 18px; }
+.cp-kl__row .dd-list__meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-kl__foot { margin: 8px 0 0; font: 400 12.5px/18px var(--font-sans); }
+.cp-kl-blk { padding: var(--s-4) 0; }
+.cp-kl-blk > .dd-blk__t { margin-bottom: 8px; }
+.cp-kl-blk + .dd-blk { border-top: 1px solid var(--rule); }
+.cp-kl__row:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+@media (min-width: 600px) and (max-width: 1023px) {
+  body.is-drawer-open[data-section="campus"] .rail--l.pg-rail { transform: translateX(calc(-100% - var(--inset))); }
+  body.is-drawer-open[data-section="campus"] .edge-tab { visibility: hidden; }
+}
+
+/* ── widths ──────────────────────────────────────────────────────────────── */
+@media (max-width: 1279px) {
+  .cp-work:not(.ws-drawer) {
+    position: fixed; top: var(--stage-t); right: 0; bottom: 0; width: min(620px, calc(100vw - 24px)); border-radius: 0;
+    transform: translateX(calc(100% + 24px)); z-index: var(--z-drawer);
+  }
+  .cp-work.is-open:not(.ws-drawer) { transform: none; }
+  .cp-work__close { display: inline-flex; }
+  .cp-openwork { display: inline-flex; }
+}
+@media (max-width: 599px) {
+  /* touch targets ≥ 44 px on phones (layout.css §L.5; the campus rules above are more specific, so they say it again) */
+  .cp-seg .seg__opt, .guide .cp-seg .seg__opt, .cp-scope .seg__opt, .guide .cp-scope .seg__opt, .cp-row .scope .seg__opt, .guide .cp-row .scope .seg__opt,
+  body[data-section="campus"] .cp-chips .chip, body[data-section="campus"] .cp-rchips .chip,
+  body[data-section="campus"] .guide .cp-chips .chip, body[data-section="campus"] .guide .cp-rchips .chip,
+  .cp-morebtn, .guide .cp-morebtn, .cp-unplaced__btn, .cp-step, body[data-section="campus"] .btn--bar { min-height: 44px; }
+  .cp-work:not(.ws-drawer) { position: relative; inset: auto; width: auto; transform: none; z-index: auto; border-radius: var(--r-panel); }
+  .cp-work__close, .cp-openwork { display: none; }
+  .cp-work__body { overflow: visible; }
+  .cp-table, .cp-ex--fill .cp-table { height: 440px; }
+}
+@media (max-width: 767px) {
+  .cp-pgrid { grid-template-columns: minmax(0, 1fr); }
+  .cp-crow { grid-template-columns: minmax(0, 1fr); }
+  .cp-crow__src { grid-column: 1; }
+  .cp-step { grid-template-columns: minmax(96px, 1fr) minmax(0, 1fr) 32px; }
+  .cp-card__v { font-size: 30px; line-height: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-work { transition: none; }
+  .cp-load__bar::after { animation: none; }
+  .cp-morebtn .icon { transition: none; }
+}

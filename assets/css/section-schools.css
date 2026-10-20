@@ -1,5 +1,5 @@
 /* ==========================================================================
- * Section 3 · Sekolah (SMA)  (body[data-section="schools"], .sk-*)
+ * Section 3 · Sekolah (SMA, SMK, MA)  (body[data-section="schools"], .sk-*)
  * Sederhana (distance switch, four colour-coded cards), the Detail rail (status bar,
  * key figures, other filters, programme deadlines), the workbench "Daftar & grafik SMA"
  * (right; a slide-over between 600 and 1279 px) with five tabs, and the drawer parts.
@@ -472,7 +472,6 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
 .sk-sym > i { display: block; width: 11px; height: 11px; border: 1.5px solid var(--surface-solid); background: var(--status-mid); }
 .sk-sym.is-negeri > i { background: var(--chart-3); }
 .sk-sym.is-unknown > i { background: var(--status-none); }
-.sk-sym.is-ctx > i { background: var(--text-3); opacity: .7; }
 .sk-sym--circle > i { border-radius: 50%; }
 .sk-sym--diamond > i { width: 9px; height: 9px; transform: rotate(45deg); }
 .sk-sym--rsq > i { border-radius: 3px; }
@@ -645,4 +644,113 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
   body.is-drawer-open[data-section="schools"] .rail--l.pg-rail { transform: translateX(calc(-100% - var(--inset))); }
   /* the workbench's edge tab would sit on the card: it waits until the card closes */
   body.is-drawer-open[data-section="schools"] .edge-tab { visibility: hidden; }
+}
+
+/* ── v6 (COPY_STYLE_EN item 45, docs/V6_SPEC.md §2–§5): scope, Jenis, Filter lain, kelas biaya, kontak ──────── */
+/* the controls of the guide and the Detail rail: "Cakupan" first, then "Jenis", then the folded "Filter lain" */
+.sk-ctl { display: grid; gap: 12px; margin: 0 0 14px; min-width: 0; }
+.sk-ctl__row { display: grid; gap: 6px; min-width: 0; }
+.sk-ctl__l { font: 600 12.5px/16.5px var(--font-sans); color: var(--text-1); }
+.sk-ctl__clear { display: flex; justify-content: flex-start; }
+.sk-scopefield { display: grid; gap: 6px; min-width: 0; }
+.sk-scope { display: flex; width: 100%; height: auto; }
+.sk-scope .seg__opt { flex: 1 1 0; min-height: 36px; padding: 0 10px; font-weight: 600; }
+.sk-ctl--ov .sk-scope .seg__opt { min-height: 40px; }
+.sk-scope.is-vertical { flex-direction: column; width: 60px; }
+.sk-scope.is-vertical .seg__opt { min-height: 32px; }
+.sk-scope__st { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--r-ctl); background: var(--surface-well); }
+.sk-scope__st[hidden] { display: none; }
+.sk-scope__st .sk-load__t { font-size: 12.5px; line-height: 18px; }
+.sk-scope__st.is-error { box-shadow: inset 0 0 0 1px var(--status-bad); }
+.sk-scope__st .btn { justify-self: start; }
+.sk-scope__hint:empty { display: none; }
+.sk-scope__hint .sk-note { margin: 0; }
+.sk-fg--inline .scope-field, .sk-fg--inline .sk-scopefield { min-width: 180px; }
+
+/* Jenis chips (SMA · SMK · MA) and kelas biaya chips: the shared .chip with its one pressed style */
+.sk-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.sk-chip { min-width: 0; }
+.sk-chip--jenis { min-width: 56px; justify-content: center; }
+.sk-chip--tier .sk-bars { margin-right: -1px; }
+.sk-chip[disabled] { opacity: .5; cursor: progress; }
+
+/* "Filter lain (n)": a quiet fold, open by default in the Detail rail, folded in the guide and on phones (§2) */
+.sk-more { display: grid; gap: 10px; border-top: 1px solid var(--rule); padding-top: 10px; }
+.sk-more__btn {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: 600 12.5px/16.5px var(--font-sans); color: var(--text-1); text-align: left;
+}
+.sk-more__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
+.sk-more__n { color: var(--text-2); font-weight: 500; }
+.sk-more__chev { margin-left: auto; transition: transform var(--dur-fast) var(--ease-out); }
+.sk-more__btn[aria-expanded="true"] .sk-more__chev { transform: rotate(90deg); }
+.sk-more__body { display: grid; gap: 12px; }
+.sk-more__body[hidden] { display: none; }
+.sk-fg__head { display: flex; align-items: center; gap: 8px; }
+.sk-fg--tier { gap: 8px; }
+.sk-tierstate:empty, .sk-tierstate[hidden] { display: none; }
+.sk-tierretry[hidden] { display: none; }
+
+/* the "signal bars" glyph (D6): four ascending bars, `level` of them drawn; filled = fee or type, outline = perkiraan */
+.sk-bars { display: inline-flex; align-items: flex-end; gap: 1px; height: 12px; flex: none; color: currentColor; }
+.sk-bars > i { display: block; width: 3px; border-radius: 1px; background: currentColor; opacity: .22; }
+.sk-bars > i:nth-child(1) { height: 3px; }
+.sk-bars > i:nth-child(2) { height: 6px; }
+.sk-bars > i:nth-child(3) { height: 9px; }
+.sk-bars > i:nth-child(4) { height: 12px; }
+.sk-bars.is-fill > i.is-on { opacity: 1; }
+.sk-bars.is-line > i.is-on { opacity: 1; background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
+.sk-tier {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; max-width: 100%;
+  border: 1px solid var(--rule-strong); border-radius: 11px; background: var(--surface-raised);
+  font: 600 12px/1 var(--font-sans); color: var(--text-1); white-space: nowrap;
+}
+
+/* the "Kelas biaya" fold (fallback without MCD.inst) */
+.sk-tierblk__basis { margin: 6px 0 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.sk-tierblk__q { margin: 6px 0 0; font: italic 400 13px/19px var(--font-serif); color: var(--text-2); }
+.sk-tierblk__link { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0; }
+.sk-tierblk__host { font: 400 12px/16px var(--font-mono); color: var(--text-3); }
+
+/* "Kontak & identitas" (fallback without MCD.inst): links open only on a click, in a new tab */
+.sk-ext { display: inline-flex; align-items: center; gap: 4px; font: 600 12.5px/18px var(--font-sans); color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.sk-ext:hover { text-decoration-color: var(--text-1); }
+.sk-ext:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
+.sk-ext .icon { width: 12px; height: 12px; flex: none; }
+.sk-kvv { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.sk-kv__src { display: block; margin-top: 2px; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.sk-mono { font: 400 12.5px/18px var(--font-mono); color: var(--text-1); overflow-wrap: anywhere; }
+.sk-phones { display: grid; gap: 4px; }
+.sk-phone { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.sk-phone a, .sk-kvv a:not(.sk-ext) { font: 500 12.5px/18px var(--font-sans); color: var(--text-1); text-underline-offset: 3px; }
+.sk-mini-tag {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: 9px;
+  font: 500 12px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
+}
+.sk-copy.btn { min-height: 26px; padding: 0 8px; }
+.sk-copy .icon { width: 12px; height: 12px; }
+.sk-reflink { margin: 8px 0 0; }
+.sk-tnirow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+
+/* source logos (D22, COPY_STYLE_EN items 46-47): attribution only, on a white rounded tile in both themes, never
+   recoloured or stretched (the wordmark has too little contrast on the dark theme) */
+.sk-srcbadge { display: inline-flex; align-items: center; padding: 3px 6px; border-radius: 6px; background: var(--logo-tile, white); box-shadow: inset 0 0 0 1px var(--rule); flex: none; }
+.sk-srcbadge img { display: block; width: auto; height: 24px; max-width: none; object-fit: contain; }
+.sk-srcline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+
+/* the perkiraan "?" beside a count (the row note in its title) */
+.sk-help--inline.tipbtn { width: 20px; height: 20px; font-size: 12px; }
+
+/* Tindak lanjut: the storage line (memory, old password, damaged) and entries no longer in the data */
+.sk-pstore { display: grid; gap: 6px; }
+.sk-pstore[hidden] { display: none; }
+.sk-pstore p { margin: 0; }
+.sk-pstore .btn { justify-self: start; }
+.sk-plist__row.is-gone .sk-plist__name { color: var(--text-2); }
+
+/* phones (390): every scope and chip target is 40 px or more */
+@media (max-width: 767px) {
+  .sk-scope .seg__opt, .sk-ctl .scope .seg__opt, .sk-ctl .scope-field .scope:not(.scope--v) .seg__opt, .sk-ctl .chip, .sk-more__btn { min-height: 44px; }
+  .sk-ctl .chip { height: auto; padding: 0 14px; }
 }

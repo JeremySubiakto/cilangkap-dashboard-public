@@ -403,6 +403,16 @@ body.ws-adopted .ws-rail .pg-head { padding-right: 40px; }
 .ws-slim__kpi.is-bad .ws-slim__v::before { background: var(--status-bad); }
 .ws-slim__kpi.is-mid .ws-slim__v::before { background: var(--status-mid); }
 .ws-slim__kpi.is-potential .ws-slim__v::before { background: var(--status-potential); }
+/* v6 (V6_SPEC §2, §3.1): the scope pair "15 km" over "30 km" between the label and the numbers (y ≈ 283–351 at 1366),
+   the shared .seg look stood on end: a vertical radiogroup of two 60 × 32 px options; no visible label (its title) */
+.ws-slim__scope { display: block; flex: none; }
+.ws-slim__scope[hidden] { display: none; }
+.ws-slim .ws-scope { display: grid; grid-template-columns: var(--ws-scope-w); gap: 4px; height: auto; padding: 2px; cursor: default; }
+.ws-slim .ws-scope__opt {
+  width: var(--ws-scope-w); height: var(--ws-scope-h); min-height: var(--ws-scope-h); padding: 0 4px; border-radius: 8px; cursor: pointer;
+  font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+}
+.ws-slim .ws-scope__opt[aria-checked="true"] { color: var(--text-1); cursor: default; }
 
 /* ── 5 · Adopted workspace: the bottom drawer "Daftar & grafik" (peek · half · full) ─ */
 body.ws-adopted .ws-drawer {

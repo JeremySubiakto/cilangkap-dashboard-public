@@ -1,11 +1,14 @@
 /* ==========================================================================
  * MCD.state · MCD.data · MCD.derive: the shared core of the Acquisition Dashboard.
  *
- * Scope (branch decision 15 Oct 2026, docs/COPY_STYLE_EN.md items 10–14): five
- * sections (Overview · Merchants · Schools · KPR · Data & Privacy). There is no
+ * Scope (branch decision 15 Oct 2026, docs/COPY_STYLE_EN.md items 10–14; v6, item 45): six
+ * sections (Overview · Merchants · Schools · Kampus · KPR · Data & Privacy). There is no
  * customer (nasabah), loan, giro, payroll or staff model any more: the core only
- * routes state, holds the bank datasets the five sections use, and memoises the
- * per-section derived blocks that sections register.
+ * routes state, holds the bank datasets the sections use, and memoises the
+ * per-section derived blocks that sections register. Kampus (id 'campus', #s=campus)
+ * adds no bank dataset and no state key: its list sort lives in mcd.campus.ui.v1 and
+ * the 15 km / 30 km scope of Sekolah and Kampus in sessionStorage (MCD.inst.scope),
+ * never in the hash (V6_SPEC D4: a view setting, not a filter).
  *
  * Load order: config → util → data-reference → state. Nothing runs at load time
  * except declarations: no hash read, no storage access, no data generation.
@@ -50,7 +53,7 @@
 
   function sectionIds() {
     var s = MCD.config && MCD.config.sections;
-    return s ? s.map(function (x) { return x.id; }) : ['overview', 'merchants', 'schools', 'property', 'data'];
+    return s ? s.map(function (x) { return x.id; }) : ['overview', 'merchants', 'schools', 'campus', 'property', 'data'];
   }
 
   /* ============================================================== helpers */
@@ -379,7 +382,7 @@
 
   /* ===================================================== MCD.data (§F.1, §J.4) */
 
-  // Bank datasets of the five sections, plus the public map sites. Sections may add more
+  // Bank datasets of the sections (Kampus adds none), plus the public map sites. Sections may add more
   // with registerDataset(). `bank: false` marks public reference data (never tagged DEMO).
   var DATASETS = {
     lvm: { types: ['lvm', 'livin_merchant', 'livin_merchants'], label: 'Livin’ Merchant (LVM)', bank: true },

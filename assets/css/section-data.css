@@ -484,6 +484,39 @@ body[data-section="data"] .pg-sheet .pg-card__value { font-size: 26px; line-heig
 .dp-src__by { color: var(--text-2); }
 .dp-src__lic { color: var(--text-3); }
 .dp-src td.num { white-space: nowrap; }
+/* v6: a long "Per" (two download dates) wraps instead of widening the table; on phones every "Per" may wrap */
+.dp-src td.num.is-long { white-space: normal; min-width: 168px; }
+@media (max-width: 599px) { .dp-src td.num { white-space: normal; min-width: 96px; } }
+.dp-src-notes { margin-top: 8px; }
+.dp-src-notes .dp-fine { margin: 4px 0 0; color: var(--text-2); }
+
+/* v6 source badges (V6_SPEC D22, COPY_STYLE_EN items 46-47): attribution only, on a white rounded tile in both themes
+   (the wordmarks need a light ground), never recoloured, never stretched (height fixed, width from the image). The tile
+   colour is the token --logo-tile once tokens.css has it; until then plain white. */
+.dp-logo {
+  display: flex; align-items: center; width: fit-content; max-width: 100%; height: 40px; margin: 0 0 6px; padding: 5px 10px;
+  border-radius: var(--r-tip); background: var(--logo-tile, white); box-shadow: inset 0 0 0 1px var(--rule);
+}
+.dp-logo__img { display: block; height: 30px; width: auto; max-width: 100%; object-fit: contain; }
+
+/* v6 "Tindak lanjut di komputer ini" (Simpan & kata sandi; V6_SPEC §7.6) */
+.dp-fu__state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; font: 400 13.5px/20px var(--font-sans); color: var(--text-1); }
+.dp-fu__lead { min-width: 0; flex: 1 1 240px; }
+.dp-fu__lists { display: grid; max-width: 420px; margin: 0 0 14px; padding: 0; list-style: none; }
+.dp-fu__row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-height: 36px; padding: 8px 0; border-bottom: 1px solid var(--rule); font: 400 14px/20px var(--font-sans); }
+.dp-fu__row:first-child { border-top: 1px solid var(--rule); }
+.dp-fu__name { color: var(--text-1); font-weight: 500; }
+.dp-fu__n { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dp-fu__old { margin: 0 0 14px; padding: 12px; border: 1px solid var(--rule-strong); border-left: 4px solid var(--status-mid); border-radius: var(--r-ctl); background: var(--status-mid-a20); }
+.dp-fu__old .dp-p { margin: 0 0 10px; color: var(--text-1); }
+.dp-fu__act { margin-top: 4px; }
+.dp-fu .dp-callout { margin-bottom: 14px; }
+.dp-fu .btn .icon { width: 14px; height: 14px; }
+
+/* the "Kata sandi lama" dialog (the shell's .scrim and .modal; one field, its line under it) */
+.dp-oldpw__field { display: grid; gap: 6px; margin-top: 16px; }
+.dp-oldpw__in { width: 100%; height: 40px; }
+.dp-oldpw .modal__body { margin: 0; }
 
 /* Deep dive: status colour on the page cards */
 body[data-section="data"] .pg-sheet .pg-card { position: relative; overflow: hidden; }

@@ -1,0 +1,190 @@
+/* ==========================================================================
+ * Section 7 · Calon Prioritas (body[data-section="wealth"], .wl-*)  docs/V7_SPEC.md §5
+ * The panel (Sederhana guide and Detail summary rail): the public-data line, scope, "Jenis tempat" chips with one
+ * explaining line, three cards (Kecamatan daya beli tinggi · Tempat sasaran · Tempat terdekat), the lead count line
+ * (full rail only, D17); the drawer "Daftar & grafik" (Daftar tempat · Kecamatan); the card folds (Mengapa calon
+ * Prioritas · Cara masuk · Jarak & rute) and the kecamatan list. Calm: one neutral ink for every kind, the shape says
+ * the kind; daya beli as 1–3 small bars, never a fill or a colour scale (item 23, D11). Tokens only (tokens.css,
+ * brand.css). Day and Night; 1440 / 1366 / 1024 / 390. Text 12 px or larger; targets 40 px in Sederhana, 44 px on phones.
+ * ========================================================================== */
+
+body[data-section="wealth"] {
+  --wl-work-w: clamp(420px, 34vw, 560px);
+}
+
+/* ── shared bits ─────────────────────────────────────────────────────────── */
+.wl-link {
+  display: inline; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
+}
+.wl-link:hover { text-decoration-color: var(--text-1); }
+.wl-link:focus-visible, .wl-mini__row:focus-visible, .wl-row-btn:focus-visible, .wl-kec__row:focus-visible,
+.wl-chip-btn:focus-visible, .wl-tab:focus-visible, .wl-seg .seg__opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.wl-note { margin: 6px 0 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.wl-note--quiet { color: var(--text-3); font-size: 12px; }
+.wl-note--busy { color: var(--text-3); }
+.wl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.wl-actions--head { margin: 0 0 10px; }
+.wl-seg { height: auto; max-width: 100%; }
+.wl-seg .seg__opt { min-height: 32px; padding: 0 12px; }
+.guide .wl-seg .seg__opt { min-height: 40px; }
+
+/* the kind glyph: the map's shape in the text ink (circle sekolah, shield or triangle kampus, rounded square
+   perumahan, small dot merchant) */
+.wl-glyph { flex: none; fill: var(--text-1); stroke: var(--surface-solid); stroke-width: 1; vertical-align: -2px; }
+.wl-glyph--merchant { fill: var(--text-2); }
+/* daya beli bars: on = the text ink, off = a hairline step (shape, never hue) */
+.wl-bars { flex: none; vertical-align: -1px; }
+.wl-bars__on { fill: var(--text-1); }
+.wl-bars__off { fill: var(--rule-strong); }
+
+/* chips in cards and callouts */
+.wl-chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; max-width: 100%; padding: 0 8px;
+  border: 1px solid var(--rule); border-radius: 11px; background: var(--surface-well);
+  font: 600 12px/16px var(--font-sans); color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-chip--area { font-weight: 500; color: var(--text-2); }
+
+/* ── panel: guide and rail ───────────────────────────────────────────────── */
+.wl-panel { display: grid; gap: 14px; min-width: 0; }
+.wl-public { margin: 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.wl-row { display: grid; gap: 6px; }
+.wl-row__l, .wl-fg__l { margin: 0; font: 600 12px/16px var(--font-sans); color: var(--text-2); letter-spacing: .02em; }
+.wl-scope, .wl-row .scope.seg { display: flex; width: 100%; height: auto; }
+.wl-scope .seg__opt, .wl-row .scope .seg__opt { flex: 1 1 0; min-height: 36px; font-weight: 600; }
+.guide .wl-scope .seg__opt, .guide .wl-row .scope .seg__opt { min-height: 40px; }
+.wl-row .scope-field { width: 100%; }
+.wl-fg { display: grid; gap: 6px; }
+.wl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* quiet chips (as Kampus): pressed = a soft tint and an edge; short labels, one row each in the 360 px rail */
+body[data-section="wealth"] .wl-chips .chip { height: auto; min-height: 32px; padding: 4px 10px; gap: 6px; white-space: nowrap; text-align: left;
+  border-color: var(--rule); color: var(--text-3); background: transparent; }
+body[data-section="wealth"] .wl-chips .chip[aria-pressed="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); }
+body[data-section="wealth"] .wl-chips .chip[aria-pressed="true"] .chip__count { color: var(--text-2); opacity: 1; }
+body[data-section="wealth"] .wl-chips .chip[aria-disabled="true"] { cursor: default; }
+body[data-section="wealth"] .wl-chips .chip:disabled { opacity: .55; cursor: progress; }
+body[data-section="wealth"] .wl-chips .chip[hidden] { display: none; }
+body[data-section="wealth"] .guide .wl-chips .chip { min-height: 40px; }
+.wl-chip-btn__t { font: 500 12.5px/16px var(--font-sans); }
+.wl-chip-btn .wl-glyph { stroke: none; }
+.wl-kindline { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.wl-tierstate { display: grid; gap: 6px; }
+.wl-tierstate:empty { display: none; }
+.wl-tierstate .btn { justify-self: start; }
+.wl-m15[hidden] { display: none; }
+.wl-m15 { margin: 0; }
+
+.wl-cards { display: grid; gap: 12px; }
+.wl-card { position: relative; overflow: hidden; border: 1px solid var(--glass-border-card); border-radius: var(--r-card);
+  background: var(--grad-card); box-shadow: inset 0 3px 0 var(--plat-2), var(--glass-shadow-card); }
+.wl-card--count { box-shadow: inset 0 3px 0 var(--chart-3), var(--glass-shadow-card); }
+.wl-card__body { display: grid; gap: 8px; padding: 14px 16px 14px; }
+.wl-card__t { margin: 0; font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.wl-card__v { margin: 0; font: 400 34px/38px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.wl-card__lines { display: grid; gap: 6px; min-width: 0; }
+.wl-card__lines > * { min-width: 0; }
+.wl-card__line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0; font: 400 13px/18px var(--font-sans); color: var(--text-1); }
+.wl-card__line b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.wl-card__quiet { color: var(--text-3); font-size: 12px; }
+.wl-card__foot { margin: 2px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.wl-card .dist-ctl { flex-wrap: wrap; row-gap: 4px; }
+.wl-empty { display: grid; gap: 8px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.wl-empty p { margin: 0; }
+
+.wl-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.wl-mini__row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; width: 100%; padding: 7px 6px;
+  border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
+.wl-mini__row:hover { background: var(--surface-hover); }
+.wl-mini__row > svg { margin-top: 2px; }
+.wl-mini__txt { display: grid; gap: 1px; min-width: 0; }
+.wl-mini__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-mini__meta { font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wl-mini__go { font: 600 14px/18px var(--font-sans); color: var(--text-3); }
+.wl-mini__empty { padding: 6px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.guide .wl-mini__row { min-height: 44px; }
+
+.wl-lead:empty, .wl-lead[hidden] { display: none; }
+.wl-src { margin: 4px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.wl-openwork { display: none; width: 100%; justify-content: center; }
+
+/* ── the drawer "Daftar & grafik" ────────────────────────────────────────── */
+/* Detail ≥ 1280 without MCD.windows: a column on the right while open; below 1280 a slide-over with a large Tutup;
+   adopted by MCD.windows it is the bottom drawer (body.ws-adopted .ws-drawer positions it) */
+.wl-work {
+  position: absolute; top: var(--stage-t); right: var(--inset); bottom: var(--inset); width: var(--wl-work-w); z-index: var(--z-sheet);
+  display: flex; flex-direction: column; min-height: 0;
+  transform: translateX(calc(100% + var(--inset) + 24px));
+  transition: transform var(--dur-sheet) var(--ease-enter);
+}
+.wl-work.is-open, .wl-work.ws-drawer { transform: none; }
+.wl-work.ws-drawer { visibility: visible; }
+.wl-work.ws-drawer .wl-work__body { padding-top: 12px; }
+.wl-work__close { display: inline-flex; }
+.wl-work__titles { flex: 1 1 auto; min-width: 0; }
+.wl-work__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; }
+.wl-work__eyebrow { margin: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.wl-work__lede { margin: 2px 0 0; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.wl-work__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
+.wl-work__foot { padding: 8px 16px 12px; border-top: 1px solid var(--rule); }
+.wl-tabhost { padding: 0 16px; }
+.wl-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--rule); scrollbar-width: none; }
+.wl-tab { flex: none; min-height: 36px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer;
+  font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.wl-tab[aria-selected="true"] { color: var(--text-1); border-bottom-color: var(--signal); }
+
+.wl-list__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
+.wl-list__title { flex: 1 1 100%; margin: 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.wl-list__sub { margin: 0 0 8px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.wl-list { display: grid; gap: 1px; }
+.wl-list__more { display: grid; gap: 6px; justify-items: start; margin-top: 8px; }
+.wl-list__more:empty { display: none; }
+.wl-row-btn { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; min-height: 40px; padding: 6px 8px;
+  border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
+.wl-row-btn:hover { background: var(--surface-hover); }
+.wl-row-btn > svg { margin-top: 2px; }
+.wl-row-btn__txt { display: grid; gap: 1px; min-width: 0; }
+.wl-row-btn .dd-list__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-row-btn .dd-list__meta { font: 400 12px/16px var(--font-sans); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+
+.wl-kec { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.wl-kec__row { display: grid; grid-template-columns: 24px 14px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 8px;
+  border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
+.wl-kec__row:hover { background: var(--surface-hover); }
+.wl-kec__rank { font: 600 12px/16px var(--font-mono); color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
+.wl-kec__name { font: 500 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-kec__legend { margin-top: 12px; }
+
+/* ── card folds and the kecamatan list ───────────────────────────────────── */
+.wl-dd .wl-note:first-of-type { margin-top: 0; }
+.wl-route { margin: 0 0 6px; font: 500 13px/19px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.wl-arealine { display: flex; align-items: center; gap: 8px; margin: 0; font: 500 13px/19px var(--font-sans); color: var(--text-1); }
+.wl-kl-blk { padding: var(--s-4) 0; }
+.wl-kl-blk > .dd-blk__t { margin-bottom: 8px; }
+.wl-kl-blk + .dd-blk { border-top: 1px solid var(--rule); }
+.wl-kl__group + .wl-kl__group { margin-top: 10px; }
+.wl-kl__head { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font: 600 12px/16px var(--font-sans); color: var(--text-2); letter-spacing: .02em; }
+
+/* ── widths ──────────────────────────────────────────────────────────────── */
+@media (max-width: 1279px) {
+  .wl-work:not(.ws-drawer) { position: fixed; top: var(--stage-t); right: 0; bottom: 0; width: min(560px, calc(100vw - 24px)); border-radius: 0; z-index: var(--z-drawer); }
+  .wl-openwork { display: inline-flex; }
+}
+@media (max-width: 599px) {
+  .wl-seg .seg__opt, .guide .wl-seg .seg__opt, .wl-scope .seg__opt, .guide .wl-scope .seg__opt, .wl-row .scope .seg__opt, .guide .wl-row .scope .seg__opt,
+  body[data-section="wealth"] .wl-chips .chip, body[data-section="wealth"] .guide .wl-chips .chip,
+  .wl-mini__row, .wl-row-btn, .wl-kec__row, body[data-section="wealth"] .btn--bar { min-height: 44px; }
+  body[data-section="wealth"] .wl-chips .chip { white-space: normal; }
+  .wl-work:not(.ws-drawer) { position: relative; inset: auto; width: auto; transform: none; z-index: auto; border-radius: var(--r-panel); }
+  .wl-work:not(.ws-drawer):not(.is-open) { display: none; }
+  .wl-work__close, .wl-openwork { display: none; }
+  .wl-work__body { overflow: visible; }
+}
+@media (max-width: 767px) {
+  .wl-card__v { font-size: 30px; line-height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-work { transition: none; }
+}
+@media print {
+  .wl-work { position: static; transform: none; }
+}

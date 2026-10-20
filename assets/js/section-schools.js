@@ -1,15 +1,15 @@
 /* ==========================================================================
- * MCD.sections.schools: section 3 "Sekolah (SMA)" (key 3)
+ * MCD.sections.schools: section 3 "Sekolah (SMA, SMK, MA)" (key 3)
  * Product rules: docs/COPY_STYLE_EN.md items 10-22 (SMA only, flat map, bold status colours with legends
  * in words, Bahasa Indonesia, one solid shape per kecamatan, "Buka di Google Maps"), exhibits per
  * docs/DESIGN_DIRECTION_V2.md, contracts in docs/INTEGRATION_NOTES.md, changes in docs/UX_FIX_PLAN.md C-02,
  * C-03, C-07, C-09, C-10.
  *
- * Scope: senior high schools (SMA, jenjang SMA) only. Madrasah aliyah (MA) share the SMA/MA level of
- * data/schools.js; they are split off by name and, like SMK, appear only as small neutral context points on the
- * map (switches "Tampilkan MA" and "Tampilkan SMK", off by default, remembered per browser). They are never counted.
+ * Scope (v6): SMA, SMK and MA. Madrasah aliyah (MA) share the SMA/MA level of data/schools.js and are split off by
+ * name; SMK are their own level. SMA alone is the default (the pilot view); SMK and MA are full layers once their
+ * Jenis chip is on (v5 drew them as small neutral context points; that is gone).
  *
- * Sederhana: distance switch, MA / SMK point switches, the new-CIF card (item 35(a): siswa 17+ → Tabungan /
+ * Sederhana: scope and Jenis controls, "Filter lain", the new-CIF card (item 35(a): siswa 17+ → Tabungan /
  *   Livin' by Mandiri with a KTP, siswa di bawah 17 → Tabungan SimPel with a parent or guardian), the SMA with the
  *   most students aged 17+ (or nearest the branch), status, TNI and cluster cards (distances from KCP).
  * Detail: left rail (status bar, new-CIF card, key figures, other filters, programme deadlines) and the
@@ -48,9 +48,24 @@
  *   Section functions: workspace() (rail, drawer, hide), summary() (the slim rail's three numbers), cardFor(sel)
  *   (live pins) and kecList(kecId).
  *
+ * v6 (COPY_STYLE_EN item 45, docs/V6_SPEC.md §3–§5, §7; lane SEKOLAH):
+ *   - Scope "Cakupan: 15 km | 30 km" (D3, D4): a view setting, not a filter (no chip, not counted, kept by "Hapus
+ *     filter"), remembered per browser tab (MCD.inst.scope, sessionStorage mcd.scope.v1; own copy without MCD.inst).
+ *     It sits in the slim rail (summary().scope), the rail and guide controls and the "Daftar sekolah" toolbar.
+ *   - SMK and MA are full layers (D5): Jenis chips "SMA · SMK · MA" (SMA only by default, the choice kept in
+ *     mcd.schools.ui.v2 show), status colour and size for every jenis, counted in every number while shown. Students
+ *     of SMK, MA and every school beyond 15 km come from data/school-students.js (MCD.schools.students.view, lazy);
+ *     the SMA within 15 km keep data/sma-students.js, so SMA only at 15 km still reads 366 / 160.411 / 79.985.
+ *   - Kelas biaya (§4): five chips (Premium · Atas · Menengah · Reguler · Belum diketahui) with counts, the "signal
+ *     bars" badge on the map while filtered or from zoom 14, a fold per card and a list column (MCD.inst.tierOf, else
+ *     data/institution-tiers.js directly).
+ *   - "Kontak & identitas" (§5, D14, D17, D18): one fold replaces Identitas and Sumber (MCD.inst.contactBlock, else a
+ *     plain copy of its rules); contacts hide while "Samarkan nama" is on (D7); the Dapodik badge (D22).
+ *   - Tindak lanjut sealed (§7): MCD.schools.pipeline delegates to MCD.seal; the tab names the storage state.
+ *
  * Engine: assets/js/schools-core.js (MCD.schools). Public data always shows with its source; bank data
  * only from the vault, an import or the opt-in Data contoh switch (then tagged CONTOH). Storage:
- * mcd.schools.* (the distance is not stored, UX_FIX_PLAN D14).
+ * mcd.schools.* (the distance is not stored, UX_FIX_PLAN D14); the scope in sessionStorage (mcd.scope.v1).
  * ========================================================================== */
 (function (MCD) {
   'use strict';
@@ -63,7 +78,7 @@
   var CLUSTER_MIN = 4;
   var TOP_KEC = 12;
   var TABS = [
-    { id: 'list', label: 'Daftar SMA' },
+    { id: 'list', label: 'Daftar sekolah' },
     { id: 'kec', label: 'Kecamatan' },
     { id: 'yay', label: 'Yayasan' },
     { id: 'prog', label: 'Program & kalkulator' },
@@ -89,8 +104,38 @@
   var U17_LABEL = 'Siswa di bawah 17 tahun (Tabungan SimPel)';
   var DIST_TIP = 'Perkiraan jarak jalan dan waktu berkendara dari KCP Jakarta Cilangkap, lalu lintas normal.';
   var DIST_NONE = 'Jarak belum dapat dihitung untuk titik ini.';
-  var LIST_SORTS = [{ v: 'near', label: 'Terdekat dari KCP' }, { v: 'k17', label: 'Siswa 17+ terbanyak' }, { v: 'stu', label: 'Siswa terbanyak' }];
+  var LIST_SORTS = [{ v: 'near', label: 'Terdekat dari KCP' }, { v: 'k17', label: 'Siswa 17+ terbanyak' }, { v: 'stu', label: 'Siswa terbanyak' }, { v: 'tier', label: 'Kelas biaya tertinggi' }];
   var JENIS_WORD = { sma: 'SMA', ma: 'MA', smk: 'SMK' };
+  var JENIS_LEVEL = { sma: 'SMA', smk: 'SMK', ma: 'MA' };
+  var JENIS_ORDER = ['sma', 'smk', 'ma'];
+  var JENIS_NAME = { sma: 'SMA', smk: 'SMK (sekolah menengah kejuruan)', ma: 'MA (madrasah aliyah)' };
+
+  /* v6 scope (V6_SPEC §3.1, D3, D4) */
+  var SCOPES = [15, 30];
+  var SCOPE_KEY = 'mcd.scope.v1';
+  var SCOPE_ARIA = 'Cakupan jarak dari Mabes TNI';
+  var SCOPE_TIP = 'Sekolah dalam radius 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.';
+  var SCOPE30_HINT = 'Angka di Ringkasan tetap untuk 15 km, cakupan pilot.';
+  var LOAD30 = 'Memuat jumlah siswa dalam 30 km…';
+  var FAIL30 = 'Jumlah siswa dalam 30 km tidak dapat dimuat. Coba lagi.';
+  var JENIS_TIP = 'SMK adalah sekolah menengah kejuruan. MA adalah madrasah aliyah di bawah Kementerian Agama.';
+  var JENIS_LAST = 'Paling sedikit satu jenis tampil.';
+
+  /* v6 kelas biaya (V6_SPEC §4, D6, D21) */
+  var TIERS = [{ id: 'premium', label: 'Premium', level: 4 }, { id: 'atas', label: 'Atas', level: 3 }, { id: 'menengah', label: 'Menengah', level: 2 },
+    { id: 'reguler', label: 'Reguler', level: 1 }, { id: 'unknown', label: 'Belum diketahui', level: 0 }];
+  var TIER_LINE = 'Kelas biaya menunjukkan besar biaya sekolah. Sekolah negeri umumnya tanpa SPP. Kemudahan kerja sama tetap perlu ditanyakan ke sekolah atau yayasan.';
+  var TIER_LOADING = 'Memuat kelas biaya…';
+  var TIER_FAILED = 'Kelas biaya tidak dapat dimuat. Coba lagi.';
+  var TIER_NONE = 'Kelas biaya belum diketahui. Data biaya dan jenis sekolah belum cukup.';
+  var TIER_LEGEND_2 = 'Batang berisi = dari biaya resmi atau jenis sekolah. Batang kosong = perkiraan. Tanpa tanda = belum diketahui.';
+  var TIER_ZOOM = 14;
+
+  /* v6 kontak (V6_SPEC §5, D7, D17, D18) and the source badge (D22) */
+  var DAPODIK_LOGO = 'assets/brand/dapodik-logo.png';
+  var DAPODIK_ALT = 'Dapodik (Data Pokok Pendidikan)';
+  var REF_BASE = 'https://referensi.data.kemendikdasmen.go.id/pendidikan/npsn/';
+  var NOTE_PLACEHOLDER = 'Tulis langkah kerja. Jangan tulis nomor pribadi atau data siswa.';
 
   /* Programme terms as recorded in docs/research-schools.json (products[0], products[1]). */
   var PROGRAMMES = [
@@ -129,6 +174,8 @@
   var drawerObs = null, drawerSel = null, flyNext = false, hlTimer = 0, unbindTerr = null, drawerDist = null;
   var pipeEds = {}, building = null;    /* v5: the open pipeline editors by key; 'pin' while cardFor builds a pinned card */
   var NO_NPSN = 'SMA ini tidak memiliki NPSN. Tambahkan yayasannya ke tindak lanjut.';
+  var NO_NPSN_SK = 'Sekolah ini tidak memiliki NPSN. Tambahkan yayasannya ke tindak lanjut.';
+  var scopeSwitches = [], ctlSets = [], lazyTimers = [], scopeOff = null, scopeLive = null, seenMigrated = false;
   var SHARE_HINT = 'Porsi nasabah tampil setelah file sekolah diimpor.';
   var KL_MAX = 60;                      /* rows in the kecamatan card's SMA list (§3.3.4) */
 
@@ -320,23 +367,36 @@
   /* ------------------------------------- students and 17+ (items 26, 29; MCD.schools.students) */
 
   function SS() { var s = SC && SC.students; return s && isFn(s.ready) && s.ready() ? s : null; }
+  /** The v6 adapter (schools-core.js): students of every SMA, SMK and MA within 30 km under the display rule. */
+  function SV() { var s = SC && SC.students; return s && isFn(s.view) ? s : null; }
+  function f30Ready() { var s = SC && SC.students; return !!(s && isFn(s.ready30) && s.ready30()); }
+  function f30State() { return SC && isFn(SC.dataStatus) ? SC.dataStatus('school-students') : 'error'; }
+  /** The jenis switched on, as the levels of the data files ({SMA, SMK, MA}): the sum rule needs it (§1.1). */
+  function shownLevels() { var s = (st && st.show) || { sma: true }; return { SMA: s.sma !== false, SMK: !!s.smk, MA: !!s.ma }; }
   var SINFO = { key: '', idx: null, m: new Map() };
-  /** Students of one school row under the shared display rule, or null (no student file, or not an SMA in it). */
+  /**
+   * Students of one school row under the display rule, or null (not an SMA, SMK or MA): the pilot file for the SMA
+   * within 15 km, data/school-students.js for every other school (V6_SPEC §1.1). The shape keeps v5's {students,
+   * perGrade, k17, k17Official, duplicate, inactive, note, semester, …} and adds src, missing, olderTable, npsn.
+   */
   function sInfo(i) {
-    var s = SS(), I = SC && SC.idx;
-    if (!s || !I || i == null || i < 0) return null;
-    var key = s.sig();
+    var I = SC && SC.idx, S0 = SS(), A = SV();
+    if (!I || i == null || i < 0 || (!S0 && !A)) return null;
+    var sh = shownLevels();
+    var key = (S0 ? S0.sig() : '-') + '|' + (f30Ready() ? 1 : 0) + f30State() + '|' + (sh.SMK ? 1 : 0) + (sh.MA ? 1 : 0);
     if (SINFO.key !== key || SINFO.idx !== I) SINFO = { key: key, idx: I, m: new Map() };
     if (SINFO.m.has(i)) return SINFO.m.get(i);
     var v = null;
-    try { v = s.info(I, i); } catch (e) { v = null; }
+    try { v = A ? A.view(I, i, { shown: sh }) : (S0 ? S0.info(I, i) : null); } catch (e) { v = null; }
     SINFO.m.set(i, v);
     return v;
   }
-  /** Students of a row: the Dapodik file (16 Oct 2026) first, else the school list (private SMA only), else -1. */
+  /** Students of a row: the pilot or the 30 km file (v6); without either adapter the school list (private SMA only);
+      while the 30 km file loads (or failed) a school beyond the pilot shows "—" (-1), as V6_SPEC §3.1 says. */
   function stuOf(i) {
     var s = sInfo(i);
     if (s && s.students != null) return s.students;
+    if (s && s.src !== 'pilot') return -1;
     var I = SC.idx;
     return I && I.stu[i] >= 0 ? I.stu[i] : -1;
   }
@@ -351,10 +411,23 @@
   /** Students line for popups: "1.234 siswa · 612 berusia 17+ (data resmi)". */
   function studentsLine(i) {
     var s = sInfo(i), I = SC.idx;
-    if (s && s.inactive) return 'Kemungkinan tidak aktif: Dapodik mencatat 0 siswa';
-    if (s && s.students != null) return count(s.students, 'siswa') + ' · ' + (s.k17Official ? fm().int(s.k17) + ' berusia 17+ (data resmi)' : '± ' + fm().int(s.k17) + ' berusia 17+ (perkiraan)');
+    if (s && s.inactive) return s.closedLikely ? 'Kemungkinan tidak aktif' : 'Kemungkinan tidak aktif: Dapodik mencatat 0 siswa';
+    if (s && s.students != null) return count(s.students, 'siswa') + (s.k17 == null ? '' : ' · ' + (s.k17Official ? fm().int(s.k17) + ' berusia 17+ (data resmi)' : '± ' + fm().int(s.k17) + ' berusia 17+ (perkiraan)'));
     if (I && I.stu[i] >= 0) return count(I.stu[i], 'siswa') + ' (Dapodik, 12 Okt 2026)';
+    if (s && s.missing === 'loading') return LOAD30;
     return 'Jumlah siswa belum tersedia';
+  }
+  /** Why a school has no student count, in words (V6_SPEC §3.2, §1.0.1), or null. */
+  function missingWords(s) {
+    if (!s || s.students != null || s.duplicate) return null;
+    switch (s.missing) {
+      case 'osm': return 'Titik ini dari OpenStreetMap atau Overture dan tidak cocok dengan data Dapodik, sehingga jumlah siswanya tidak tersedia.';
+      case 'closed': return 'Kemungkinan tidak aktif: NPSN tidak ditemukan lagi di Data Referensi dan belum ada data siswa 2026/2027.';
+      case 'loading': return LOAD30;
+      case 'failed': return FAIL30;
+      case 'dapodik': return 'Jumlah siswa sekolah ini belum tersedia di Dapodik.';
+      default: return null;
+    }
   }
 
   /* ------------------------------------- distance from KCP (items 27, 28; MCD.distance) */
@@ -494,12 +567,13 @@
     if (!I) return 'sma';
     if (I.jen[i] === 4) return 'smk';
     if (I.jen[i] === 3 && X.idx === I && X.cls && X.cls[i] === 2) return 'ma';
+    if (I.jen[i] === 3 && X.idx !== I && SC.smaClass(I.name[i], !!I.npsn[i]) === 2) return 'ma';
     return 'sma';
   }
   function specOf(i) {
     var Mx = symMod(), I = SC.idx;
     if (!Mx || !I) return null;
-    var j = jenisOf(i), n = j === 'sma' ? stuOf(i) : -1;
+    var j = jenisOf(i), n = stuOf(i);
     return Mx.spec({ jenis: j, negeri: I.st[i] === 0, unknown: I.st[i] === 2, tni: I.tni[i] >= 0, students: n >= 0 ? n : null });
   }
   function uiTheme() { var t = ctx && isFn(ctx.theme) ? ctx.theme() : document.documentElement.getAttribute('data-theme'); return t === 'day' ? 'day' : 'night'; }
@@ -512,6 +586,421 @@
   function symLabel(i) {
     var Mx = symMod(), sp = specOf(i);
     return E('span', { class: 'sk-symlabel' }, symChip(i), E('span', { text: Mx && sp ? Mx.words(sp) : JENIS_WORD[jenisOf(i)] }));
+  }
+
+  /* ================================================== v6: jenis words (V6_SPEC §3.2) */
+
+  function showNow() { return (st && st.show) || { sma: true, smk: false, ma: false }; }
+  /** SMA alone on: every word stays "SMA" (the pilot view, the deck's numbers). */
+  function onlySma() { var s = showNow(); return s.sma !== false && !s.smk && !s.ma; }
+  function shownJenis() { var s = showNow(); return JENIS_ORDER.filter(function (j) { return j === 'sma' ? s.sma !== false : !!s[j]; }); }
+  /** "SMA" or "sekolah": the noun of every count ("366 SMA", "1.234 sekolah"). */
+  function nounOf() { return onlySma() ? 'SMA' : 'sekolah'; }
+  function Noun() { var n = nounOf(); return n.charAt(0).toUpperCase() + n.slice(1); }
+  /** "{a} SMA · {b} SMK · {c} MA" for the jenis shown (titles, the rail card). */
+  function splitWords(byJ) {
+    if (!byJ) return '';
+    return shownJenis().map(function (j) { return fm().int((byJ[j] && byJ[j].n) || 0) + ' ' + JENIS_WORD[j]; }).join(' · ');
+  }
+
+  /* ================================================== v6: scope 15 km | 30 km (V6_SPEC §3.1, D3, D4) */
+
+  /* Own copy of MCD.inst.scope (INSTITUSI lane) for a shell without it: the same sessionStorage record
+     {"v":1,"schools":30,"campus":30} (numbers only), memory when storage is blocked. */
+  var LOCAL_SCOPE = { mem: {}, fns: [] };
+  function sstore() { try { return window.sessionStorage || null; } catch (e) { return null; } }
+  var LOCAL_SCOPE_API = {
+    KEY: SCOPE_KEY,
+    get: function (section, def) {
+      var v = null;
+      try { var ss = sstore(), raw = ss ? ss.getItem(SCOPE_KEY) : null, o = raw ? JSON.parse(raw) : null; if (o && o.v === 1) v = o[section]; } catch (e) { v = null; }
+      if (v == null && Object.prototype.hasOwnProperty.call(LOCAL_SCOPE.mem, section)) v = LOCAL_SCOPE.mem[section];
+      return v === 15 || v === 30 ? v : def;
+    },
+    set: function (section, val) {
+      val = +val === 30 ? 30 : 15;
+      LOCAL_SCOPE.mem[section] = val;
+      try {
+        var ss = sstore();
+        if (ss) { var o = null; try { o = JSON.parse(ss.getItem(SCOPE_KEY) || 'null'); } catch (e) { o = null; } if (!o || o.v !== 1) o = { v: 1 }; o[section] = val; ss.setItem(SCOPE_KEY, JSON.stringify(o)); }
+      } catch (e) { /* kept in memory */ }
+      LOCAL_SCOPE.fns.slice().forEach(function (fn) { try { fn(section, val); } catch (e) { /* ignore */ } });
+      return val;
+    },
+    on: function (fn) { if (isFn(fn)) LOCAL_SCOPE.fns.push(fn); return function () { LOCAL_SCOPE.fns = LOCAL_SCOPE.fns.filter(function (f) { return f !== fn; }); }; }
+  };
+  function scopeApi() { var I0 = MCD.inst, s = I0 && I0.scope; return s && isFn(s.get) && isFn(s.set) ? s : LOCAL_SCOPE_API; }
+  function scopeGet() { var v = 15; try { v = scopeApi().get(ID, 15); } catch (e) { v = 15; } return +v === 30 ? 30 : 15; }
+  function scopeNow() { return st && st.f.km > 15 ? 30 : 15; }
+  /** Staff chose a scope (any switch, the slim rail, the ring, an action): stored, then applied. */
+  function setScope(v, o) {
+    v = +v === 30 ? 30 : 15;
+    /* applied first, then stored: the store's listener (below) then finds the view already there and stays quiet */
+    applyScope(v, o);
+    try { scopeApi().set(ID, v); } catch (e) { /* the view still changes */ }
+  }
+  function applyScope(v, o) {
+    if (!st) return;
+    syncScopes(v);
+    if (st.f.km === v) return;
+    setF({ km: v }, o);
+    if (v === 30) need30();
+    if (!(o && o.quiet)) announceScope();
+  }
+  function syncScopes(v) {
+    v = v || scopeNow();
+    scopeSwitches.forEach(function (s) { try { s.set(v); } catch (e) { /* ignore */ } });
+  }
+  /** "Cakupan 30 km. 1.234 sekolah tampil." (the symbols on the map) through the section's live region. */
+  function announceScope() {
+    if (!ui || !ui.live) return;
+    var n = V ? V.rows.length : 0;
+    ui.live.textContent = '';
+    var msg = 'Cakupan ' + scopeNow() + ' km. ' + count(n, nounOf()) + ' tampil.';
+    setTimeout(function () { if (ui && ui.live) ui.live.textContent = msg; }, 30);
+  }
+  /**
+   * One scope control (MCD.inst.scopeSwitch when INSTITUSI has it, else the same radiogroup here):
+   * div[role=radiogroup][aria-label="Cakupan jarak dari Mabes TNI"] with "15 km" and "30 km"; ← → (↑ ↓), Home, End.
+   */
+  function scopeCtl(o) {
+    o = o || {};
+    var I0 = MCD.inst, r = null;
+    if (I0 && isFn(I0.scopeSwitch)) {
+      try {
+        r = I0.scopeSwitch({ section: ID, value: scopeNow(), onChange: function (v) { setScope(v, { quiet: true }); }, vertical: !!o.vertical, wide: !!o.wide, label: o.label !== false,
+          hint: o.hint ? { id: 'sk-scope30', text: SCOPE30_HINT, at: 30 } : null,
+          announce: function (v) { return 'Cakupan ' + v + ' km. ' + count(V ? V.rows.length : 0, nounOf()) + ' tampil.'; } });
+      } catch (e) { r = null; }
+      var el0 = r && r.nodeType === 1 ? r : (r && r.el && r.el.nodeType === 1 ? r.el : null);
+      if (el0) {
+        var ms = el0.mcdScope || null;
+        var api0 = { el: el0, own: false, field: true,
+          set: function (v) { if (ms && isFn(ms.get) && ms.get() === v) return; if (isFn(el0.set)) { try { el0.set(v); } catch (e) { /* ignore */ } } },
+          status: function (text, so) { if (ms && isFn(ms.status)) { try { ms.status(text, so); } catch (e) { /* ignore */ } } } };
+        scopeSwitches.push(api0);
+        return api0;
+      }
+    }
+    var api = ownScope(o);
+    /* the same field as MCD.inst.scopeSwitch: visible label "Cakupan", the radiogroup, a status line, the 30 km hint */
+    var st0 = E('div', { class: 'sk-scope__st', hidden: true });
+    var hint = E('div', { class: 'sk-scope__hint' });
+    var field = E('div', { class: ['sk-scopefield', o.vertical ? 'is-vertical' : null] },
+      o.label === false || o.vertical ? null : E('span', { class: 'sk-ctl__l', aria: { hidden: 'true' }, text: 'Cakupan', title: SCOPE_TIP }), api.el, st0, hint);
+    var group = api.el, setGroup = api.set;
+    api.el = field;
+    api.field = true;
+    api.set = function (v) {
+      setGroup(v);
+      if (!o.hint) return;
+      clear(hint);
+      if (v === 30) { var hn = hintNode('sk-scope30', E('p', { class: 'sk-note', text: SCOPE30_HINT })); if (hn) hint.appendChild(hn); }
+    };
+    api.status = function (text, so) {
+      so = so || {};
+      clear(st0);
+      st0.hidden = !text;
+      st0.classList.toggle('is-error', !!so.retry);
+      if (!text) { group.removeAttribute('aria-busy'); return; }
+      st0.setAttribute('aria-live', 'polite');
+      st0.appendChild(E('p', { class: 'sk-load__t', text: so.retry ? String(text).replace(/\s*Coba lagi\.?\s*$/, '') : text }));
+      if (so.retry) st0.appendChild(btn('Coba lagi', 'reset', function () { so.retry(); }, 'btn--ghost btn--bar'));
+      if (so.busy) group.setAttribute('aria-busy', 'true'); else group.removeAttribute('aria-busy');
+    };
+    api.set(scopeNow());
+    return api;
+  }
+  function ownScope(o) {
+    var wrap = E('div', { class: ['scope', 'seg', 'sk-scope', o.vertical ? 'is-vertical' : null, o.cls], role: 'radiogroup', aria: { label: SCOPE_ARIA }, title: SCOPE_TIP });
+    var btns = SCOPES.map(function (v) {
+      var b = E('button', { type: 'button', class: 'seg__opt', role: 'radio', aria: { checked: 'false' }, attrs: { tabindex: '-1' }, text: v + ' km' });
+      b.addEventListener('click', function () { setScope(v); });
+      wrap.appendChild(b);
+      return b;
+    });
+    wrap.addEventListener('keydown', function (e) {
+      var k = e.key, i = btns.indexOf(document.activeElement);
+      if (i < 0) return;
+      var n = k === 'Home' ? 0 : k === 'End' ? btns.length - 1 : (k === 'ArrowRight' || k === 'ArrowDown') ? Math.min(btns.length - 1, i + 1) : (k === 'ArrowLeft' || k === 'ArrowUp') ? Math.max(0, i - 1) : -1;
+      if (n < 0) return;
+      e.preventDefault();
+      btns[n].focus();
+      setScope(SCOPES[n]);
+    });
+    var api = { el: wrap, own: true, set: function (v) { btns.forEach(function (b, i) { var on = SCOPES[i] === v; b.setAttribute('aria-checked', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; }); } };
+    api.set(scopeNow());
+    scopeSwitches.push(api);
+    return api;
+  }
+
+  /* ================================================== v6: lazy data (V6_SPEC §9.1) */
+
+  function need(name) {
+    if (!SC || !isFn(SC.lazy)) return Promise.resolve(null);
+    var p;
+    try { p = SC.lazy(name); } catch (e) { return Promise.resolve(null); }
+    return p.then(function (g) { return g; }, function () { return null; });
+  }
+  function need30() { return need('school-students'); }
+  function needTiers() { return need('institution-tiers'); }
+  function needContacts() { return need('school-contacts'); }
+  /** The scope or a jenis needs the 30 km file: SMK / MA on, or 30 km. */
+  function wants30() { var s = showNow(); return !!(st && (st.f.km > 15 || s.smk || s.ma)); }
+  /** Idle loads after the mount (§9.1): students at 2 s, kelas biaya at 2,5 s, contacts at 4 s; never in the mount frame. */
+  function scheduleLazy() {
+    lazyTimers.forEach(clearTimeout);
+    lazyTimers = [];
+    function idle(ms, fn) {
+      lazyTimers.push(setTimeout(function () {
+        if (!ctx) return;
+        var ric = window.requestIdleCallback;
+        if (isFn(ric)) { try { ric(function () { if (ctx) fn(); }, { timeout: 1500 }); return; } catch (e) { /* timer below */ } }
+        fn();
+      }, ms));
+    }
+    idle(2000, need30);
+    idle(2500, needTiers);
+    idle(4000, needContacts);
+  }
+
+  /* ================================================== v6: kelas biaya (V6_SPEC §4) */
+
+  function TD() { var T = window.MCD_INSTITUTION_TIERS; return T && Array.isArray(T.rows) && isFn(T.byId) && T.meta ? T : null; }
+  function tiersState() { return TD() ? 'ready' : (SC && isFn(SC.dataStatus) ? SC.dataStatus('institution-tiers') : 'error'); }
+  function rowId(i) { var A = SC && SC.students; return A && isFn(A.idOf) ? A.idOf(SC.idx, i) : null; }
+  function capWords(s) { s = String(s || '').trim(); if (!s) return ''; s = s.charAt(0).toUpperCase() + s.slice(1); return /[.!?]$/.test(s) ? s : s + '.'; }
+  /** The tier model of §4.1 from the file itself (MCD.inst.tierOf when INSTITUSI has it). */
+  function tierFallback(id) {
+    var T = TD(), r = T && id ? T.byId(id) : null, M0 = (T && T.meta) || {};
+    var none = { tier: null, label: 'Belum diketahui', level: 0, basis: null, basisWords: '', check: null, checkWords: '', fee: null, year: null, url: null, quote: null, fetched: null, note: null, source: null };
+    if (!r) return none;
+    var tm = (M0.tiers || []).filter(function (x) { return x.label === r.tier || x.id === String(r.tier).toLowerCase(); })[0];
+    if (!tm) return none;
+    var types = (M0.types && M0.types.sekolah) || {}, bw = '';
+    if (r.basis === 'biaya') bw = r.year ? 'Dari biaya resmi, ' + r.year : 'Dari biaya resmi (tahun tidak disebut)';
+    else if (r.basis === 'jenis') bw = 'Dari jenis sekolah: ' + (types[r.type] || r.type || '');
+    else if (r.basis === 'perkiraan') bw = 'Perkiraan dari jenis sekolah dan daya beli area' + (r.area ? ' (' + r.area + ')' : '');
+    return { tier: tm.id, label: tm.label, level: tm.level, basis: r.basis || null, basisWords: bw, check: r.check || null,
+      checkWords: capWords((M0.checkWords || {})[r.check]), fee: r.fee || null, year: r.year || null, url: r.url || null, quote: r.quote || null,
+      fetched: r.fetched || null, note: r.note || null, source: r.url ? 'situs resmi sekolah' : null };
+  }
+  var TIERC = { T: null, inst: null, m: new Map() };
+  /** tierOf a school row → {tier, label, level, basis, basisWords, …} or null while the file is not in (§4.2 loading). */
+  function tierOf(i) {
+    var T = TD(), I = SC && SC.idx;
+    if (!T || !I || i == null || i < 0 || i >= I.n) return null;
+    var I0 = MCD.inst && isFn(MCD.inst.tierOf) ? MCD.inst : null;
+    if (TIERC.T !== T || TIERC.inst !== I0 || TIERC.idx !== I) TIERC = { T: T, inst: I0, idx: I, m: new Map() };
+    if (TIERC.m.has(i)) return TIERC.m.get(i);
+    var id = rowId(i), t = null;
+    if (I0) { try { t = I0.tierOf(id, { kind: 'sekolah' }); } catch (e) { t = null; } }
+    if (!t || typeof t !== 'object') t = tierFallback(id);
+    if (t && t.tier && !t.label) t = Object.assign({}, t, { label: (TIERS.filter(function (x) { return x.id === t.tier; })[0] || {}).label || '' });
+    TIERC.m.set(i, t);
+    return t;
+  }
+  /** The filter key of a row: 'premium' … 'reguler', 'unknown' (Belum diketahui), or null while the file is not in. */
+  function tierKey(i) { var t = tierOf(i); return t ? (t.tier || 'unknown') : null; }
+  function tierLevel(i) { var t = tierOf(i); return t && t.tier ? (+t.level || 0) : 0; }
+  /** Four small bars (D6): the first `level` filled (fee or type) or outlined (perkiraan); no bars for level 0. */
+  function tierBarsEl(level, basis) {
+    var w = E('span', { class: ['sk-bars', basis === 'perkiraan' ? 'is-line' : 'is-fill'], aria: { hidden: 'true' } });
+    for (var k = 1; k <= 4; k++) w.appendChild(E('i', { class: k <= level ? 'is-on' : null }));
+    return w;
+  }
+  /** "Kelas biaya Atas, dari biaya resmi" chip (MCD.inst.tierChip when INSTITUSI has it). */
+  function tierChipEl(t) {
+    if (!t) return null;
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.tierChip)) { try { var n = I0.tierChip(t); if (n && n.nodeType === 1) return n; } catch (e) { /* own chip below */ } }
+    var lv = +t.level || 0, words = t.tier ? t.label : 'Belum diketahui';
+    var said = 'Kelas biaya ' + words + (t.basisWords ? ', ' + t.basisWords.charAt(0).toLowerCase() + t.basisWords.slice(1) : '');
+    return E('span', { class: 'sk-tier', title: said, aria: { label: said } }, lv ? tierBarsEl(lv, t.basis) : null, E('span', { text: words }));
+  }
+  /** "Atas · dari biaya resmi, 2026/2027" (fold preview). */
+  function tierPreview(t) {
+    if (!t) return tiersState() === 'error' ? 'belum tersedia' : 'memuat';
+    if (!t.tier) return 'Belum diketahui';
+    return t.label + (t.basisWords ? ' · ' + t.basisWords.charAt(0).toLowerCase() + t.basisWords.slice(1) : '');
+  }
+  function hostOf(url) { try { var u = new URL(String(url)); return /^https?:$/.test(u.protocol) ? u.hostname.replace(/^www\./, '') : ''; } catch (e) { return ''; } }
+  function safeHref(url) { try { var u = new URL(String(url)); return (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password && /\./.test(u.hostname) ? u.href : null; } catch (e) { return null; } }
+  /** An outside link that opens only on a click, in a new tab, without a referrer (§5.2 link rules). */
+  function extLink(href, text, title, cls) {
+    var h = safeHref(href);
+    if (!h) return null;
+    return E('a', { class: ['sk-ext', cls], href: h, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer', title: title || 'Buka di tab baru. Perlu internet.' },
+      E('span', { text: text }), icon('external'), E('span', { class: 'sr-only', text: ', terbuka di tab baru' }));
+  }
+  function dateWords(ymd0) { var f = fm(); try { return ymd0 ? f.date(ymd0) : ''; } catch (e) { return String(ymd0 || ''); } }
+  /** The "Kelas biaya" fold (§4.4): MCD.inst.tierBlock when INSTITUSI has it, else the same content here. */
+  function tierBlockFor(i) {
+    var id = rowId(i), t = tierOf(i), I0 = MCD.inst, el = null;
+    if (t && I0 && isFn(I0.tierBlock)) { try { el = I0.tierBlock(id, { kind: 'sekolah', veiled: veil() }); } catch (e) { el = null; } }
+    if (el && el.nodeType === 1) {
+      if (!el.getAttribute('data-fold')) el.setAttribute('data-fold', 'biaya');
+      if (!el.getAttribute('data-preview')) el.setAttribute('data-preview', tierPreview(t));
+      if (!el.getAttribute('data-open')) el.setAttribute('data-open', '0');
+      return el;
+    }
+    var kids = [], stt = tiersState();
+    if (!t) {
+      kids.push(E('p', { class: 'sk-note', text: stt === 'error' ? 'Kelas biaya belum tersedia.' : TIER_LOADING }));
+      if (stt === 'error') kids.push(btn('Coba lagi', 'reset', function () { needTiers(); }, 'btn--ghost btn--bar'));
+    } else if (!t.tier) {
+      kids.push(E('p', { class: 'sk-note', text: TIER_NONE }));
+    } else {
+      kids.push(E('p', { class: 'sk-dd-status' }, tierChipEl(t)));
+      if (t.basisWords) kids.push(E('p', { class: 'sk-tierblk__basis', text: t.basisWords }));
+      if (t.fee && t.fee.text) kids.push(kv('Biaya', t.fee.text));
+      if (t.quote) kids.push(E('p', { class: 'sk-tierblk__q', text: '“' + String(t.quote).slice(0, 160) + '”' }));
+      if (t.basis === 'biaya') {
+        if (t.fetched) kids.push(E('p', { class: 'sk-note', text: 'Sumber: situs resmi sekolah, dibaca ' + dateWords(t.fetched) }));
+        var h = hostOf(t.url);
+        var a = veil() ? null : extLink(t.url, 'Buka sumber biaya', 'Buka sumber biaya di tab baru (' + h + '). Perlu internet.', 'sk-tierblk__src');
+        if (a) kids.push(E('p', { class: 'sk-tierblk__link' }, a, h ? E('span', { class: 'sk-tierblk__host', text: h }) : null));
+      } else if (t.checkWords) kids.push(E('p', { class: 'sk-note', text: t.checkWords }));
+      if (t.note) kids.push(E('p', { class: 'sk-note', text: t.note }));
+    }
+    kids.push(E('p', { class: 'sk-note', text: TIER_LINE }));
+    return blk('Kelas biaya', kids, 'sk-dd--tier', { id: 'biaya', preview: tierPreview(t), open: false });
+  }
+
+  /* ================================================== v6: kontak & identitas (V6_SPEC §5) */
+
+  function CD() { var C = window.MCD_SCHOOL_CONTACTS; return C && Array.isArray(C.rows) && isFn(C.byNpsn) ? C : null; }
+  function contactsState() { return CD() ? 'ready' : (SC && isFn(SC.dataStatus) ? SC.dataStatus('school-contacts') : 'error'); }
+  /** The NPSN of a row: the app's own, else the one the 30 km file matched to an OpenStreetMap point (8 rows). */
+  function npsnOf(i) { var I = SC.idx; if (I && I.npsn[i]) return I.npsn[i]; var s = sInfo(i); return s && s.npsn ? String(s.npsn) : ''; }
+  var SRC_WORDS = { sekolahkita: 'Sekolah Kita (Dapodik)', referensi: 'Data Referensi Kemendikdasmen', 'sekolahkita, referensi': 'Sekolah Kita (Dapodik) dan Data Referensi Kemendikdasmen' };
+  function srcLine(code, fetched) { var w = SRC_WORDS[code]; return w ? w + (fetched ? ' · ' + dateWords(fetched) : '') : ''; }
+  /** Digits without an area code (no 0 or 62 in front): shown and copyable, never a tel: link (D18). */
+  function noAreaCode(num) { var d = String(num || '').replace(/[^\d]/g, ''); return !!d && !/^(0|62)/.test(d); }
+  function telHrefOf(C, p) {
+    if (!p || noAreaCode(p.number)) return null;
+    var h = null;
+    try { h = C && isFn(C.telHref) ? C.telHref(p) : null; } catch (e) { h = null; }
+    return h && /^tel:\+?\d{7,15}$/.test(h) ? h : null;
+  }
+  function mailOf(v) { var s = String(v || '').trim().toLowerCase(); return /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/.test(s) ? s : null; }
+  function copyBtn(text, aria, toastText) {
+    var b = E('button', { type: 'button', class: 'btn btn--ghost btn--bar sk-copy', aria: { label: aria }, title: aria }, icon('copy'), E('span', { text: 'Salin' }));
+    b.addEventListener('click', function () { copy(text).then(function () { if (ctx) ctx.toast(toastText); }, function () { if (ctx) ctx.toast('Fitur salin tidak tersedia di browser ini', 'warn'); }); });
+    return b;
+  }
+  function kvSrc(k, v, src) { var r = kv(k, v); if (src) r.appendChild(E('span', { class: 'sk-kv__src', text: src })); return r; }
+  function dapodikBadge(h) {
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.logo)) { try { var n = I0.logo('dapodik', { px: h || 24 }); if (n && n.nodeType === 1) return n; } catch (e) { /* own tile below */ } }
+    return E('span', { class: 'sk-srcbadge', title: 'Sumber data: Dapodik' }, E('img', { src: DAPODIK_LOGO, alt: DAPODIK_ALT, width: Math.round((h || 24) * 480 / 227), height: h || 24, decoding: 'async' }));
+  }
+  /** The section's own identity rows for the fold (jenjang, jenis, catatan data, yayasan TNI). */
+  function identityRows(i) {
+    var I = SC.idx, t = I.tni[i] >= 0 ? I.tniRows[I.tni[i]] : null, j = jenisOf(i), s = sInfo(i);
+    var np = npsnOf(i), pt = I.src[i] === 2 ? 'daftar yayasan TNI' : I.npsn[i] ? 'Dapodik' : 'OpenStreetMap / Overture · tanpa NPSN';
+    var rows = [
+      kv('Jenjang', JENIS_NAME[j] || 'SMA'),
+      kv('Jenis', E('span', {}, symLabel(i), I.inf[i] ? ' (tanpa NPSN)' : '')),
+      kv('Catatan data', (np && !I.npsn[i] ? 'NPSN ' + np + ' · ' : '') + 'Titik dari ' + pt)
+    ];
+    if (s && s.npsnMatched && s.note) rows.push(E('p', { class: 'sk-note', text: s.note }));
+    if (t) rows.push(kv('Yayasan TNI', E('span', { class: 'sk-tnirow' }, tniBadge(t), E('span', { text: [t.foundation, SC.config.matraFull[t.matra], t.npyp ? 'NPYP ' + t.npyp : null, t.accreditation ? 'Akreditasi ' + t.accreditation : null].filter(Boolean).join(' · ') }))));
+    return rows;
+  }
+  /** "(021) 840 1234 · NPSN 20100123" (fold preview); never a number while names are veiled. */
+  function contactPreview(i) {
+    var np = npsnOf(i), C = CD(), c = C && np ? C.byNpsn(np) : null;
+    var tel = !veil() && c && c.phone && c.phone[0] ? c.phone[0].number : '';
+    return [tel, np ? 'NPSN ' + np : 'tanpa NPSN'].filter(Boolean).join(' · ');
+  }
+  /** "Kontak & identitas" (§5.2, D14): MCD.inst.contactBlock when INSTITUSI has it, else the same rules here. */
+  function contactBlockFor(i) {
+    var id = rowId(i), I0 = MCD.inst, el = null;
+    if (I0 && isFn(I0.contactBlock)) {
+      try { el = I0.contactBlock(id, { veiled: veil(), toast: function (m) { if (ctx) ctx.toast(m); }, identity: identityRows(i), kind: 'sekolah' }); } catch (e) { el = null; }
+    }
+    if (el && el.nodeType === 1) {
+      if (!el.getAttribute('data-fold')) el.setAttribute('data-fold', 'kontak');
+      if (!el.getAttribute('data-preview')) el.setAttribute('data-preview', contactPreview(i));
+      if (!el.getAttribute('data-open')) el.setAttribute('data-open', '0');
+      return el;
+    }
+    return blk('Kontak & identitas', contactRows(i), 'sk-dd--kontak', { id: 'kontak', preview: contactPreview(i), open: false });
+  }
+  function contactRows(i) {
+    var np = npsnOf(i), kids = [], C = CD(), c = C && np ? C.byNpsn(np) : null, stt = contactsState();
+    var npsnRow = np ? kv('NPSN', E('span', { class: 'sk-kvv' }, E('span', { class: 'sk-mono', text: np }), copyBtn(np, 'Salin NPSN ' + np, 'NPSN disalin'))) : null;
+    if (!np) kids.push(E('p', { class: 'sk-note', text: 'Sekolah ini tidak memiliki NPSN, sehingga kontaknya tidak dapat dicari.' }));
+    else if (veil()) { kids.push(npsnRow); kids.push(E('p', { class: 'sk-note', text: 'Kontak disembunyikan saat nama disamarkan.' })); }
+    else if (!C) {
+      kids.push(npsnRow);
+      kids.push(E('p', { class: 'sk-note', text: stt === 'error' ? 'Kontak tidak dapat dimuat. Coba lagi.' : 'Memuat kontak…' }));
+      if (stt === 'error') kids.push(btn('Coba lagi', 'reset', function () { needContacts(); }, 'btn--ghost btn--bar'));
+    } else {
+      var phones = c && Array.isArray(c.phone) ? c.phone.filter(function (p) { var d = String(p && p.number || '').replace(/[^\d]/g, ''); return d.length >= 7 && d.length <= 15; }) : [];
+      var mail = c ? mailOf(c.email) : null, web = c && c.website ? String(c.website) : null, wl = null;
+      try { wl = c && isFn(C.webLink) ? C.webLink(c) : null; } catch (e) { wl = null; }
+      var fetched = c && c.fetched, srcs = (c && c.src) || {};
+      if (!phones.length && !mail && !web && !(c && c.webCheck === 'dibuang')) {
+        kids.push(E('p', { class: 'sk-note' }, 'Kontak sekolah belum tercatat di daftar resmi. ', extLink(REF_BASE + np, 'Lihat Data Referensi Kemendikdasmen', 'Buka Data Referensi Kemendikdasmen di tab baru. Perlu internet.')));
+        if (c && c.emailWhy) kids.push(E('p', { class: 'sk-note', text: 'E-mail di daftar resmi tampak milik pribadi, sehingga tidak ditampilkan.' }));
+      } else {
+        var tv = E('span', { class: 'sk-phones' });
+        phones.forEach(function (p) {
+          var href = telHrefOf(C, p), na = noAreaCode(p.number);
+          var line = E('span', { class: 'sk-phone' }, href ? E('a', { href: href, title: 'Hubungi melalui aplikasi telepon di perangkat ini.', text: p.number }) : E('span', { class: 'sk-mono', text: p.number }),
+            na ? E('span', { class: 'sk-mini-tag', title: 'Nomor ini tercatat tanpa kode area. Tambahkan kode area saat menelepon dari ponsel.', text: 'tanpa kode area' }) : null,
+            p.mobile ? E('span', { class: 'sk-mini-tag', title: 'Nomor seluler yang tercatat sebagai kontak lembaga di Dapodik.', text: 'seluler' }) : null,
+            copyBtn(p.number, 'Salin nomor telepon ' + p.number, 'Nomor telepon disalin'));
+          tv.appendChild(line);
+        });
+        kids.push(kvSrc('Telepon', phones.length ? tv : 'Telepon belum tercatat.', phones.length ? srcLine(srcs.phone, fetched) : ''));
+        kids.push(kvSrc('E-mail', mail ? E('span', { class: 'sk-kvv' }, E('a', { href: 'mailto:' + mail, title: 'Tulis e-mail dengan aplikasi e-mail di perangkat ini.', text: mail }), copyBtn(mail, 'Salin alamat e-mail ' + mail, 'Alamat e-mail disalin'))
+          : (c && c.emailWhy ? 'E-mail di daftar resmi tampak milik pribadi, sehingga tidak ditampilkan.' : 'E-mail belum tercatat.'), mail ? srcLine(srcs.email, fetched) : ''));
+        var wv;
+        if (c && c.webCheck === 'dibuang') wv = 'Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.';
+        else if (!web) wv = 'Situs resmi belum tercatat.';
+        else if (wl && safeHref(wl)) {
+          var hst = hostOf(wl), tt = 'Buka situs resmi di tab baru. Perlu internet.' + (c.webCheck === 'dialihkan' ? ' Situs ini terbuka di alamat lain milik lembaga yang sama.' : c.webCheck === 'belum' ? ' Alamat dari daftar resmi, belum diperiksa.' : '');
+          wv = E('span', { class: 'sk-kvv' }, extLink(wl, hst, tt, 'sk-web'), /^http:/i.test(wl) ? E('span', { class: 'sk-kv__src', text: 'Situs ini tidak menggunakan HTTPS.' }) : null);
+        } else wv = E('span', {}, E('span', { class: 'sk-mono', text: hostOf(web) || web }), E('span', { class: 'sk-kv__src', text: 'Situs resmi tidak dapat dibuka saat diperiksa.' }));
+        kids.push(kvSrc(/facebook\.com|instagram\.com|blogspot\.|wordpress\.com|sites\.google\.com/i.test(web || '') ? 'Halaman resmi' : 'Situs resmi', wv, web && c.webCheck !== 'dibuang' ? srcLine(srcs.website, fetched) : ''));
+      }
+      kids.push(npsnRow);
+      if (c && c.akreditasi) kids.push(kvSrc('Akreditasi', c.akreditasi, 'BAN-PDM, tercatat di Dapodik'));
+      if (c && c.address) kids.push(kvSrc('Alamat', c.address, srcLine(srcs.address, fetched)));
+      if (c && c.officialName) kids.push(kv('Nama di Dapodik', c.officialName));
+    }
+    identityRows(i).forEach(function (r) { kids.push(r); });
+    kids.push(E('p', { class: 'sk-srcline' }, dapodikBadge(24), E('span', { text: 'Data siswa: Dapodik' })));
+    if (np && !veil()) kids.push(E('p', { class: 'sk-reflink' }, extLink(REF_BASE + np, 'Lihat di Data Referensi Kemendikdasmen', 'Buka Data Referensi Kemendikdasmen di tab baru. Perlu internet.')));
+    return kids;
+  }
+  /** Institutional contacts of a row for the CSV (§5.2 exports): official values only, empty while names are veiled. */
+  function contactCsv(i) {
+    if (veil()) return {};
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.contactCsv)) {
+      try { var o = I0.contactCsv(rowId(i), { veiled: false }); if (o) return { telepon: o.telepon, seluler: o.telepon_seluler_resmi, email: o.email, situs: o.situs_resmi, sumber: o.sumber_kontak }; } catch (e) { /* own copy below */ }
+    }
+    var np = npsnOf(i), C = CD(), c = C && np ? C.byNpsn(np) : null;
+    if (!c) return {};
+    var phones = (c.phone || []).map(function (p) { return p && p.number; }).filter(Boolean);
+    var wl = null;
+    try { wl = isFn(C.webLink) ? C.webLink(c) : null; } catch (e) { wl = null; }
+    var srcs = c.src || {}, from = uniq([srcs.phone, srcs.email, srcs.website].filter(Boolean).map(function (s) { return SRC_WORDS[s] || s; }));
+    return { telepon: phones.join('; '), seluler: (c.phone || []).some(function (p) { return p && p.mobile; }) ? 'ya' : '', email: mailOf(c.email) || '',
+      situs: wl && safeHref(wl) ? safeHref(wl) : '', sumber: from.join('; ') + (from.length && c.fetched ? ' · ' + c.fetched : '') };
+  }
+  function tierCsv(i) {
+    var t = tierOf(i);
+    if (!t) return {};
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.tierCsv)) {
+      try { var o = I0.tierCsv(rowId(i)); if (o) return { kelas: o.kelas_biaya, dasar: o.dasar_kelas_biaya, biaya: o.biaya_resmi, tahun: o.tahun_biaya, sumber: o.sumber_biaya }; } catch (e) { /* own copy below */ }
+    }
+    return { kelas: t.tier ? t.label : 'Belum diketahui', dasar: t.basisWords || '', biaya: t.fee && t.fee.text ? t.fee.text : '', tahun: t.year || '', sumber: t.basis === 'biaya' && t.url ? (safeHref(t.url) || '') : '' };
   }
 
   function seg(label, opts, onPick, extra) {
@@ -667,17 +1156,17 @@
   }
   function defaults() {
     return {
-      f: { km: 15, type: 'all', tni: false, inf: false },
-      show: { ma: false, smk: false },
-      tab: 'list', kecAll: false, sort: 'schools', listSort: 'near', topSort: 'k17', q: '', sq: '',
+      f: { km: 15, type: 'all', tni: false, inf: false, tiers: null },
+      show: { sma: true, ma: false, smk: false },
+      tab: 'list', kecAll: false, kecSort: 'k17', sort: 'schools', listSort: 'near', topSort: 'k17', q: '', sq: '',
       mapShow: 'both', wide: false, workOpen: false, pipeStage: '', pipeProd: '',
       selKec: null, calc: defaultCalc(), calcTarget: ''
     };
   }
-  /** Filters live in memory only (UX_FIX_PLAN D14, C-07): the distance and the filters are never restored.
-      The MA / SMK point switches and the list order are display choices, remembered per browser. The switches
-      are off by default since 16 Oct 2026 (about 580 context points crowded the 366 SMA); a choice saved before
-      that (no showV) was the old default, so it is not restored. */
+  /** Filters live in memory only (UX_FIX_PLAN D14, C-07): the filters are never restored. The scope (15 or 30 km) is a
+      view setting kept per browser tab (V6_SPEC D4, mcd.scope.v1). The jenis switches (SMA · SMK · MA, v6 D5) and the
+      list order are display choices, remembered per browser; SMA alone is the default, and a choice saved before
+      16 Oct 2026 (no showV) was the old default, so it is not restored. At least one jenis stays on. */
   function loadState() {
     var s = defaults(), saved = sget(UI_KEY, null);
     if (saved && saved.v === 2) {
@@ -685,12 +1174,17 @@
       if (TABS.some(function (t) { return t.id === tab; })) s.tab = tab;
       if (/^(schools|students|nearest|score)$/.test(saved.sort)) s.sort = saved.sort;
       if (/^(both|dots|kec|tiles)$/.test(saved.mapShow)) s.mapShow = saved.mapShow === 'tiles' ? 'kec' : saved.mapShow;
-      if (/^(near|k17|stu)$/.test(saved.listSort)) s.listSort = saved.listSort;
+      if (/^(near|k17|stu|tier)$/.test(saved.listSort)) s.listSort = saved.listSort;
       if (/^(near|k17)$/.test(saved.topSort)) s.topSort = saved.topSort;
-      if (saved.showV === 2 && saved.show && typeof saved.show === 'object') s.show = { ma: saved.show.ma === true, smk: saved.show.smk === true };
+      if (/^(k17|n|stu)$/.test(saved.kecSort)) s.kecSort = saved.kecSort;
+      if (saved.showV === 2 && saved.show && typeof saved.show === 'object') {
+        s.show = { sma: saved.show.sma !== false, ma: saved.show.ma === true, smk: saved.show.smk === true };
+        if (!s.show.sma && !s.show.ma && !s.show.smk) s.show.sma = true;
+      }
       s.kecAll = !!saved.kecAll;
       s.wide = !!saved.wide;
     }
+    s.f.km = scopeGet();
     var c = sget(CALC_KEY, null);
     if (c && c.v === 2 && c.inputs) SC.config.calcFields.forEach(function (fd) { if (fd.k in c.inputs) s.calc[fd.k] = c.inputs[fd.k]; });
     if (c && c.v === 2 && typeof c.target === 'string') s.calcTarget = c.target;
@@ -702,60 +1196,72 @@
   function setF(patch, opts) {
     var f = Object.assign({}, st.f, patch || {});
     if (KMS.indexOf(f.km) < 0) f.km = 15;
+    if (f.tiers && (!Array.isArray(f.tiers) || f.tiers.length >= TIERS.length)) f.tiers = null;
     if (same(f, st.f)) return;
     var kmChanged = f.km !== st.f.km;
     st.f = f;
     saveUi();
     refresh(['filters']);
-    if (kmChanged) applyZones();
+    if (kmChanged) { applyZones(); syncScopes(); }
     if (((opts && opts.camera) || kmChanged) && !(opts && opts.camera === false)) cameraForKm();
   }
-  function resetF(opts) { setF({ km: 15, type: 'all', tni: false, inf: false }, opts); }
-  /** MA and SMK context points on the map (item 34): display only, never counted. */
+  /** "Hapus filter" (and filters:reset): the scope is a view setting, not a filter, so it stays (V6_SPEC D4). */
+  function resetF(opts) { setF({ type: 'all', tni: false, inf: false, tiers: null }, opts); }
+  /** The jenis shown on the map (SMA · SMK · MA, v6 D5): every number, list and chip follows; at least one stays on. */
   function setShow(patch) {
-    st.show = Object.assign({}, st.show, patch || {});
+    var next = Object.assign({}, st.show, patch || {});
+    if (!next.sma && !next.ma && !next.smk) return;
+    if (same(next, st.show)) return;
+    st.show = next;
     saveUi();
+    if (next.smk || next.ma) need30();
     refresh(['filters']);
   }
-  function noun() { return 'SMA'; }
-  function filtersActive() { var f = st.f; return f.km !== 15 || f.type !== 'all' || f.tni || f.inf; }
+  function noun() { return nounOf(); }
+  function filtersActive() { var f = st.f; return f.type !== 'all' || f.tni || f.inf || !!f.tiers; }
   function presetForKm(km) { return km === 30 ? 'ring30' : 'sma' + km; }
   function cameraForKm() { if (MCD.map && MCD.map.preset) MCD.map.preset(presetForKm(st.f.km)); }
-  /** Item 30 zones: the kecamatan focus up to 15 km; the 30 km circle when the list reaches 30 km. */
+  /** Zones (item 30, V6_SPEC §3.3): the 15 km kecamatan focus; at 30 km the kecamatan focus of the 30 km circle. */
   var zonesSet = false;
   function applyZones(reset) {
     var Mp = MCD.map;
     if (!Mp || !isFn(Mp.setZones)) return;
     var wide = !reset && st && st.f.km > 15;
     if (!wide && !zonesSet) return;
-    try { Mp.setZones(wide ? { mode: 'radius', km: st.f.km } : { mode: 'kecamatan15' }); zonesSet = wide; } catch (e) { /* the map keeps its zones */ }
+    try { Mp.setZones(wide ? { mode: 'kecamatan', km: 30 } : { mode: 'kecamatan15' }); zonesSet = wide; } catch (e) { /* the map keeps its zones */ }
   }
+  function tierWords(list) { return (list || []).map(function (id) { return (TIERS.filter(function (t) { return t.id === id; })[0] || {}).label; }).filter(Boolean).join(', '); }
 
-  /** Active filters as chips in the section header (ctx.filterChips, A-09) when the shell has them. */
+  /** Active filters as chips in the section header (ctx.filterChips, A-09) when the shell has them. No scope chip (D4). */
   function syncChips() {
     if (!ctx || !isFn(ctx.filterChips)) return;
     var f = st.f, chips = [];
-    if (f.km !== 15) chips.push({ label: 'Dalam ' + f.km + ' km', onClear: function () { setF({ km: 15 }); } });
     if (f.type !== 'all') chips.push({ label: f.type === 'private' ? 'Swasta' : 'Negeri', onClear: function () { setF({ type: 'all' }); } });
     if (f.tni) chips.push({ label: 'Yayasan TNI', onClear: function () { setF({ tni: false }); } });
     if (f.inf) chips.push({ label: 'Sekolah tanpa NPSN disembunyikan', onClear: function () { setF({ inf: false }); } });
+    if (f.tiers) chips.push({ label: 'Kelas biaya: ' + (tierWords(f.tiers) || 'tidak ada'), onClear: function () { setF({ tiers: null }); } });
     try { ctx.filterChips(chips, { onClearAll: resetF }); } catch (e) { /* the shell has its own guard */ }
   }
 
   /* ================================================================ SMA index */
 
-  /** SMA-level rows of the school index, nearest first, with their class (SMA / MA / other) and kecamatan. */
+  /**
+   * SMA-level rows of the school index, nearest first, with their class (SMA / MA / other) and kecamatan; v6: X.uni =
+   * every SMA, MA and SMK within 30 km of Mabes TNI, nearest first (the rows of data/school-students.js).
+   */
   function smaIdx(I) {
     if (X.idx === I && X.rows) { ensureKec(I); return X; }
-    var cls = new Uint8Array(I.n), rows = [], classify = typeof SC.smaClass === 'function' ? SC.smaClass : smaClass;
+    var cls = new Uint8Array(I.n), rows = [], uni = [], classify = typeof SC.smaClass === 'function' ? SC.smaClass : smaClass;
     for (var k = 0; k < I.n; k++) {
       var i = I.order[k];
+      if (I.jen[i] === 4) { if (I.dist[i] <= 30) uni.push(i); continue; }
       if (I.jen[i] !== 3) continue;
       var c = classify(I.name[i], !!I.npsn[i]);
       cls[i] = c === 0 ? 3 : c;
       rows.push(i);
+      if (c !== 0 && I.dist[i] <= 30) uni.push(i);
     }
-    X = { idx: I, cls: cls, rows: rows, kec: null, kel: null, clusters: {} };
+    X = { idx: I, cls: cls, rows: rows, uni: uni, kec: null, kel: null, clusters: {} };
     ensureKec(I);
     return X;
   }
@@ -764,7 +1270,7 @@
     var A = admin();
     if (!A) return;
     var kec = new Array(I.n), kel = new Array(I.n);
-    X.rows.forEach(function (i) {
+    X.rows.concat(X.uni.filter(function (i) { return I.jen[i] === 4; })).forEach(function (i) {
       var loc = null;
       try { loc = A.locate(I.lon[i], I.lat[i]); } catch (e) { loc = null; }
       kec[i] = loc ? loc.kecamatanId : null;
@@ -798,44 +1304,47 @@
   /* ================================================================ view model */
 
   /**
-   * computeView() → V: every figure the panels and the map need, for the current filters.
-   *   all     SMA within 30 km, minus hidden rows without NPSN and the duplicates of the student file
-   *   base    all ∩ type ∩ TNI filter (no distance)
-   *   rows    base within the distance: the map symbols, lists, KPIs and the yayasan board. Schools with
-   *           0 students ("kemungkinan tidak aktif") stay in rows with that flag but are never counted.
-   *   kec     per kecamatan, the rows within the distance only (so "Gunungputri · 24 SMA" at 15 km matches the
-   *           366 total, Ringkasan and the student file); nAll = every counted SMA of the kecamatan up to 30 km
-   *   ctxMa, ctxSmk  MA and SMK within the distance (type filter applied): context points only
-   * Students, 17+ and under 17 (siswa − siswa 17+, Tabungan SimPel, item 35(a)) follow the shared display rule
-   * of MCD.schools.students; under 17 is summed only over schools with both counts.
+   * computeView() → V: every figure the panels and the map need, for the current filters (v6: every jenis shown).
+   *   rows    the schools of the jenis shown within the scope, after the filters (status, yayasan TNI, tanpa NPSN,
+   *           kelas biaya): the map symbols, lists, KPIs and the yayasan board. "Kemungkinan tidak aktif" schools
+   *           (0 students, or probably closed outside the pilot) stay in rows with that flag but are never counted;
+   *           duplicate points are left out (V6_SPEC §1.1 display rule; the Labiomed sum rule in the adapter).
+   *   base    the same without the distance (the TNI card lists up to 30 km)
+   *   kec     per kecamatan, the rows within the scope only (so "Gunungputri · 24 SMA" at 15 km matches the 366 total,
+   *           Ringkasan and the student file); nAll = every counted school of the kecamatan up to 30 km
+   *   byJ     per jenis: {n, stu, stuN, k17, inactive, noData}; tierCounts: the kelas biaya chips (everything but that
+   *           filter); kpi.noData: counted schools without a student count; kpi.loading: of those, still loading
+   *   ctxMa, ctxSmk  (tests, v5 names) the MA and SMK rows shown within the scope
+   * Students, 17+ and under 17 (siswa − siswa 17+, Tabungan SimPel, item 35(a)) follow the display rule of
+   * MCD.schools.students; under 17 is summed only over schools with both counts.
    */
-  function newKecAgg(id) { return { id: id, n: 0, nAll: 0, priv: 0, pub: 0, unk: 0, tni: 0, stu: 0, stuN: 0, k17: 0, k17Est: 0, u17: 0, u17N: 0, inactive: 0, cust: 0, pros: 0, none: 0, rows: [] }; }
+  function newKecAgg(id) { return { id: id, n: 0, nAll: 0, priv: 0, pub: 0, unk: 0, tni: 0, stu: 0, stuN: 0, k17: 0, k17Est: 0, u17: 0, u17N: 0, inactive: 0, cust: 0, pros: 0, none: 0, nJ: { sma: 0, smk: 0, ma: 0 }, rows: [] }; }
+  function newJ() { return { n: 0, stu: 0, stuN: 0, k17: 0, inactive: 0, noData: 0, rows: 0 }; }
+  function tierSig() { return TD() ? 't' + (MCD.inst && isFn(MCD.inst.tierOf) ? 'i' : 'o') : tiersState(); }
   function computeView() {
     var I = SC.idx;
     if (!I) { V = null; return null; }
-    var Xs = smaIdx(I), f = st.f, rel = relNow(), S0 = SS(), show = st.show || { ma: false, smk: false };
+    var Xs = smaIdx(I), f = st.f, rel = relNow(), S0 = SS(), show = showNow();
     var relSig = rel ? [rel.version, rel.total, rel.demo ? 1 : 0, (MCD.data && MCD.data.version) || 0].join(':') : '0';
-    var sig = [I.n, f.km, f.type, f.tni ? 1 : 0, f.inf ? 1 : 0, show.ma ? 1 : 0, show.smk ? 1 : 0, relSig, Xs.kec ? 1 : 0, territory() ? 1 : 0, S0 ? S0.sig() : '-'].join('|');
+    var sig = [I.n, f.km, f.type, f.tni ? 1 : 0, f.inf ? 1 : 0, (f.tiers || []).join(','), show.sma !== false ? 1 : 0, show.ma ? 1 : 0, show.smk ? 1 : 0, relSig,
+      Xs.kec ? 1 : 0, territory() ? 1 : 0, S0 ? S0.sig() : '-', f30Ready() ? 1 : 0, f30State(), tierSig()].join('|');
     if (V && V.sig === sig) return V;
     var v = {
-      sig: sig, rel: rel, hasBank: !!rel, demo: !!(rel && relDemo()), km: f.km, students: !!S0,
+      sig: sig, rel: rel, hasBank: !!rel, demo: !!(rel && relDemo()), km: f.km, students: !!(S0 || f30Ready()), s30: f30Ready(), s30State: f30State(),
       status: new Uint8Array(I.n), rows: [], base: [], tni: [], allKm: 0, hidden: 0, ctxMa: [], ctxSmk: [],
       n: { 5: 0, 10: 0, 15: 0, 30: 0 }, nTni: { 5: 0, 10: 0, 15: 0, 30: 0 },
       mix: { priv: 0, tni: 0, pub: 0, unk: 0 },
-      kpi: { n: 0, priv: 0, pub: 0, unk: 0, tni: 0, stu: 0, stuN: 0, k17: 0, k17Off: 0, k17Est: 0, k17EstN: 0, u17: 0, u17N: 0, inactive: 0, cust: 0, pros: 0, none: 0 },
+      kpi: { n: 0, priv: 0, pub: 0, unk: 0, tni: 0, stu: 0, stuN: 0, k17: 0, k17Off: 0, k17Est: 0, k17EstN: 0, u17: 0, u17N: 0, inactive: 0, cust: 0, pros: 0, none: 0, noData: 0, loading: 0, fee: 0 },
+      byJ: { sma: newJ(), smk: newJ(), ma: newJ() }, tiers: !!TD(), tierCounts: { premium: 0, atas: 0, menengah: 0, reguler: 0, unknown: 0, biaya: 0 },
       kec: {}, ents: [], entMap: new Map()
     };
     function typeOk(i) { return !(f.type === 'private' && I.st[i] !== 1) && !(f.type === 'public' && I.st[i] !== 0); }
-    var aggs = v.entMap;
-    for (var k = 0; k < Xs.rows.length; k++) {
-      var i = Xs.rows[k], c = Xs.cls[i], d = I.dist[i];
-      if (c === 2) {
-        if (show.ma && !f.tni && d <= f.km && typeOk(i) && !(f.inf && I.inf[i])) v.ctxMa.push(i);
-        continue;
-      }
-      if (c === 3) continue;
+    var aggs = v.entMap, tierOn = f.tiers && v.tiers ? f.tiers : null;
+    for (var k = 0; k < Xs.uni.length; k++) {
+      var i = Xs.uni[k], j = jenisOf(i), d = I.dist[i];
+      if (j === 'sma' ? show.sma === false : !show[j]) continue;
       if (f.inf && I.inf[i]) continue;
-      var si = S0 ? sInfo(i) : null;
+      var si = sInfo(i);
       if (si && si.duplicate) { v.hidden++; continue; }
       var inact = !!(si && si.inactive);
       if (!inact) {
@@ -858,6 +1367,10 @@
       }
       if (!typeOk(i)) continue;
       if (f.tni && I.tni[i] < 0) continue;
+      /* kelas biaya: the chips count what every other filter lets through (a facet ignores its own dimension) */
+      var tk = v.tiers ? tierKey(i) : null;
+      if (inKm && !inact && tk) { v.tierCounts[tk]++; if (tierOf(i).basis === 'biaya') v.tierCounts.biaya++; }
+      if (tierOn && tk && tierOn.indexOf(tk) < 0) continue;
       v.base.push(i);
       var code = 1;
       if (rel) { var r = SC.relationOf(rel, I, i); code = r === 'active' ? 2 : r === 'prospect' ? 3 : 4; }
@@ -873,6 +1386,7 @@
           if (inact) ka.inactive++;
           else {
             ka.n++;
+            ka.nJ[j]++;
             if (I.st[i] === 1) ka.priv++; else if (I.st[i] === 0) ka.pub++; else ka.unk++;
             if (I.tni[i] >= 0) ka.tni++;
             if (stu >= 0) { ka.stu += stu; ka.stuN++; }
@@ -884,35 +1398,30 @@
       }
       if (!inKm) continue;
       v.rows.push(i);
-      var K = v.kpi;
-      if (inact) { K.inactive++; continue; }
-      K.n++;
+      if (j === 'ma') v.ctxMa.push(i); else if (j === 'smk') v.ctxSmk.push(i);
+      var K = v.kpi, BJ = v.byJ[j];
+      BJ.rows++;
+      if (inact) { K.inactive++; BJ.inactive++; continue; }
+      K.n++; BJ.n++;
       if (I.st[i] === 1) K.priv++; else if (I.st[i] === 0) K.pub++; else K.unk++;
       if (I.tni[i] >= 0) K.tni++;
-      if (stu >= 0) { K.stu += stu; K.stuN++; }
-      if (k17 != null) { K.k17 += k17; if (si.k17Official) K.k17Off += k17; else { K.k17Est += k17; K.k17EstN++; } }
+      if (stu >= 0) { K.stu += stu; K.stuN++; BJ.stu += stu; BJ.stuN++; }
+      else { K.noData++; BJ.noData++; if (si && (si.missing === 'loading' || si.missing === 'failed')) K.loading++; }
+      if (k17 != null) { K.k17 += k17; BJ.k17 += k17; if (si.k17Official) K.k17Off += k17; else { K.k17Est += k17; K.k17EstN++; } }
       if (u17 != null) { K.u17 += u17; K.u17N++; }
       if (code === 2) K.cust++; else if (code === 3) K.pros++; else if (code === 4) K.none++;
+      if (v.tiers) { var tt = tierOf(i); if (tt && tt.basis === 'biaya') K.fee++; }
       var e = I.ent[i];
       if (e >= 0) {
         var a = aggs.get(e);
         if (!a) { a = { e: e, n: 0, core: 0, jen: [0, 0, 0, 0, 0, 0, 0], students: 0, studentsN: 0, k17: 0, dmin: Infinity, dmax: 0, rows: [], anyActiveRow: false, cust: 0 }; aggs.set(e, a); }
-        a.n++; a.jen[3]++; a.rows.push(i);
+        a.n++; a.jen[I.jen[i]]++; a.rows.push(i);
         if (d <= 15) a.core++;
         if (stu >= 0) { a.students += stu; a.studentsN++; }
         if (k17 != null) a.k17 += k17;
         if (d < a.dmin) a.dmin = d;
         if (d > a.dmax) a.dmax = d;
         if (code === 2) { a.anyActiveRow = true; a.cust++; }
-      }
-    }
-    /* SMK context points: the school list is nearest first, so the scan stops at the distance */
-    if (show.smk && !f.tni) {
-      for (var q = 0; q < I.n; q++) {
-        var j = I.order[q];
-        if (I.dist[j] > f.km) break;
-        if (I.jen[j] !== 4 || (f.inf && I.inf[j]) || !typeOk(j)) continue;
-        v.ctxSmk.push(j);
       }
     }
     aggs.forEach(function (a) {
@@ -933,10 +1442,18 @@
       }
       v.ents.push(a);
     });
-    // kecamatan list: the 15 km focus (MCD.territory) with names, else every kecamatan with an SMA
-    var T = territory(), list = [];
-    if (T) T.kecamatan().forEach(function (k2) { var a = v.kec[k2.id] || newKecAgg(k2.id); a.name = k2.name; a.kota = k2.kotaName; a.dist = k2.distKm; a.focus = true; v.kec[k2.id] = a; list.push(a); });
-    else Object.keys(v.kec).forEach(function (id) { var a = v.kec[id]; a.name = kecName(id); a.kota = ''; list.push(a); });
+    /* kecamatan list: the 15 km focus (MCD.territory) with names; at 30 km also every other kecamatan with a school in
+       scope (names from data/admin-areas.js), each marked whether it is a pilot kecamatan (focus15) */
+    var T = territory(), list = [], seen = {}, A = admin();
+    if (T) T.kecamatan().forEach(function (k2) { var a = v.kec[k2.id] || newKecAgg(k2.id); a.name = k2.name; a.kota = k2.kotaName; a.dist = k2.distKm; a.focus = true; a.focus15 = (k2.in15 || 0) >= 0.5; v.kec[k2.id] = a; list.push(a); seen[k2.id] = 1; });
+    Object.keys(v.kec).forEach(function (id) {
+      if (seen[id]) return;
+      var a = v.kec[id];
+      if (T && f.km <= 15 && !a.n) return;
+      var rec = A && isFn(A.byId) ? A.byId(id) : null, kr = rec && rec.kota && isFn(A.byId) ? A.byId(rec.kota) : null;
+      a.name = rec ? rec.name : kecName(id); a.kota = kr ? kr.name : ''; a.dist = rec && isNum(rec.distKm) ? rec.distKm : null; a.focus15 = !!(rec && (rec.in15 || 0) >= 0.5);
+      list.push(a);
+    });
     list.forEach(function (a) { a.cov = rel && a.n ? a.cust / a.n : null; });
     list.sort(function (a, b) { return (b.n - a.n) || (a.name < b.name ? -1 : 1); });
     v.kecList = list;
@@ -1090,20 +1607,12 @@
     var theme = ms.theme === 'day' ? 'day' : 'night', Mx = symMod(), atlas = Mx ? Mx.atlas(theme) : null;
     var pos = function (i) { return [I.lon[i], I.lat[i]]; };
     var hset = hl.set;
-    var dataRows = drawOrder(), ctxRows = V.ctxMa.concat(V.ctxSmk);
+    var dataRows = drawOrder();
     var size = function (i) { return symPx(i, zq); };
     var inact = function (i) { var s = sInfo(i); return !!(s && s.inactive); };
-    /* school symbols (item 34): shape = jenis, colour = negeri / swasta, size = students, star = yayasan TNI */
+    /* school symbols (item 34; v6 D5: SMA, SMK and MA alike): shape = jenis, colour = negeri / swasta, size = students,
+       star = SMA yayasan TNI */
     if (atlas && D.IconLayer) {
-      if (ctxRows.length) {
-        out.base.push(new D.IconLayer({
-          id: 'schools-ctx-icons', data: ctxRows, iconAtlas: atlas.iconAtlas, iconMapping: atlas.iconMapping,
-          getIcon: function (i) { return Mx.iconKey(specOf(i)); }, getPosition: pos, getSize: size, sizeUnits: 'pixels',
-          getColor: function (i) { return [255, 255, 255, hset && !hset.has(i) ? 45 : 180]; },
-          updateTriggers: { getIcon: [V.sig, atlas.key], getSize: [V.sig, zq], getColor: [hl.key] },
-          pickable: true, autoHighlight: true, highlightColor: [255, 255, 255, 60], beforeId: K.beforeId, mcd: schoolMeta()
-        }));
-      }
       out.base.push(new D.IconLayer({
         id: 'schools-sma-icons', data: dataRows, iconAtlas: atlas.iconAtlas, iconMapping: atlas.iconMapping,
         getIcon: function (i) { return Mx.iconKey(specOf(i)); }, getPosition: pos, getSize: size, sizeUnits: 'pixels',
@@ -1113,12 +1622,12 @@
       }));
     } else {
       /* no canvas: plain dots in the same colours */
-      var C = Mx ? Mx.colours(theme) : { negeri: P.text1, swasta: P.gold, unknown: P.text3 || P.text1, ctx: P.text3 || P.text1 };
+      var C = Mx ? Mx.colours(theme) : { negeri: P.text1, swasta: P.gold, unknown: P.text3 || P.text1 };
       var fillOf = function (i) { var sp = specOf(i); return (sp && C[sp.tone]) || (I.st[i] === 0 ? C.negeri : C.swasta); };
       out.base.push(new D.ScatterplotLayer({
-        id: 'schools-sma-dots', data: ctxRows.concat(dataRows), getPosition: pos, radiusUnits: 'pixels', getRadius: function (i) { return size(i) / 2.4; },
+        id: 'schools-sma-dots', data: dataRows, getPosition: pos, radiusUnits: 'pixels', getRadius: function (i) { return size(i) / 2.4; },
         filled: true, stroked: true, lineWidthUnits: 'pixels', getLineWidth: 1,
-        getFillColor: function (i) { return rgba(fillOf(i), hset && !hset.has(i) ? 60 : jenisOf(i) !== 'sma' ? 180 : inact(i) ? 120 : 230); },
+        getFillColor: function (i) { return rgba(fillOf(i), hset && !hset.has(i) ? 60 : inact(i) ? 120 : 230); },
         getLineColor: rgba(P.canvas, 215), updateTriggers: { getFillColor: [V.sig, hl.key, theme], getRadius: [V.sig, zq] },
         pickable: true, autoHighlight: true, highlightColor: rgba(P.text1, 70), beforeId: K.beforeId, mcd: schoolMeta()
       }));
@@ -1134,6 +1643,22 @@
           updateTriggers: { getLineColor: [V.sig, hl.key, S.key], getRadius: [V.sig, zq] }, pickable: false, beforeId: K.beforeId
         }));
       }
+    }
+    /* kelas biaya (D6, §4.3): a "signal bars" badge at the symbol's top right while the filter is on or from zoom 14,
+       never at the default zoom otherwise; filled = fee or school type, outline = perkiraan; no badge = belum diketahui */
+    var TA = badgesOn(ms) && Mx && isFn(Mx.tierAtlas) ? Mx.tierAtlas(theme) : null;
+    if (TA && D.IconLayer) {
+      var badgeRows = dataRows.filter(function (i) { return tierLevel(i) > 0; });
+      var bpx = Math.round(Math.max(10, Math.min(15, 12 * (zq >= 15 ? 1.15 : zq <= 11 ? 0.9 : 1))));
+      /* in the base group, right above the symbols: the kecamatan chips, the selection ring and the names stay on top */
+      out.base.push(new D.IconLayer({
+        id: 'schools-tier-badges', data: badgeRows, iconAtlas: TA.iconAtlas, iconMapping: TA.iconMapping,
+        getIcon: function (i) { var t = tierOf(i); return Mx.tierKey(t.level, t.basis); }, getPosition: pos, getSize: bpx, sizeUnits: 'pixels',
+        getPixelOffset: function (i) { var s = size(i) / 2; return [Math.round(s * 0.7 + bpx * 0.45), -Math.round(s * 0.7 + bpx * 0.4)]; },
+        getColor: function (i) { return [255, 255, 255, hset && !hset.has(i) ? 60 : inact(i) ? 120 : 255]; },
+        updateTriggers: { getIcon: [V.sig, TA.key], getPixelOffset: [V.sig, zq], getColor: [hl.key, V.sig] },
+        pickable: false, beforeId: K.beforeId
+      }));
     }
     var tniRows = dataRows.filter(function (i) { return I.tni[i] >= 0; });
     var sel = MCD.state.get().selection, selRow = sel && sel.kind === 'smaSchool' ? +sel.id : -1;
@@ -1165,6 +1690,8 @@
     }
     return out;
   }
+  /** Kelas biaya badges show while the kelas biaya filter is on, or from zoom 14 (D6). */
+  function badgesOn(ms) { return !!(V && V.tiers && st && (st.f.tiers || (ms && isNum(ms.zoom) && ms.zoom >= TIER_ZOOM))); }
   function shortName(s) { s = String(s || ''); return s.length > 34 ? s.slice(0, 33) + '…' : s; }
   /** Greedy label placement in Web Mercator pixels at this zoom: highest priority first, no overlaps.
       (deck's CollisionFilterExtension hid every label in this deck build, so labels are decluttered here.) */
@@ -1206,7 +1733,7 @@
   function kecLabel(k) {
     var a = V && V.kec[k.id];
     if (!a || !a.n) return k.name;
-    return k.name + ' · ' + count(a.n, 'SMA');
+    return k.name + ' · ' + count(a.n, nounOf());
   }
 
   function tipSchool(i) {
@@ -1215,11 +1742,12 @@
     var f = fm(), t = I.tni[i] >= 0 ? I.tniRows[I.tni[i]] : null, lines = [], j = jenisOf(i);
     var Mx = symMod(), sp = specOf(i), e = I.ent[i] >= 0 ? I.ents[I.ent[i]] : null;
     var eyebrow = (t ? 'Yayasan TNI · ' + t.matra + ' · ' : '') + JENIS_WORD[j] + ' · ' + typeWord(I.st[i]) + (I.inf[i] ? ' · tanpa NPSN' : '');
-    if (j === 'sma' && V && V.hasBank) { var S = STATUS[codeOf(i)] || STATUS[1]; lines.push({ kind: 'body', text: S.label + (V.demo && codeOf(i) > 1 ? ' (data contoh)' : '') }); }
+    if (V && V.hasBank) { var S = STATUS[codeOf(i)] || STATUS[1]; lines.push({ kind: 'body', text: S.label + (V.demo && codeOf(i) > 1 ? ' (data contoh)' : '') }); }
     var who = e ? e.label : (I.yay[i] || (I.st[i] === 0 ? 'Sekolah negeri' : 'Yayasan tidak tercatat'));
     lines.push(Mx && sp ? { glyph: sp.glyph, rgb: Mx.rgb(sp.tone, uiTheme()), text: Mx.words(sp) + ' · ' + who } : { text: who });
-    if (j === 'sma') lines.push({ kind: 'body', text: studentsLine(i) });
-    else lines.push({ text: (j === 'ma' ? 'MA (madrasah aliyah)' : 'SMK') + ': titik pembanding, tidak dihitung' });
+    lines.push({ kind: 'body', text: studentsLine(i) });
+    var tt = tierOf(i);
+    if (tt && tt.tier) lines.push({ text: 'Kelas biaya ' + tt.label + (tt.basis === 'perkiraan' ? ' (perkiraan)' : '') });
     lines.push({ kind: 'meta', text: 'Jarak dari KCP · ' + distText(distOf(i)) });
     var kn = X.kec && X.kec[i] ? 'Kec. ' + kecName(X.kec[i]) + ' · ' : '';
     lines.push({ kind: 'meta', text: kn + f.km(I.dist[i]) + ' dari Mabes TNI' });
@@ -1228,20 +1756,21 @@
   }
   function tipKec(kid) {
     if (!kid || !V) return null;
-    var a = V.kec[kid], f = fm(), lines = [], k = kecIndex()[kid];
-    if (!a || !a.n) lines.push({ kind: 'body', text: 'Tidak ada SMA dalam ' + st.f.km + ' km di kecamatan ini dengan filter ini.' });
+    var a = V.kec[kid], f = fm(), lines = [], k = kecIndex()[kid], nn = nounOf();
+    if (!a || !a.n) lines.push({ kind: 'body', text: 'Tidak ada ' + nn + ' dalam ' + st.f.km + ' km di kecamatan ini dengan filter ini.' });
     else {
-      if (!V.hasBank) lines.push({ kind: 'body', text: count(a.n, 'SMA') + ' dalam ' + st.f.km + ' km: ' + f.int(a.priv) + ' swasta · ' + f.int(a.pub) + ' negeri' + (a.tni ? ' · ' + f.int(a.tni) + ' yayasan TNI' : '') });
+      if (!V.hasBank) lines.push({ kind: 'body', text: count(a.n, nn) + ' dalam ' + st.f.km + ' km: ' + f.int(a.priv) + ' swasta · ' + f.int(a.pub) + ' negeri' + (a.tni ? ' · ' + f.int(a.tni) + ' yayasan TNI' : '') });
       else {
         lines.push({ kind: 'body', text: f.int(a.cust) + ' nasabah Mandiri · ' + f.int(a.pros) + ' prospek · ' + f.int(a.none) + ' tanpa data' });
-        lines.push({ text: f.pct(a.cov, 0) + ' SMA-nya nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
+        lines.push({ text: f.pct(a.cov, 0) + ' ' + nn + '-nya nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
         var kt = kecThird(a);
         if (kt) lines.push({ text: kt });
       }
       if (V.students && a.stuN) lines.push({ text: count(a.stu, 'siswa') + ' · ' + (a.k17Est ? '± ' : '') + f.int(a.k17) + ' berusia 17+' + (a.u17N ? ' · ' + (a.k17Est ? '± ' : '') + f.int(a.u17) + ' di bawah 17' : '') });
     }
     lines.push({ kind: 'meta', text: 'Klik untuk melihat angkanya' });
-    return { eyebrow: ('Kecamatan' + (k && k.kotaName ? ' · ' + k.kotaName : '')).toUpperCase(), title: kecName(kid), lines: lines };
+    var kota = k && k.kotaName ? k.kotaName : (a && a.kota) || '';
+    return { eyebrow: ('Kecamatan' + (kota ? ' · ' + kota : '')).toUpperCase(), title: kecName(kid), lines: lines };
   }
 
   /** The calm kecamatan popup (MCD.territory.bind): SMA figures, students, the rank in words, one action and Google Maps. */
@@ -1249,19 +1778,21 @@
     var a = V && V.kec[kid], f = fm(), k = kecIndex()[kid];
     if (!V) return {};
     var n = a ? a.n : 0, unknown = 'Belum diketahui';
-    var rows = [{ label: noun() + ' dalam ' + st.f.km + ' km', value: f.int(n), tone: V.hasBank ? null : 'potential' }];
+    var rows = [{ label: Noun() + ' dalam ' + st.f.km + ' km', value: f.int(n), tone: V.hasBank ? null : 'potential' }];
     if (a && a.nAll > n) rows.push({ label: 'Semua ' + noun() + ' di kecamatan ini', value: f.int(a.nAll) });
     if (V.students) {
       rows.push({ label: 'Siswa', value: a && a.stuN ? f.int(a.stu) : '—' });
       rows.push({ label: K17_LABEL, value: a && a.stuN ? (a.k17Est ? '± ' : '') + f.int(a.k17) : '—' });
       rows.push({ label: U17_LABEL, value: a && a.u17N ? (a.k17Est ? '± ' : '') + f.int(a.u17) : '—' });
     }
-    rows.push({ label: 'SMA nasabah Mandiri', value: V.hasBank ? f.int(a ? a.cust : 0) : unknown, tone: 'ok' });
+    rows.push({ label: Noun() + ' nasabah Mandiri', value: V.hasBank ? f.int(a ? a.cust : 0) : unknown, tone: 'ok' });
     rows.push({ label: 'Prospek, belum nasabah', value: V.hasBank ? f.int(a ? a.pros : 0) : unknown, tone: 'bad' });
-    rows.push({ label: 'SMA yayasan TNI', value: f.int(a ? a.tni : 0) });
-    rows.push({ label: 'Jarak dari Mabes TNI', value: k && isNum(k.distKm) ? f.km(k.distKm) : '—' });
-    var big = V.hasBank && a && a.n ? { value: f.pct(a.cov, 0), caption: 'SMA nasabah Mandiri' }
-      : (V.students && a && a.stuN ? { value: (a.k17Est ? '± ' : '') + f.int(a.k17), caption: K17_LABEL } : { value: f.int(n), caption: noun() + (V.hasBank ? '' : ' · file sekolah belum diimpor') });
+    rows.push({ label: Noun() + ' yayasan TNI', value: f.int(a ? a.tni : 0) });
+    var kd = k && isNum(k.distKm) ? k.distKm : (a && isNum(a.dist) ? a.dist : null);
+    rows.push({ label: 'Jarak dari Mabes TNI', value: kd != null ? f.km(kd) : '—' });
+    if (a && a.n && !onlySma()) rows.splice(1, 0, { label: 'Menurut jenis', value: splitWords({ sma: { n: a.nJ.sma }, smk: { n: a.nJ.smk }, ma: { n: a.nJ.ma } }) });
+    var big = V.hasBank && a && a.n ? { value: f.pct(a.cov, 0), caption: Noun() + ' nasabah Mandiri' }
+      : (V.students && a && a.stuN ? { value: (a.k17Est ? '± ' : '') + f.int(a.k17), caption: K17_LABEL } : { value: f.int(n), caption: Noun() + (V.hasBank ? '' : ' · file sekolah belum diimpor') });
     var chip = V.hasBank ? (a && a.n ? { tone: BAND_TONE[a.band3 || 'noData'], text: kecThird(a) || THIRD.noData } : null)
       : { tone: 'none', text: SHARE_HINT };
     /* v5 (item 43): the callout's brief (MCD.windows.callout through MCD.territory); the older popup reads rows, big and chip */
@@ -1276,21 +1807,23 @@
    */
   function kecBrief(kid) {
     if (!V) return null;
-    var a = V.kec[kid], f = fm(), km = st.f.km, nums = [];
+    var a = V.kec[kid], f = fm(), km = st.f.km, nums = [], nn = nounOf();
     var k17v = V.students && a && a.stuN ? (a.k17Est ? '± ' : '') + f.int(a.k17) : null;
-    if (V.hasBank && a && a.n) nums.push({ label: 'SMA nasabah Mandiri', value: f.pct(a.cov, 0), big: true, tone: BAND_TONE[a.band3 || 'noData'], title: f.int(a.cust) + ' dari ' + count(a.n, 'SMA') + ' nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
+    if (V.hasBank && a && a.n) nums.push({ label: Noun() + ' nasabah Mandiri', value: f.pct(a.cov, 0), big: true, tone: BAND_TONE[a.band3 || 'noData'], title: f.int(a.cust) + ' dari ' + count(a.n, nn) + ' nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
     else if (k17v) nums.push({ label: 'Siswa 17+', value: k17v, big: true, title: K17_LABEL + (a.k17Est ? ', sebagian perkiraan' : '') });
-    nums.push({ label: 'SMA dalam ' + km + ' km', value: f.int(a ? a.n : 0) });
+    nums.push({ label: Noun() + ' dalam ' + km + ' km', value: f.int(a ? a.n : 0), title: a && a.n && !onlySma() ? splitWords({ sma: { n: a.nJ.sma }, smk: { n: a.nJ.smk }, ma: { n: a.nJ.ma } }) : null });
     if (V.hasBank) nums.push({ label: 'Siswa 17+', value: k17v || '—', title: K17_LABEL });
     else nums.push({ label: 'Siswa', value: a && a.stuN ? f.int(a.stu) : '—' });
     /* the chip names the third only ("Sepertiga tertinggi"); the rank in words is its title (a chip never wraps) */
     var chips = V.hasBank && a && a.n ? [{ text: THIRD[a.band3 || 'noData'] || THIRD.noData, tone: BAND_TONE[a.band3 || 'noData'], title: kecThird(a) || THIRD.noData }] : [];
     return {
       numbers: nums.slice(0, 3), chips: chips,
-      primary: { label: 'Lihat SMA di kecamatan ini', run: function () { openKec(kid); } },
+      primary: { label: listLabel(), run: function () { openKec(kid); } },
       note: V.hasBank ? null : { text: SHARE_HINT, tone: 'none', hintId: 'sk-import-share' }
     };
   }
+  /** "Lihat SMA di kecamatan ini" while only SMA is on, "Lihat sekolah di kecamatan ini" otherwise (V6_SPEC §3.2). */
+  function listLabel() { return onlySma() ? 'Lihat SMA di kecamatan ini' : 'Lihat sekolah di kecamatan ini'; }
   /** Where a kecamatan sits for the callout and the away rule: its bounding box and its label point. */
   function kecAnchor(kid) {
     var T = territory(), A = admin(), b = null, rec = null;
@@ -1311,18 +1844,37 @@
   /** Legend counts under the panel's display rule (MCD.schools.students): the "kemungkinan tidak aktif" schools get
       their own faded row, so negeri + swasta + TNI + jenis belum diketahui = the SMA counted on the panel (V.kpi.n). */
   function legendCounts() {
-    var I = SC.idx, c = { negeri: 0, swasta: 0, tni: 0, unknown: 0, inactive: 0 };
+    var I = SC.idx, c = { negeri: 0, swasta: 0, tni: 0, tniStar: 0, unknown: 0, inactive: 0, jenis: {}, split: {} };
+    var st3 = { sma: [0, 0, 0], smk: [0, 0, 0], ma: [0, 0, 0] };
     V.rows.forEach(function (i) {
-      var s = sInfo(i);
-      if (s && s.inactive) c.inactive++;
-      else if (I.tni[i] >= 0) c.tni++;
+      var s = sInfo(i), j = jenisOf(i);
+      if (s && s.inactive) { c.inactive++; return; }
+      if (I.tni[i] >= 0) { c.tni++; if (j === 'sma') c.tniStar++; }
       else if (I.st[i] === 0) c.negeri++;
       else if (I.st[i] === 1) c.swasta++;
       else c.unknown++;
+      st3[j][I.st[i] === 0 ? 0 : I.st[i] === 1 ? 1 : 2]++;
+    });
+    /* one legend row per jenis shown: its counted symbols (the list counts), the split by status in its title */
+    shownJenis().forEach(function (j) {
+      c.jenis[j] = V.byJ[j].n;
+      c.split[j] = fm().int(st3[j][0]) + ' negeri · ' + fm().int(st3[j][1]) + ' swasta' + (st3[j][2] ? ' · ' + fm().int(st3[j][2]) + ' belum diketahui' : '');
     });
     c.ma = V.ctxMa.length; c.smk = V.ctxSmk.length;
     c.showMa = !!st.show.ma && c.ma > 0; c.showSmk = !!st.show.smk && c.smk > 0;
     return c;
+  }
+  /** Legend group "Kelas biaya" (§4.3, two rows): MCD.inst.tierLegendRows when INSTITUSI has it. */
+  function tierLegendRows(theme) {
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.tierLegendRows)) {
+      try { var r = I0.tierLegendRows(theme, { kind: 'sekolah' }); if (Array.isArray(r) && r.length && r.every(function (x) { return x && !x.nodeType && x.label; })) return r; } catch (e) { /* own rows below */ }
+    }
+    var Mx = symMod(), strip = Mx && isFn(Mx.tierStrip) ? Mx.tierStrip(theme) : null;
+    return [
+      strip ? { img: strip, imgKey: 'sk|tier|' + theme, size: 18, label: 'Reguler · Menengah · Atas · Premium' } : { glyph: 'none', label: 'Batang 1 sampai 4: Reguler · Menengah · Atas · Premium' },
+      { glyph: 'none', label: TIER_LEGEND_2 }
+    ];
   }
   function legend(derived, ms) {
     if (!V || !ms || !ms.kit) return [];
@@ -1334,6 +1886,7 @@
         var L = Mx.legend(theme, legendCounts());
         groups.push({ id: 'schools-sym', title: 'Sekolah dalam ' + st.f.km + ' km', rows: L.rows, note: L.note });
       }
+      if (badgesOn(ms)) groups.push({ id: 'schools-tier', title: 'Kelas biaya', rows: tierLegendRows(theme) });
       if (V.hasBank) {
         groups.push({ id: 'schools-sma', title: 'Status Mandiri' + (V.demo ? ' (data contoh)' : ''), rows: [
           { glyph: 'ring', rgb: S.ok, label: 'Lingkar hijau: nasabah Mandiri', count: k.cust },
@@ -1346,7 +1899,7 @@
       /* the calm kecamatan map (COPY_STYLE item 23): no fills, so no fill swatches. Chips, dots and lines in words. */
       var b = V.terr.bands, brows = [], rk = V.rank && V.rank.applied ? V.rank : null;
       if (!V.hasBank) {
-        groups.push({ id: 'schools-kec', title: 'Label kecamatan', rows: [{ glyph: 'chip', label: 'Nama kecamatan · jumlah SMA' }],
+        groups.push({ id: 'schools-kec', title: 'Label kecamatan', rows: [{ glyph: 'chip', label: 'Nama kecamatan · jumlah ' + nounOf() }],
           note: 'Setelah file sekolah diimpor, setiap label mendapat titik warna porsi nasabah.' });
       } else {
         if (rk) {
@@ -1359,7 +1912,8 @@
           brows.push({ glyph: 'circle', rgb: S.bad, label: 'Titik merah: di bawah ' + Math.round(b.mid * 100) + '%. Porsi masih hampir sama, sehingga berlaku batas tetap.' });
         }
         brows.push({ glyph: 'circle', rgb: S.none, label: rk ? 'Tanpa titik: tidak dinilai atau tidak ada SMA' : 'Tanpa titik: tidak ada SMA' });
-        groups.push({ id: 'schools-kec', title: rk ? 'Titik pada label: porsi SMA nasabah Mandiri, dibandingkan antarkecamatan' : 'Titik pada label: porsi SMA nasabah Mandiri', rows: brows });
+        groups.push({ id: 'schools-kec', title: !onlySma() ? (rk ? 'Titik pada label: porsi sekolah nasabah Mandiri, dibandingkan antarkecamatan' : 'Titik pada label: porsi sekolah nasabah Mandiri')
+          : rk ? 'Titik pada label: porsi SMA nasabah Mandiri, dibandingkan antarkecamatan' : 'Titik pada label: porsi SMA nasabah Mandiri', rows: brows });
       }
       var T = MCD.territory, lines = T && isFn(T.legendGroups) ? (T.legendGroups({ ms: ms, stats: V.terr }) || []).filter(function (g) { return g.id === 'territory-lines'; })[0] : null;
       if (lines) groups.push(lines);
@@ -1370,7 +1924,7 @@
   function telemetry() {
     if (!V) return SC && SC.loading ? 'MEMUAT DATA SEKOLAH 1,6 MB' : '';
     var f = fm();
-    return f.int(V.kpi.n) + ' SMA DALAM ' + st.f.km + ' KM · ' + f.int(V.kpi.tni) + ' YAYASAN TNI' + (V.students && V.kpi.stuN ? ' · ' + f.int(V.kpi.k17) + ' SISWA 17+' : '') + (V.hasBank ? ' · ' + f.int(V.kpi.cust) + ' NASABAH MANDIRI' : '');
+    return f.int(V.kpi.n) + ' ' + nounOf().toUpperCase() + ' DALAM ' + st.f.km + ' KM · ' + f.int(V.kpi.tni) + ' YAYASAN TNI' + (V.students && V.kpi.stuN ? ' · ' + f.int(V.kpi.k17) + ' SISWA 17+' : '') + (V.hasBank ? ' · ' + f.int(V.kpi.cust) + ' NASABAH MANDIRI' : '');
   }
 
   function registerMap() {
@@ -1380,8 +1934,9 @@
     MCD.map.registerPosture('schools', {
       imagery: 'full', camera: presetForKm(st.f.km), rings: 'schools', layerSet: 'schools', deck: true, buildings: 'off',
       attribution: ATTRIBUTION,
-      onRingClick: function (km) { var k = KMS.filter(function (x) { return x >= km - 0.01; })[0] || 30; setF({ km: k }); },
-      ringHint: 'Klik untuk menampilkan SMA sampai jarak ini dari Mabes TNI',
+      /* v6 (D3): a ring click sets the scope, 15 km for the inner rings, else 30 km */
+      onRingClick: function (km) { setScope(km <= 15.01 ? 15 : 30); },
+      ringHint: 'Klik untuk memilih cakupan 15 km atau 30 km dari Mabes TNI',
       telemetry: telemetry
     });
     MCD.map.registerLegend('schools', legend);
@@ -1404,7 +1959,7 @@
         /* v5: the callout's "Detail" runs the action {id: 'detail'} (the kecamatan card with its numbers first); the
            older popup has no "Detail", so the action is offered only with MCD.windows */
         actions: function (kid) {
-          var out = [{ label: 'Lihat SMA di kecamatan ini', primary: true, run: function () { openKec(kid); } }];
+          var out = [{ label: listLabel(), primary: true, run: function () { openKec(kid); } }];
           if (WS()) out.push({ id: 'detail', label: 'Detail', run: function () { openKecNums(kid); } });
           return out;
         },
@@ -1443,17 +1998,176 @@
 
   /* ================================================================ Sederhana */
 
+  /* ================================================== v6 controls: scope, Jenis, "Filter lain" (V6_SPEC §2, §3, §4.2) */
+
+  /** "Jenis: SMA · SMK · MA": three pressed chips; the last one on cannot be turned off (its title says why). */
+  function jenisCtl() {
+    var wrap = E('div', { class: 'sk-chips sk-jenis', role: 'group', aria: { label: 'Jenis sekolah' }, title: JENIS_TIP });
+    var tips = { sma: 'SMA: sekolah menengah atas.', smk: 'SMK adalah sekolah menengah kejuruan.', ma: 'MA adalah madrasah aliyah di bawah Kementerian Agama.' };
+    var btns = JENIS_ORDER.map(function (j) {
+      var b = E('button', { type: 'button', class: 'chip sk-chip sk-chip--jenis', aria: { pressed: 'false' }, attrs: { 'data-jenis': j } }, E('span', { class: 'sk-chip__t', text: JENIS_WORD[j] }));
+      b.addEventListener('click', function () {
+        var on = shownJenis();
+        if (on.length === 1 && on[0] === j) { if (ctx) ctx.toast(JENIS_LAST, null); return; }
+        var patch = {};
+        patch[j] = on.indexOf(j) < 0;
+        setShow(patch);
+      });
+      wrap.appendChild(b);
+      return { j: j, b: b, tip: tips[j] };
+    });
+    return {
+      el: wrap,
+      set: function () {
+        var on = shownJenis();
+        btns.forEach(function (x) {
+          var p = on.indexOf(x.j) >= 0, last = p && on.length === 1;
+          x.b.setAttribute('aria-pressed', p ? 'true' : 'false');
+          x.b.title = last ? JENIS_LAST : x.tip;
+        });
+      }
+    };
+  }
+  /** Kelas biaya chips (§4.2): Premium · Atas · Menengah · Reguler · Belum diketahui with their counts in scope; disabled
+      while the file loads, hidden with a "Coba lagi" line when it failed; the entry line and the "?" under them. */
+  function tierCtl() {
+    /* MCD.inst.tierFilter (INSTITUSI lane) when present: the same chips, line and "?" as Kampus */
+    var I0 = MCD.inst, ids = TIERS.map(function (t) { return t.id; });
+    if (I0 && isFn(I0.tierFilter)) {
+      var el0 = null;
+      try {
+        el0 = I0.tierFilter({ kind: 'sekolah', counts: V && V.tiers ? V.tierCounts : null, value: st.f.tiers || ids,
+          onChange: function (v) { setF({ tiers: Array.isArray(v) && v.length < ids.length ? v.slice() : null }); },
+          onRetry: function () { needTiers(); }, onLoad: function () { V = null; if (ctx) refresh(['tiers']); } });
+      } catch (e) { el0 = null; }
+      if (el0 && el0.nodeType === 1 && el0.mcdTier && isFn(el0.mcdTier.update)) {
+        return { el: el0, shared: true, set: function () {
+          var stt = tiersState();
+          try { el0.mcdTier.update({ counts: V && V.tiers ? V.tierCounts : null, value: st.f.tiers || ids, state: TD() ? 'ready' : stt === 'error' ? 'error' : 'loading' }); } catch (e) { /* ignore */ }
+        } };
+      }
+    }
+    var c = {};
+    c.chips = E('div', { class: 'sk-chips sk-tiers', role: 'group', aria: { label: 'Kelas biaya' } });
+    c.btns = TIERS.map(function (t) {
+      var n = E('span', { class: 'chip__count' });
+      var b = E('button', { type: 'button', class: 'chip sk-chip sk-chip--tier', aria: { pressed: 'true' }, attrs: { 'data-tier': t.id } },
+        t.level ? tierBarsEl(t.level, 'biaya') : null, E('span', { class: 'sk-chip__t', text: t.label }), n);
+      b.addEventListener('click', function () { toggleTier(t.id); });
+      c.chips.appendChild(b);
+      return { t: t, b: b, n: n };
+    });
+    c.state = E('p', { class: 'sk-fg__note sk-tierstate', aria: { live: 'polite' } });
+    c.retry = btn('Coba lagi', 'reset', function () { needTiers(); }, 'btn--ghost btn--bar sk-tierretry');
+    c.line = E('p', { class: 'sk-fg__note', text: TIER_LINE });
+    var help = E('button', { type: 'button', class: 'tipbtn sk-help', title: 'Arti kelas biaya', aria: { label: 'Arti kelas biaya', haspopup: 'dialog' } }, E('span', { aria: { hidden: 'true' }, text: '?' }));
+    help.addEventListener('click', function () { needTiers().then(function () { openTierHelp(); }); });
+    c.el = E('div', { class: 'sk-fg sk-fg--tier' }, E('div', { class: 'sk-fg__head' }, E('p', { class: 'sk-fg__l', text: 'Kelas biaya' }), help), c.chips, c.state, c.retry, c.line);
+    c.set = function () {
+      var stt = tiersState(), on = st.f.tiers, counts = V && V.tiers ? V.tierCounts : null;
+      c.chips.hidden = stt === 'error';
+      c.retry.hidden = stt !== 'error';
+      c.line.hidden = stt === 'error';
+      c.state.hidden = stt === 'ready';
+      c.state.textContent = stt === 'error' ? TIER_FAILED : stt === 'ready' ? '' : TIER_LOADING;
+      c.btns.forEach(function (x) {
+        var p = !on || on.indexOf(x.t.id) >= 0;
+        x.b.setAttribute('aria-pressed', p ? 'true' : 'false');
+        x.b.disabled = stt !== 'ready';
+        x.n.textContent = counts ? fm().int(counts[x.t.id] || 0) : '';
+        x.b.title = x.t.id === 'unknown' ? 'Sekolah tanpa data biaya atau status: belum diketahui' : 'Kelas biaya ' + x.t.label;
+      });
+    };
+    return c;
+  }
+  function toggleTier(id) {
+    if (tiersState() !== 'ready') { needTiers(); return; }
+    var cur = st.f.tiers ? st.f.tiers.slice() : TIERS.map(function (t) { return t.id; });
+    var k = cur.indexOf(id);
+    if (k >= 0) cur.splice(k, 1); else cur.push(id);
+    setF({ tiers: cur.length >= TIERS.length ? null : cur });
+  }
+  /** A quiet fold: "Filter lain (2)" opens its body (the phone panel and Sederhana keep it folded, §2). */
+  function foldBox(title, kids, open) {
+    var body = E('div', { class: 'sk-more__body' }, kids);
+    var n = E('span', { class: 'sk-more__n' });
+    var b = E('button', { type: 'button', class: 'sk-more__btn', aria: { expanded: open ? 'true' : 'false' } }, E('span', { text: title }), n, icon('chev-r', 'sk-more__chev'));
+    body.hidden = !open;
+    b.addEventListener('click', function () { var on = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', on ? 'true' : 'false'); body.hidden = !on; });
+    return { el: E('section', { class: 'sk-more' }, b, body), body: body, set: function (count0) { n.textContent = count0 ? ' (' + count0 + ')' : ''; } };
+  }
+  function activeFilterCount() { var f = st.f; return (f.type !== 'all' ? 1 : 0) + (f.tni ? 1 : 0) + (f.inf ? 1 : 0) + (f.tiers ? 1 : 0); }
+  /**
+   * The controls of the guide (Sederhana, phones) and the Detail rail: "Cakupan" (the scope switch, first control) with
+   * its status line, "Jenis" chips, then "Filter lain" (Status, Kelas biaya, Tanpa NPSN, Hapus filter).
+   */
+  function buildCtl(where) {
+    var c = { where: where };
+    c.scope = scopeCtl({ cls: where === 'ov' ? 'seg--big' : null, hint: true, wide: where === 'ov' });
+    c.jenis = jenisCtl();
+    c.type = seg('Status', [{ v: 'all', label: 'Semua' }, { v: 'private', label: 'Swasta' }, { v: 'public', label: 'Negeri' }], function (v) { setF({ type: v }); });
+    c.tier = tierCtl();
+    c.inf = toggle('Sembunyikan sekolah tanpa NPSN', function (on) { setF({ inf: on }); }, { title: 'Sekolah yang hanya ada di OpenStreetMap atau Overture' });
+    c.clear = btn('Hapus filter', 'reset', function () { resetF(); }, 'btn--ghost btn--bar');
+    c.more = foldBox('Filter lain', [E('div', { class: 'sk-fg' }, E('p', { class: 'sk-fg__l', text: 'Status' }), c.type.el), c.tier.el,
+      E('div', { class: 'sk-fg sk-fg--toggles' }, c.inf.el), E('div', { class: 'sk-ctl__clear' }, c.clear)], where === 'rail');
+    c.el = E('section', { class: ['sk-ctl', 'sk-ctl--' + where], aria: { label: 'Cakupan dan jenis sekolah' } },
+      E('div', { class: 'sk-ctl__row sk-ctl__row--scope' }, c.scope.el),
+      E('div', { class: 'sk-ctl__row' }, E('span', { class: 'sk-ctl__l', text: 'Jenis', title: JENIS_TIP }), c.jenis.el),
+      c.more.el);
+    c.sync = function () {
+      c.scope.set(scopeNow());
+      c.jenis.set();
+      c.type.set(st.f.type);
+      c.inf.set(st.f.inf);
+      c.clear.disabled = !filtersActive();
+      c.more.set(activeFilterCount());
+      c.tier.set();
+      renderStatus30(c.scope);
+    };
+    ctlSets.push(c);
+    return c;
+  }
+  /** "Memuat jumlah siswa dalam 30 km…" under the switch (aria-live), or the failed line with "Coba lagi" (§3.1). */
+  function renderStatus30(sc) {
+    if (!sc || !isFn(sc.status)) return;
+    var stt = f30State(), need = wants30(), key = need ? stt : 'off';
+    if (sc.__st30 === key) return;
+    sc.__st30 = key;
+    if (!need || stt === 'ready' || stt === 'idle') { sc.status(null); return; }
+    if (stt === 'error') sc.status(FAIL30, { retry: function () { need30(); } });
+    else sc.status(LOAD30, { busy: true });
+  }
+  function syncCtls() { ctlSets.forEach(function (c) { try { c.sync(); } catch (e) { /* ignore */ } }); }
+  /** "?" of Kelas biaya (§4.2): the four bands from meta.tiers, the three bases, what perkiraan means, the share in scope. */
+  function openTierHelp() {
+    if (!ctx) return;
+    var T = TD(), M0 = (T && T.meta) || {}, body = [];
+    function ul(lines) { return E('ul', { class: 'sk-bul' }, lines.map(function (t) { return E('li', { text: t }); })); }
+    drawerSel = null;
+    drawerDist = null;
+    body.push(E('p', { class: 'sk-note', text: TIER_LINE }));
+    if (Array.isArray(M0.tiers)) body.push(blk('Batas kelas', [E('dl', { class: 'sk-prog__dl' }, M0.tiers.map(function (t) {
+      return [E('dt', { text: t.label }), E('dd', { text: (t.text && t.text.sekolah) || '' })];
+    }))]));
+    var bases = M0.basis || {};
+    body.push(blk('Dasar kelas', [ul([bases.biaya, bases.jenis, bases.perkiraan].filter(Boolean)),
+      E('p', { class: 'sk-note', text: 'Perkiraan berarti kelas biaya dihitung dari jenis sekolah dan daya beli area karena biaya resmi tidak dipublikasikan.' })]));
+    if (V && V.tiers) body.push(E('p', { class: 'sk-note', text: 'Biaya resmi ditemukan untuk ' + count(V.kpi.fee, 'sekolah') + '. Selebihnya dari jenis sekolah atau perkiraan.' }));
+    body.push(blk('Di peta', [ul(['Tanda batang di kanan atas titik sekolah: 1 batang Reguler sampai 4 batang Premium.', TIER_LEGEND_2,
+      'Tanda tampil saat filter kelas biaya aktif atau saat peta diperbesar.'])]));
+    var tm = { eyebrow: 'SEKOLAH', title: 'Kelas biaya', body: body, prov: 'Sumber: situs resmi sekolah (biaya resmi), jenis sekolah, daya beli area (perkiraan) · biaya dibaca 18 Okt 2026' };
+    ctx.openDrawer(tm);
+    staggerDrawer(tm);
+  }
+
   function buildOverview(body) {
     var o = {};
     o.status = E('div', { class: 'sk-load', hidden: true });
-    o.km = seg('Jarak dari Mabes TNI', KMS.map(function (k) { return { v: k, label: k + ' km' }; }), function (v) { setF({ km: v }); }, 'seg--big');
-    o.ma = toggle('Tampilkan MA (madrasah aliyah)', function (on) { setShow({ ma: on }); }, { title: 'Titik kecil belah ketupat. MA satu jenjang dengan SMA, tetapi tidak dihitung.' });
-    o.smk = toggle('Tampilkan SMK', function (on) { setShow({ smk: on }); }, { title: 'Titik kecil kotak. SMK tidak dihitung.' });
+    o.ctl = buildCtl('ov');
     o.more = E('p', { class: 'sk-ov__more', hidden: true });
     o.cards = E('div', { class: 'sk-cards', role: 'list' });
-    var ctl = E('section', { class: 'sk-ov', aria: { label: 'Yang tampil di peta' } },
-      E('div', { class: 'sk-ov__row' }, E('span', { class: 'sk-ov__label', text: 'Jarak dari Mabes TNI' }), o.km.el),
-      E('div', { class: 'sk-ov__sw' }, o.ma.el, o.smk.el), o.more);
+    var ctl = E('section', { class: 'sk-ov', aria: { label: 'Yang tampil di peta' } }, o.ctl.el, o.more);
     body.insertBefore(E('div', { class: 'sk-ovwrap' }, o.status, ctl, o.cards), body.firstChild);
     // card 1: SMA within the distance, private / public split
     o.c1 = card('sk-card--count');
@@ -1520,7 +2234,7 @@
         pic, E('div', { class: 'sk-cif__txt' }, E('p', { class: 'sk-cif__l', text: label }), value, sub, E('p', { class: 'sk-cif__line', text: line })));
     }
     c.body = E('div', { class: 'sk-card__body' },
-      E('div', { class: 'sk-cif__head' }, E('p', { class: 'sk-card__t', text: 'Calon nasabah baru dari SMA' }), helpBtn('Cara menghitung siswa 17+ dan di bawah 17')),
+      E('div', { class: 'sk-cif__head' }, (c.title = E('p', { class: 'sk-card__t', text: 'Calon nasabah baru dari SMA' })), helpBtn('Cara menghitung siswa 17+ dan di bawah 17')),
       group('sk-cif__grp--k17', livin, K17_LABEL, c.value, c.split, 'Membuka Tabungan sendiri dengan KTP, melalui aplikasi Livin’ by Mandiri.'),
       group('sk-cif__grp--u17', simpel, 'Siswa di bawah 17 tahun', c.u17, c.u17Sub, 'Membuka Tabungan SimPel bersama orang tua atau wali.'),
       c.scope, E('p', { class: 'sk-card__src', text: STU_SRC }));
@@ -1531,6 +2245,8 @@
   function renderCif(c) {
     if (!c) return;
     var fmt = fm();
+    /* v6: "Calon nasabah baru dari sekolah" once SMK or MA are shown (SMA only: unchanged) */
+    if (c.title) c.title.textContent = onlySma() ? 'Calon nasabah baru dari SMA' : 'Calon nasabah baru dari sekolah';
     if (!V || !V.students) {
       countOnce(c.value, null, intOrDash);
       countOnce(c.u17, null, intOrDash);
@@ -1543,14 +2259,14 @@
     /* the total without "±" (as on Ringkasan); the estimated part is named in the line below it */
     /* the two big numbers count up once, the first time they show (item 38) */
     countOnce(c.value, k.stuN ? k.k17 : null, intOrDash);
-    c.split.textContent = !k.stuN ? 'Tidak ada data siswa untuk SMA dengan filter ini.'
-      : k.k17Est ? fmt.int(k.k17Off) + ' dari data resmi umur · ± ' + fmt.int(k.k17Est) + ' perkiraan (' + count(k.k17EstN, 'SMA') + ')'
+    c.split.textContent = !k.stuN ? (k.loading ? LOAD30 : 'Tidak ada data siswa untuk ' + nounOf() + ' dengan filter ini.')
+      : k.k17Est ? fmt.int(k.k17Off) + ' dari data resmi umur · ± ' + fmt.int(k.k17Est) + ' perkiraan (' + count(k.k17EstN, nounOf()) + ')'
       : 'Semua dari data resmi umur Dapodik.';
     countOnce(c.u17, k.u17N ? k.u17 : null, intOrDash);
     c.u17Sub.textContent = k.u17N ? 'Siswa dikurangi siswa 17+' + (k.k17Est ? ', sebagian perkiraan.' : '.') : '';
-    var sc = k.stuN ? 'Dari ' + count(k.stu, 'siswa') + ' di ' + count(k.stuN, 'SMA') + ' dalam ' + st.f.km + ' km' + filterWords() + '.' : '';
-    if (st.f.km > 15) sc += ' Data siswa hanya tersedia untuk SMA dalam 15 km.';
-    if (k.inactive && c.compact) sc += ' ' + count(k.inactive, 'SMA') + ' kemungkinan tidak aktif tidak dihitung.';
+    var sc = k.stuN ? 'Dari ' + count(k.stu, 'siswa') + ' di ' + count(k.stuN, nounOf()) + ' dalam ' + st.f.km + ' km' + filterWords() + '.' : '';
+    if (k.loading) sc += ' ' + (f30State() === 'error' ? FAIL30 : LOAD30);
+    if (k.inactive && c.compact) sc += ' ' + count(k.inactive, nounOf()) + ' kemungkinan tidak aktif tidak dihitung.';
     c.scope.textContent = sc.trim();
   }
 
@@ -1562,7 +2278,7 @@
     c.sort = seg('Urutkan SMA', [{ v: 'k17', label: 'Siswa 17+ terbanyak' }, { v: 'near', label: 'Terdekat dari KCP' }], function (v) { st.topSort = v; saveUi(); renderTop(c); }, 'sk-seg--top');
     c.sw = distToggles();
     c.list = E('ul', { class: 'sk-mini sk-top' });
-    c.more = link('Lihat semua di Daftar SMA', function () { st.listSort = st.topSort; saveUi(); goTab('list'); });
+    c.more = link('Lihat semua di daftar', function () { st.listSort = st.topSort; saveUi(); goTab('list'); });
     c.body.insertBefore(c.head, c.slot);
     c.body.insertBefore(c.sort.el, c.slot);
     c.body.insertBefore(c.sw.el, c.slot);
@@ -1580,6 +2296,7 @@
   function renderTop(c) {
     if (!c || !V) return;
     var by = st.topSort === 'near' ? 'near' : 'k17', fmt = fm();
+    c.head.textContent = Noun() + ' untuk dikunjungi';
     c.sort.set(by);
     c.sw.sync();
     setCardTone(c, 'plain');
@@ -1596,7 +2313,7 @@
       b.addEventListener('click', function () { focusRow(i); });
       c.list.appendChild(E('li', {}, b));
     });
-    if (!rows.length) c.list.appendChild(E('li', { class: 'sk-mini__empty', text: by === 'k17' && !V.students ? 'Data siswa belum termuat.' : 'Tidak ada SMA dengan filter ini. Hapus salah satu filter.' }));
+    if (!rows.length) c.list.appendChild(E('li', { class: 'sk-mini__empty', text: by === 'k17' && !V.students ? 'Data siswa belum termuat.' : 'Tidak ada ' + nounOf() + ' yang cocok dengan filter ini. Hapus salah satu filter.' }));
     staggerOnChange(c, by + '|' + rows.join(','), c.list.children);
   }
   /** Rows enter one after another when the list shows other rows or another order, not on every redraw. */
@@ -1632,19 +2349,18 @@
     var o = ui && ui.ov;
     if (!o) return;
     var f = st.f, fmt = fm();
-    o.km.set(f.km);
-    o.ma.set(!!st.show.ma);
-    o.smk.set(!!st.show.smk);
+    if (o.ctl) o.ctl.sync();
     renderLoad(o.status);
     var extra = [];
     if (f.type !== 'all') extra.push(f.type === 'private' ? 'swasta saja' : 'negeri saja');
     if (f.tni) extra.push('yayasan TNI saja');
     if (f.inf) extra.push('sekolah tanpa NPSN disembunyikan');
+    if (f.tiers) extra.push('kelas biaya ' + (tierWords(f.tiers) || 'tidak ada'));
     o.more.hidden = !extra.length;
     clear(o.more);
     if (extra.length) {
       o.more.appendChild(document.createTextNode('Filter lain aktif: ' + extra.join(' · ') + '. '));
-      o.more.appendChild(link('Hapus filter', function () { setF({ type: 'all', tni: false, inf: false }); }));
+      o.more.appendChild(link('Hapus filter', function () { resetF(); }));
     }
     o.cards.hidden = !V;
     if (!V) return;
@@ -1652,8 +2368,9 @@
     // 1 · count
     var nm = noun();
     var other = [15, 30].filter(function (x) { return x !== f.km; }).map(function (x) { return fmt.int(V.n[x]) + ' dalam ' + x + ' km'; }).join(' · ');
-    o.c1.big.update({ label: nm + ' dalam ' + f.km + ' km', value: V.allKm, status: V.hasBank ? null : 'potential', statusLabel: V.hasBank ? null : 'Potensi',
-      note: (V.allKm ? '' : withinWords(0, f.km, V.n[15], 15) + '. ') + other + ' dari Mabes TNI.' + (V.kpi.inactive ? ' ' + count(V.kpi.inactive, 'SMA') + ' kemungkinan tidak aktif tidak dihitung.' : '') + ' MA dan SMK tidak dihitung.' });
+    o.c1.big.update({ label: Noun() + ' dalam ' + f.km + ' km', value: V.allKm, status: V.hasBank ? null : 'potential', statusLabel: V.hasBank ? null : 'Potensi',
+      note: (V.allKm ? '' : withinWords(0, f.km, V.n[15], 15) + '. ') + other + ' dari Mabes TNI.' + (!onlySma() ? ' ' + splitWords(V.byJ) + '.' : '') +
+        (V.kpi.inactive ? ' ' + count(V.kpi.inactive, nm) + ' kemungkinan tidak aktif tidak dihitung.' : '') + (k.noData && !k.loading ? ' ' + count(k.noData, 'sekolah') + ' tanpa data siswa.' : '') });
     setCardTone(o.c1, V.hasBank ? 'plain' : 'potential');
     renderSplit(o.c1.split);
     renderCif(o.cif);
@@ -1667,7 +2384,7 @@
     if (!V.hasBank) {
       importEmpty(o.c2.note);
     } else {
-      o.c2.note.appendChild(E('p', { text: (k.n ? fmt.pct(k.cust / k.n, 0) : '—') + ' SMA dalam ' + f.km + ' km telah menjadi nasabah Mandiri' + (V.demo ? ' (data contoh).' : '.') + ' ' + count(k.pros, 'prospek') + ' dan ' + count(k.none, 'SMA tanpa data') + ' masih dapat didekati.' }));
+      o.c2.note.appendChild(E('p', { text: (k.n ? fmt.pct(k.cust / k.n, 0) : '—') + ' ' + nm + ' dalam ' + f.km + ' km telah menjadi nasabah Mandiri' + (V.demo ? ' (data contoh).' : '.') + ' ' + count(k.pros, 'prospek') + ' dan ' + count(k.none, nm + ' tanpa data') + ' masih dapat didekati.' }));
       o.c2.note.appendChild(E('p', { class: 'sk-card__rank', text: V.rank && V.rank.applied
         ? 'Di peta, ' + fmt.int(V.rank.n) + ' kecamatan dibandingkan menurut porsi ini. Titik hijau tertinggi, kuning tengah, merah terendah.'
         : 'Porsi antarkecamatan masih hampir sama.\nTitik mengikuti batas tetap: hijau 50% atau lebih, kuning 20–50%, merah di bawah 20%.' }));
@@ -1676,7 +2393,7 @@
     }
     // 3 · TNI
     var tniIn = V.tni.filter(function (i) { return SC.idx.dist[i] <= f.km; });
-    o.c3.head.textContent = 'SMA yayasan TNI · ' + withinWords(tniIn.length, f.km, V.nTni[15], 15) + ', ' + fmt.int(V.tni.length) + ' dalam 30 km';
+    o.c3.head.textContent = Noun() + ' yayasan TNI · ' + withinWords(tniIn.length, f.km, V.nTni[15], 15) + ', ' + fmt.int(V.tni.length) + ' dalam 30 km';
     setCardTone(o.c3, 'gold');
     clear(o.c3.list);
     /* distances from KCP (items 27, 28), as everywhere else in the rail and the lists; the head counts by Mabes TNI */
@@ -1690,7 +2407,7 @@
       b.addEventListener('click', function () { flyNext = true; ctx.select({ kind: 'smaSchool', id: i }); });
       o.c3.list.appendChild(E('li', {}, b));
     });
-    if (!V.tni.length) o.c3.list.appendChild(E('li', { class: 'sk-mini__empty', text: 'Tidak ada SMA yayasan TNI dengan filter ini.' }));
+    if (!V.tni.length) o.c3.list.appendChild(E('li', { class: 'sk-mini__empty', text: 'Tidak ada ' + nm + ' yayasan TNI dengan filter ini.' }));
     else o.c3.list.appendChild(E('li', { class: 'sk-mini__foot', text: distBasis() }));
     staggerOnChange(o.c3, V.tni.slice(0, 6).join(','), o.c3.list.children);
     // 4 · clusters, nearest to KCP first
@@ -1768,31 +2485,18 @@
       r.kpis.appendChild(host);
       r.k[d[0]] = chart('bigNumber', host, { label: d[1], value: null }, { size: 'sm' });
     });
-    var F = r.f = {};
-    F.type = seg('Jenis sekolah', [{ v: 'all', label: 'Semua' }, { v: 'private', label: 'Swasta' }, { v: 'public', label: 'Negeri' }], function (v) { setF({ type: v }); });
-    F.ma = toggle('Tampilkan MA (madrasah aliyah)', function (on) { setShow({ ma: on }); }, { title: 'Titik kecil belah ketupat. MA satu jenjang dengan SMA, tetapi tidak dihitung.' });
-    F.smk = toggle('Tampilkan SMK', function (on) { setShow({ smk: on }); }, { title: 'Titik kecil kotak. SMK tidak dihitung.' });
-    F.inf = toggle('Sembunyikan sekolah tanpa NPSN', function (on) { setF({ inf: on }); }, { title: 'Sekolah yang hanya ada di OpenStreetMap atau Overture' });
-    F.clear = btn('Hapus filter', 'reset', function () { resetF(); }, 'btn--ghost btn--bar');
-    F.where = E('p', { class: 'sk-fg__note' });
-    function grp(label, kid) { return E('div', { class: 'sk-fg' }, E('p', { class: 'sk-fg__l', text: label }), kid); }
-    r.filters = E('section', { class: 'sk-sec sk-sec--filters', aria: { label: 'Filter lain' } },
-      E('div', { class: 'sk-sec__head' }, E('h2', { class: 'sk-sec__t', text: 'Filter lain' }), F.clear),
-      F.where, grp('Jenis sekolah', F.type.el),
-      E('div', { class: 'sk-fg sk-fg--toggles' }, F.inf.el),
-      grp('Titik pembanding di peta', E('div', { class: 'sk-fg sk-fg--toggles' }, F.ma.el, F.smk.el)));
+    /* v6 (§2, ≥ 1441 full rail and the overlay): the scope beside the title row, Jenis chips, then "Filter lain" */
+    r.ctl = buildCtl('rail');
     r.dl = E('div', { class: 'sk-dl' });
-    body.insertBefore(E('div', { class: 'sk-rail' }, r.openWork, r.status, r.ex.el, r.cif.el, r.kpis, r.filters, r.dl), body.firstChild);
+    body.insertBefore(E('div', { class: 'sk-rail' }, r.openWork, r.status, r.ctl.el, r.ex.el, r.cif.el, r.kpis, r.dl), body.firstChild);
     ui.rail = r;
   }
   function renderRail() {
     var r = ui && ui.rail;
     if (!r) return;
     renderLoad(r.status);
-    var f = st.f, F = r.f, fmt = fm();
-    F.type.set(f.type); F.ma.set(!!st.show.ma); F.smk.set(!!st.show.smk); F.inf.set(f.inf);
-    F.clear.disabled = !filtersActive();
-    F.where.textContent = 'Jarak dari Mabes TNI: ' + f.km + ' km' + (f.tni ? ' · yayasan TNI saja' : '') + '. Ubah di tab Daftar SMA.';
+    var f = st.f, fmt = fm();
+    r.ctl.sync();
     renderDeadline(r.dl);
     if (!V) { r.ex.set('Memuat daftar sekolah', '', ''); return; }
     var k = V.kpi;
@@ -1806,10 +2510,10 @@
     clear(r.empty);
     if (V.hasBank) r.bar.update(statusBarData(), statusBarCfg(true));
     else importEmpty(r.empty);
-    r.k.n.update({ label: noun() + ' yang tampil', value: k.n, note: filtersActive() ? 'Sesuai filter' : 'Dalam ' + f.km + ' km' });
+    r.k.n.update({ label: Noun() + ' yang tampil', value: k.n, note: (filtersActive() ? 'Sesuai filter' : 'Dalam ' + f.km + ' km') + (onlySma() ? '' : ' · ' + splitWords(V.byJ)) });
     r.k.priv.update({ label: 'Swasta (yayasan)', value: k.priv, note: fmt.int(k.pub) + ' negeri' + (k.unk ? ' · ' + fmt.int(k.unk) + ' belum diketahui' : '') });
-    r.k.tni.update({ label: 'SMA yayasan TNI', value: k.tni, note: k.tni ? 'Hang Tuah · Angkasa · Kartika' : withinWords(0, f.km, V.nTni[15], 15) });
-    r.k.stu.update({ label: 'Siswa', value: k.stuN ? k.stu : null, note: k.stuN ? count(k.stuN, 'SMA') + ' dengan data Dapodik' : 'Jumlah siswa belum tersedia' });
+    r.k.tni.update({ label: Noun() + ' yayasan TNI', value: k.tni, note: k.tni ? 'Hang Tuah · Angkasa · Kartika' : withinWords(0, f.km, V.nTni[15], 15) });
+    r.k.stu.update({ label: 'Siswa', value: k.stuN ? k.stu : null, note: k.stuN ? count(k.stuN, nounOf()) + ' dengan data Dapodik' + (k.noData ? ' · ' + count(k.noData, 'sekolah') + ' tanpa data siswa' : '') : (k.loading ? LOAD30 : 'Jumlah siswa belum tersedia') });
     renderCif(r.cif);
   }
   function renderDeadline(host) {
@@ -2003,16 +2707,20 @@
 
   function buildList(body) {
     var s = {};
-    s.ex = exhibit({ eyebrow: 'Daftar SMA', cls: 'sk-ex--fill' });
-    s.km = seg('Jarak dari Mabes TNI', KMS.map(function (k) { return { v: k, label: k + ' km' }; }), function (v) { setF({ km: v }); }, 'sk-seg--km');
+    s.ex = exhibit({ eyebrow: 'Daftar sekolah', cls: 'sk-ex--fill' });
+    /* v6 (§3.1): the scope switch sits where "Jarak dari Mabes TNI" was; one instance per built panel */
+    scopeSwitches = scopeSwitches.filter(function (x) { return x.tag !== 'list'; });
+    s.km = scopeCtl({ cls: 'sk-seg--km' });
+    s.km.tag = 'list';
+    s.km.set(scopeNow());
     s.tni = toggle('Hanya SMA yayasan TNI', function (on) { setF({ tni: on }); }, { title: 'Hang Tuah (AL), Angkasa / Ardhya Garini (AU), Kartika (AD)' });
-    s.sort = seg('Urutkan daftar SMA', LIST_SORTS, function (v) { st.listSort = v; saveUi(); renderList(); }, 'sk-seg--sort');
+    s.sort = seg('Urutkan daftar sekolah', LIST_SORTS, function (v) { st.listSort = v; saveUi(); if (v === 'tier') needTiers(); renderList(); }, 'sk-seg--sort');
     s.sw = distToggles();
-    s.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari SMA atau yayasan', title: 'Cari menurut nama SMA, NPSN atau yayasan', aria: { label: 'Cari SMA menurut nama, NPSN atau yayasan' }, value: st.sq || '' });
+    s.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari sekolah atau yayasan', title: 'Cari menurut nama sekolah, NPSN atau yayasan', aria: { label: 'Cari sekolah menurut nama, NPSN atau yayasan' }, value: st.sq || '' });
     s.q.addEventListener('input', debounce(function () { st.sq = s.q.value; renderList(); }, 150));
-    s.exportB = guard(btn('Ekspor daftar SMA (CSV)', 'download', function () { exportSchools(); }, 'btn--secondary btn--bar', 'Daftar SMA untuk dikunjungi, dalam CSV. Tidak tersedia saat Data contoh aktif atau nama disamarkan.'));
+    s.exportB = guard(btn('Ekspor daftar SMA (CSV)', 'download', function () { exportSchools(); }, 'btn--secondary btn--bar', 'Daftar sekolah untuk dikunjungi, dalam CSV. Tidak tersedia saat Data contoh aktif atau nama disamarkan.'));
     s.ex.el.insertBefore(E('div', { class: 'sk-tools sk-tools--filters' },
-      E('div', { class: 'sk-fg sk-fg--inline' }, E('span', { class: 'sk-fg__l', text: 'Jarak dari Mabes TNI' }), s.km.el), s.tni.el), s.ex.body);
+      E('div', { class: 'sk-fg sk-fg--inline' }, s.km.el), s.tni.el), s.ex.body);
     s.ex.el.insertBefore(E('div', { class: 'sk-tools sk-tools--sort' },
       E('div', { class: 'sk-fg sk-fg--inline' }, E('span', { class: 'sk-fg__l', text: 'Urutkan' }), s.sort.el), s.sw.el), s.ex.body);
     s.ex.el.insertBefore(E('div', { class: 'sk-tools' }, E('label', { class: 'search sk-search' }, icon('search'), s.q), s.exportB), s.ex.body);
@@ -2033,37 +2741,48 @@
     function act(i) { var s = sInfo(i); return s && s.inactive ? 1 : 0; }
     if (by === 'k17') out.sort(function (a, b) { return act(a.i) - act(b.i) || (k17Num(b.i) == null ? -1 : k17Num(b.i)) - (k17Num(a.i) == null ? -1 : k17Num(a.i)) || distSortVal(a.i) - distSortVal(b.i); });
     else if (by === 'stu') out.sort(function (a, b) { return act(a.i) - act(b.i) || stuOf(b.i) - stuOf(a.i) || distSortVal(a.i) - distSortVal(b.i); });
+    else if (by === 'tier') out.sort(function (a, b) { return act(a.i) - act(b.i) || tierLevel(b.i) - tierLevel(a.i) || tierBasisRank(a.i) - tierBasisRank(b.i) || distSortVal(a.i) - distSortVal(b.i); });
     else out.sort(function (a, b) { return distSortVal(a.i) - distSortVal(b.i) || I.dist[a.i] - I.dist[b.i]; });
     return out;
   }
+  /** Within a tier, a published fee first, then the school type, then perkiraan ("Kelas biaya tertinggi"). */
+  function tierBasisRank(i) { var t = tierOf(i); return !t || !t.basis ? 3 : t.basis === 'biaya' ? 0 : t.basis === 'jenis' ? 1 : 2; }
   function renderList() {
     var s = ui.work && ui.work.list;
     if (!s || !V) return;
-    s.km.set(st.f.km);
+    s.km.set(scopeNow());
     s.tni.set(st.f.tni);
     s.sort.set(st.listSort);
     s.sw.sync();
-    var I = SC.idx, fmt = fm(), rows = listRows(), byWords = { near: 'terdekat dari KCP lebih dulu', k17: 'siswa 17+ terbanyak lebih dulu', stu: 'siswa terbanyak lebih dulu' }[st.listSort] || '';
+    var nn = nounOf(), tniLbl = s.tni.el.querySelector('.sk-toggle__t');
+    if (tniLbl) tniLbl.textContent = 'Hanya ' + nn + ' yayasan TNI';
+    var xb = s.exportB.querySelector('span:last-child');
+    if (xb) xb.textContent = onlySma() ? 'Ekspor daftar SMA (CSV)' : 'Ekspor daftar sekolah (CSV)';
+    var I = SC.idx, fmt = fm(), rows = listRows(), byWords = { near: 'terdekat dari KCP lebih dulu', k17: 'siswa 17+ terbanyak lebih dulu', stu: 'siswa terbanyak lebih dulu', tier: 'kelas biaya tertinggi lebih dulu' }[st.listSort] || '';
     var open = V.hasBank ? V.kpi.pros + V.kpi.none : V.kpi.n;
     s.ex.set(st.sq ? count(rows.length, noun()) + ' cocok dengan “' + st.sq + '”'
-      : (!V.kpi.n ? withinWords(0, st.f.km, st.f.tni ? V.nTni[15] : V.n[15], 15) + (st.f.tni ? ' untuk SMA yayasan TNI' : '')
+      : (!V.kpi.n ? withinWords(0, st.f.km, st.f.tni ? V.nTni[15] : V.n[15], 15) + (st.f.tni ? ' untuk ' + nn + ' yayasan TNI' : '')
         : (V.hasBank ? fmt.int(open) + ' dari ' + count(V.kpi.n, noun()) + ' dalam ' + st.f.km + ' km belum menjadi nasabah Mandiri' : count(V.kpi.n, noun()) + ' dalam ' + st.f.km + ' km, ' + byWords)),
-      'SMA yang tampil · siswa 17+ dan jumlah siswa dari Dapodik · jarak dan waktu dari KCP, perkiraan' + (distModeWords() ? ' (' + distModeWords() + ')' : '') + filterWords(),
+      Noun() + ' yang tampil · siswa 17+ dan jumlah siswa dari Dapodik · jarak dan waktu dari KCP, perkiraan' + (distModeWords() ? ' (' + distModeWords() + ')' : '') + filterWords(),
       SRC_SCHOOLS + (V.students ? ' · ' + STU_SRC.replace('Data siswa: ', 'siswa: ') : '') + (V.hasBank ? ' · status: ' + (V.demo ? 'data contoh (ilustrasi)' : 'file cabang, sheet 3_sekolah') : ''));
     demoTag(s.ex.title, { inline: true, when: V.demo });
+    /* three short lines at most (calm screens, item 39) */
     setLines(s.foot, 'Angka dengan ± adalah perkiraan. Cara hitungnya ada di tombol tanda tanya pada kartu Siswa 17+.' +
-      (V.kpi.inactive ? '\n' + count(V.kpi.inactive, 'SMA') + ' kemungkinan tidak aktif (0 siswa di Dapodik) tetap tampil, tetapi tidak dihitung.' : '') +
-      '\nCSV memuat SMA yang tampil, siswa 17+, siswa di bawah 17, jarak dari KCP dan produk sasaran.' +
-      '\nTanda nasabah Mandiri (Y/N) ikut. Saldo tidak ikut.');
+      (V.kpi.inactive || V.kpi.noData ? '\n' + [V.kpi.inactive ? count(V.kpi.inactive, nn) + ' kemungkinan tidak aktif tetap tampil, tetapi tidak dihitung.' : null,
+        V.kpi.noData ? count(V.kpi.noData, 'sekolah') + ' tanpa data siswa, alasannya ada di kartunya.' : null].filter(Boolean).join(' ') : '') +
+      '\nCSV memuat siswa, jarak dari KCP, kelas biaya, kontak lembaga dan tanda nasabah Mandiri (Y/N), tanpa saldo.');
     /* narrow lists (the workbench at 1280-1440 px): narrower number columns. Phones (V3_REPORT §4.5): the SMA name
        keeps most of the row and wraps onto a second line instead of being cut; siswa 17+ (and the Mandiri status)
        move under the name, so only the distance keeps its own column */
     var tw = (s.tableHost && s.tableHost.clientWidth) || window.innerWidth || 1024, narrow = tw < 480, phone = tw < 360, mode = distModeWords();
+    /* v6 (§4.2): a "Kelas biaya" column from 820 px; narrower lists carry it on the row's second line */
+    var tierCol = !!(V.tiers && tw >= 820);
     var cols = [
       V.hasBank && !phone ? { key: 'st', label: 'Status', width: narrow ? 96 : 112, sortable: false, render: function (td, r) { td.appendChild(chipEl(V.status[r.i])); } } : null,
-      { key: 'name', label: phone ? 'SMA · siswa 17+' : 'SMA', sortable: false, headerTitle: phone ? 'Nama SMA. Di bawahnya: siswa 17+ (dapat memiliki KTP), jenis sekolah dan yayasan. Angka dengan ± adalah perkiraan.' : null, render: function (td, r) {
+      { key: 'name', label: phone ? Noun() + ' · siswa 17+' : Noun(), sortable: false, headerTitle: phone ? 'Nama sekolah. Di bawahnya: siswa 17+ (dapat memiliki KTP), jenis sekolah dan yayasan. Angka dengan ± adalah perkiraan.' : null, render: function (td, r) {
         var t = I.tni[r.i] >= 0, e = I.ent[r.i] >= 0 ? I.ents[I.ent[r.i]] : null, si = sInfo(r.i);
-        var sub = (si && si.inactive ? 'Kemungkinan tidak aktif · ' : '') + (t ? 'Yayasan TNI · ' : '') + typeWord(I.st[r.i]) + ' · ' + (e ? e.label : (I.yay[r.i] || (I.st[r.i] === 0 ? 'tanpa yayasan' : 'yayasan tidak tercatat'))) + (I.inf[r.i] ? ' · tanpa NPSN' : '');
+        var tt = V.tiers && !tierCol ? tierOf(r.i) : null;
+        var sub = (si && si.inactive ? 'Kemungkinan tidak aktif · ' : '') + (onlySma() ? '' : JENIS_WORD[jenisOf(r.i)] + ' · ') + (t ? 'Yayasan TNI · ' : '') + typeWord(I.st[r.i]) + ' · ' + (e ? e.label : (I.yay[r.i] || (I.st[r.i] === 0 ? 'tanpa yayasan' : 'yayasan tidak tercatat'))) + (I.inf[r.i] ? ' · tanpa NPSN' : '') + (tt && tt.tier ? ' · kelas biaya ' + tt.label : '');
         if (phone) sub = (si && si.inactive ? '' : k17Short(si, r.i)) + sub;
         var subEl = E('span', { class: 'sk-ent__sub' + (t ? ' is-gold' : '') + (si && si.inactive ? ' is-off' : ''), text: sub, title: sub });
         td.appendChild(E('span', { class: 'sk-ent sk-ent--sym' + (phone ? ' sk-ent--wrap' : ''), title: phone ? I.name[r.i] : null }, symChip(r.i, 'sk-ent__sym'),
@@ -2077,6 +2796,8 @@
           td.appendChild(E('span', { class: 'sk-num2', title: si && !si.inactive && si.k17 != null ? (si.k17Official ? 'Data resmi umur dari Dapodik' : 'Perkiraan dari siswa per kelas') : 'Jumlah siswa 17+ belum tersedia' },
             E('span', { class: 'sk-num2__a', text: top }), E('span', { class: 'sk-num2__b', text: n >= 0 ? 'dari ' + fmt.int(n) : 'tanpa data' })));
         } },
+      tierCol ? { key: 'tier', label: 'Kelas biaya', width: 128, sortable: false, headerTitle: TIER_LINE + '\nBatang berisi = dari biaya resmi atau jenis sekolah. Batang kosong = perkiraan.',
+        render: function (td, r) { var t = tierOf(r.i); var c0 = t ? tierChipEl(t) : null; if (c0) td.appendChild(c0); else td.textContent = '—'; } } : null,
       /* the cell drops "(jam sibuk, tanpa tol)": the header names the mode once, so km and minutes stay readable */
       { key: 'dist', label: (narrow || mode ? 'Dari KCP' : 'Jarak dari KCP') + (mode ? ' (' + mode + ')' : ''), width: phone ? 84 : narrow ? 100 : 112, sortable: false, align: 'right',
         headerTitle: DIST_TIP + (mode ? '\nWaktu: ' + mode + '.' : ''),
@@ -2086,8 +2807,8 @@
         } }
     ].filter(Boolean);
     /* phones: room for a name on two lines, the line under it and, after the school-file import, the status chip */
-    var cfg = { columns: cols, rows: rows, rowKey: function (r) { return r.i; }, rowHeight: phone ? (V.hasBank ? 76 : 62) : 50, virtual: 'auto', label: 'SMA yang tampil',
-      emptyText: st.sq ? 'Tidak ada SMA yang cocok dengan pencarian ini. Kosongkan kolom cari.' : 'Tidak ada SMA yang cocok dengan filter ini. Hapus salah satu filter.',
+    var cfg = { columns: cols, rows: rows, rowKey: function (r) { return r.i; }, rowHeight: phone ? (V.hasBank ? 76 : 62) : 50, virtual: 'auto', label: Noun() + ' yang tampil',
+      emptyText: st.sq ? 'Tidak ada ' + nn + ' yang cocok dengan pencarian ini. Kosongkan kolom cari.' : 'Tidak ada ' + (onlySma() ? 'SMA' : 'sekolah') + ' yang cocok dengan filter ini. Hapus salah satu filter.',
       onRow: function (r) { flyNext = true; ctx.select({ kind: 'smaSchool', id: r.i }); }, onHover: function (r) { highlightRows(r ? [r.i] : null, 2500); } };
     if (!s.table) s.table = ui.work.table = MCD.charts.table(s.tableHost, rows, cfg);
     else s.table.update(rows, cfg);
@@ -2102,8 +2823,13 @@
   function csvDistance(i) { var r = distOf(i); return r && r.source !== 'garis' ? { km: r.km, min: r.min } : null; }
   function exportSchools() {
     if (exportBlocked() || !V) return;
-    var csv = SC.leadsCsv(SC.idx, { rows: Int32Array.from(listRowsAll()) }, V.rel, { grain: 'school', distance: csvDistance });
-    var name = 'sma-leads_cilangkap_' + ymd(today()) + '.csv';
+    /* v6 (§5.2, §4.2): the contact and kelas biaya columns need their files; both load first (each at most once) */
+    Promise.all([needContacts(), needTiers()]).then(function () { if (ctx && V) exportNow(); });
+  }
+  function exportNow() {
+    var csv = SC.leadsCsv(SC.idx, { rows: Int32Array.from(listRowsAll()) }, V.rel, { grain: 'school', distance: csvDistance,
+      info: function (i) { return sInfo(i); }, level: function (i) { return JENIS_LEVEL[jenisOf(i)]; }, tier: tierCsv, contact: contactCsv });
+    var name = (onlySma() ? 'sma' : 'sekolah') + '-leads_cilangkap_' + ymd(today()) + '.csv';
     ctx.toast(download(name, csv) ? name + ' tersimpan di komputer ini' : 'File tidak dapat disimpan. Coba lagi.', null);
   }
   /** Every row of the list in its current order (the search box only narrows the screen). */
@@ -2117,7 +2843,10 @@
     /* students aged 17+ per kecamatan (items 26, 29): totals, then the schools with the most in the drawer */
     k.stu = exhibit({ eyebrow: 'Siswa 17+ per kecamatan' });
     k.top = seg('Kecamatan yang ditampilkan', [{ v: false, label: TOP_KEC + ' teratas' }, { v: true, label: 'Semua' }], function (v) { st.kecAll = v; saveUi(); renderKecTab(); });
-    k.stu.el.insertBefore(E('div', { class: 'sk-tools' }, k.top.el, helpBtn('Cara menghitung siswa 17+')), k.stu.body);
+    /* v6 (§3.3): every kecamatan in scope, ranked by siswa 17+ (default), by schools or by students */
+    k.sort = seg('Urutkan kecamatan', [{ v: 'k17', label: 'Siswa 17+ terbanyak' }, { v: 'n', label: 'Sekolah terbanyak' }, { v: 'stu', label: 'Siswa terbanyak' }],
+      function (v) { st.kecSort = v; saveUi(); renderKecTab(); }, 'sk-seg--sort');
+    k.stu.el.insertBefore(E('div', { class: 'sk-tools sk-tools--sort' }, k.sort.el, k.top.el, helpBtn('Cara menghitung siswa 17+')), k.stu.body);
     k.stuHost = E('div', { class: 'sk-chart sk-chart--rank' });
     k.stu.body.appendChild(k.stuHost);
     k.combo = exhibit({ eyebrow: 'SMA per kecamatan' });
@@ -2151,9 +2880,9 @@
     var rows = kecRows(), all = V.kecList.filter(function (a) { return a.n > 0; });
     var top = rows[0];
     renderKecStudents(k);
-    k.combo.set(top ? 'Kec. ' + top.name + ' memiliki SMA terbanyak dari ' + all.length + ' kecamatan di sekitar Mabes TNI (' + fmt.int(top.n) + ')' : 'Tidak ada SMA yang cocok dengan filter ini',
-      'Jumlah SMA dalam ' + f.km + ' km per kecamatan, terbanyak di atas · di bawah nama: negeri, swasta dan rata-rata siswa per SMA jika tercatat di Dapodik' + filterWords(),
-      SRC_SCHOOLS + ' · ' + SRC_AREAS + '. Semua kecamatan yang masuk 15 km dari Mabes TNI.');
+    k.combo.set(top ? 'Kec. ' + top.name + ' memiliki ' + nounOf() + ' terbanyak dari ' + all.length + ' kecamatan di sekitar Mabes TNI (' + fmt.int(top.n) + ')' : 'Tidak ada ' + nounOf() + ' yang cocok dengan filter ini',
+      'Jumlah ' + nounOf() + ' dalam ' + f.km + ' km per kecamatan, terbanyak di atas · di bawah nama: negeri, swasta dan rata-rata siswa per sekolah jika tercatat di Dapodik' + filterWords(),
+      SRC_SCHOOLS + ' · ' + SRC_AREAS + '. Semua kecamatan yang masuk ' + f.km + ' km dari Mabes TNI.');
     var data, cfg;
     if (V.hasBank) {
       /* with the school file: SMA nasabah vs belum (bars) and the share nasabah (line), its dots in the map's colours,
@@ -2161,7 +2890,7 @@
       var rk = V.rank && V.rank.applied ? V.rank : null;
       var weak = rows.filter(function (a) { return a.ranked && a.band3 === 'notYet'; }).sort(function (a, b) { return (b.n - b.cust) - (a.n - a.cust); })[0];
       k.combo.set(weak ? 'Kec. ' + weak.name + ' berada di sepertiga terendah: ' + (weak.cust ? fmt.int(weak.n - weak.cust) + ' dari ' + count(weak.n, 'SMA') + ' belum menjadi nasabah Mandiri' : 'belum ada dari ' + count(weak.n, 'SMA') + ' yang menjadi nasabah Mandiri')
-          : (top ? 'Kec. ' + top.name + ' memiliki SMA terbanyak dari ' + all.length + ' kecamatan di sekitar Mabes TNI (' + fmt.int(top.n) + ')' : 'Tidak ada SMA yang cocok dengan filter ini'),
+          : (top ? 'Kec. ' + top.name + ' memiliki ' + nounOf() + ' terbanyak dari ' + all.length + ' kecamatan di sekitar Mabes TNI (' + fmt.int(top.n) + ')' : 'Tidak ada ' + nounOf() + ' yang cocok dengan filter ini'),
         'SMA yang belum menjadi nasabah Mandiri (batang) dan porsi nasabah Mandiri, % (titik), per kecamatan' + filterWords(),
         (V.demo ? 'Sumber: data contoh (ilustrasi) · ' : 'Sumber: file sekolah cabang (sheet 3_sekolah) · ') + SRC_SHORT + ' · ' + SRC_AREAS + '. Titik dibagi menjadi tiga kelompok, sama dengan label peta.');
       /* ranked bars like Merchant › Kecamatan (B-09 / A-16): full names, one number per row, a coverage column */
@@ -2175,23 +2904,23 @@
       data = { rows: rows.map(function (a) {
         var stu = a.stuN ? Math.round(a.stu / a.stuN) : null;
         return { key: a.id, label: a.name, value: a.n,
-          sub: fmt.int(a.pub) + ' negeri · ' + fmt.int(a.priv) + ' swasta' + (a.unk ? ' · ' + fmt.int(a.unk) + ' belum diketahui' : '') + (stu != null ? ' · ' + fmt.int(stu) + ' siswa per SMA' : '') };
+          sub: fmt.int(a.pub) + ' negeri · ' + fmt.int(a.priv) + ' swasta' + (a.unk ? ' · ' + fmt.int(a.unk) + ' belum diketahui' : '') + (stu != null ? ' · ' + fmt.int(stu) + ' siswa per sekolah' : '') };
       }) };
-      cfg = { label: 'SMA per kecamatan', categoryLabel: 'Kecamatan', valueLabel: 'SMA', color: 'chart-3', demo: false,
+      cfg = { label: Noun() + ' per kecamatan', categoryLabel: 'Kecamatan', valueLabel: Noun(), color: 'chart-3', demo: false,
         onClick: function (p) { showKec(p.key); } };
     }
     if (!k.comboChart) k.comboChart = panelChart('rankBars', k.comboHost, data, cfg); else k.comboChart.update(data, cfg);
     // donut in the map's school colours (item 34): negeri blue, swasta amber, yayasan TNI gold (the section's TNI
     // highlight), grey unknown
     var m = V.mix, tot = m.priv + m.tni + m.pub + m.unk;
-    k.donut.set(tot ? fmt.pct((m.priv + m.tni) / tot, 0) + ' SMA dalam ' + f.km + ' km adalah sekolah swasta milik yayasan' : 'Tidak ada SMA dalam ' + f.km + ' km',
-      'Jumlah SMA dalam ' + f.km + ' km dari Mabes TNI menurut jenis', SRC_SCHOOLS);
+    k.donut.set(tot ? fmt.pct((m.priv + m.tni) / tot, 0) + ' ' + nounOf() + ' dalam ' + f.km + ' km adalah sekolah swasta milik yayasan' : 'Tidak ada ' + nounOf() + ' dalam ' + f.km + ' km',
+      'Jumlah ' + nounOf() + ' dalam ' + f.km + ' km dari Mabes TNI menurut status', SRC_SCHOOLS);
     var ddata = { slices: [
       { key: 'pub', label: 'Negeri', value: m.pub, color: 'chart-3' },
       { key: 'priv', label: 'Swasta (yayasan)', value: m.priv, color: 'status-mid' },
       { key: 'tni', label: 'Yayasan TNI (swasta)', value: m.tni, color: 'chart-hl' },
       { key: 'unk', label: 'Jenis belum diketahui', value: m.unk, color: 'noData' }
-    ].filter(function (s) { return s.value > 0; }), centerLabel: 'SMA', centerValue: tot };
+    ].filter(function (s) { return s.value > 0; }), centerLabel: nounOf(), centerValue: tot };
     var dcfg = { label: 'SMA menurut jenis', valueLabel: 'SMA', categoryLabel: 'Jenis', height: 240,
       onClick: function (p) {
         if (!p.selected) { setF({ type: 'all', tni: false }); return; }
@@ -2236,7 +2965,7 @@
     if (V.hasBank) hrows.forEach(function (a) { if (a.n && (!best || a.cov > best.cov)) best = a; });
     var privMore = hrows.filter(function (a) { return a.priv + a.unk > a.pub; }).length;
     k.heat.set(V.hasBank ? (best && best.cov > 0 ? 'Kec. ' + best.name + ' memiliki porsi SMA nasabah Mandiri tertinggi (' + fmt.pct(best.cov, 0) + ')' : 'Belum ada SMA di kecamatan ini yang menjadi nasabah Mandiri') :
-      (hrows.length ? 'SMA swasta lebih banyak daripada SMA negeri di ' + (privMore === hrows.length ? 'semua ' + fmt.int(privMore) : fmt.int(privMore) + ' dari') + ' ' + fmt.int(hrows.length) + ' kecamatan ini' : 'Tidak ada SMA yang cocok dengan filter ini'),
+      (hrows.length ? 'SMA swasta lebih banyak daripada SMA negeri di ' + (privMore === hrows.length ? 'semua ' + fmt.int(privMore) : fmt.int(privMore) + ' dari') + ' ' + fmt.int(hrows.length) + ' kecamatan ini' : 'Tidak ada ' + nounOf() + ' yang cocok dengan filter ini'),
       V.hasBank ? 'Porsi SMA nasabah Mandiri (%) per kecamatan dan jenis · warna membagi setiap kolom menjadi tiga kelompok, sama dengan label peta' : 'Jumlah SMA per kecamatan dan jenis · ' + hrows.length + ' kecamatan teratas',
       V.hasBank ? (V.demo ? 'Sumber: data contoh (ilustrasi); ' : 'Sumber: file sekolah cabang (sheet 3_sekolah); ') + SRC_SHORT : SRC_SCHOOLS);
     demoTag(k.heat.title, { inline: true, when: V.demo });
@@ -2248,12 +2977,12 @@
 
   /** Siswa 17+ per kecamatan (ranked bars): total aged 17+, with SMA, students and the largest school under the name. */
   function kecStudents() {
-    var I = SC.idx;
-    return V.kecList.filter(function (a) { return a.stuN > 0; }).map(function (a) {
+    var I = SC.idx, by = st.kecSort === 'n' ? 'n' : st.kecSort === 'stu' ? 'stu' : 'k17';
+    return V.kecList.filter(function (a) { return by === 'n' ? a.n > 0 : a.stuN > 0; }).map(function (a) {
       var best = null;
       a.rows.forEach(function (i) { var n = k17Num(i); if (n != null && (best == null || n > k17Num(best))) best = i; });
       return { a: a, best: best, name: best != null ? I.name[best] : '' };
-    }).sort(function (x, y) { return y.a.k17 - x.a.k17; });
+    }).sort(function (x, y) { return (y.a[by] - x.a[by]) || (y.a.k17 - x.a.k17) || (x.a.name < y.a.name ? -1 : 1); });
   }
   function renderKecStudents(k) {
     if (!k || !k.stu) return;
@@ -2265,16 +2994,19 @@
       k.stuChart = null;
       return;
     }
-    var list = kecStudents(), shown = st.kecAll ? list : list.slice(0, TOP_KEC), lead = list[0];
+    var list = kecStudents(), shown = st.kecAll ? list : list.slice(0, TOP_KEC), lead = list[0], nn = nounOf();
+    var by = st.kecSort === 'n' ? 'n' : st.kecSort === 'stu' ? 'stu' : 'k17', wide = st.f.km > 15;
     k.top.set(st.kecAll);
-    k.stu.set(lead ? 'Kec. ' + lead.a.name + ' memiliki siswa 17+ terbanyak (' + (lead.a.k17Est ? '± ' : '') + fmt.int(lead.a.k17) + ')' : 'Tidak ada data siswa dengan filter ini',
-      'Siswa berusia 17+ (dapat memiliki KTP) per kecamatan, SMA dalam 15 km' + filterWords(),
+    if (k.sort) k.sort.set(by);
+    var leadWords = !lead ? '' : by === 'n' ? count(lead.a.n, nn) + ' terbanyak (' + fmt.int(lead.a.n) + ')' : by === 'stu' ? 'siswa terbanyak (' + fmt.int(lead.a.stu) + ')' : 'siswa 17+ terbanyak (' + (lead.a.k17Est ? '± ' : '') + fmt.int(lead.a.k17) + ')';
+    k.stu.set(lead ? 'Kec. ' + lead.a.name + ' memiliki ' + (by === 'n' ? Noun().toLowerCase() + ' terbanyak (' + fmt.int(lead.a.n) + ')' : leadWords) : 'Tidak ada data siswa dengan filter ini',
+      (by === 'n' ? Noun() : by === 'stu' ? 'Siswa' : 'Siswa berusia 17+ (dapat memiliki KTP)') + ' per kecamatan, ' + nn + ' dalam ' + st.f.km + ' km' + (wide ? ' · "dalam 15 km" = kecamatan pilot' : '') + filterWords(),
       STU_SRC + ' · ' + SRC_AREAS + '. Data resmi umur jika ada, selain itu perkiraan.');
     var data = { rows: shown.map(function (x) {
-      return { key: x.a.id, label: x.a.name, value: x.a.k17,
-        sub: count(x.a.n, 'SMA') + ' · ' + count(x.a.stu, 'siswa') + (x.a.k17Est ? ' · sebagian perkiraan' : '') + (x.name ? ' · terbanyak: ' + x.name : '') };
+      return { key: x.a.id, label: x.a.name, value: x.a[by],
+        sub: (wide && x.a.focus15 ? 'dalam 15 km · ' : '') + count(x.a.n, nn) + ' · ' + count(x.a.stu, 'siswa') + (by !== 'k17' && x.a.stuN ? ' · ' + (x.a.k17Est ? '± ' : '') + fmt.int(x.a.k17) + ' siswa 17+' : '') + (x.a.k17Est ? ' · sebagian perkiraan' : '') + (x.name ? ' · terbanyak: ' + x.name : '') };
     }) };
-    var cfg = { label: 'Siswa berusia 17+ per kecamatan', categoryLabel: 'Kecamatan', valueLabel: 'Siswa 17+', color: 'chart-2', demo: false,
+    var cfg = { label: (by === 'n' ? Noun() : by === 'stu' ? 'Siswa' : 'Siswa berusia 17+') + ' per kecamatan', categoryLabel: 'Kecamatan', valueLabel: by === 'n' ? Noun() : by === 'stu' ? 'Siswa' : 'Siswa 17+', color: 'chart-2', demo: false,
       onClick: function (p) { showKec(p.key); } };
     if (!k.stuChart) k.stuChart = panelChart('rankBars', k.stuHost, data, cfg); else k.stuChart.update(data, cfg);
   }
@@ -2309,6 +3041,8 @@
     if (!b || !V) return;
     b.sort.set(st.sort);
     var rows = boardRows(st.q), fmt = fm(), top = rows[0];
+    var eb = b.ex.el.querySelector('.sk-ex__eyebrow');
+    if (eb) eb.textContent = 'Urutan yayasan · ' + (onlySma() ? 'SMA saja' : shownJenis().map(function (j) { return JENIS_WORD[j]; }).join(', '));
     rows.forEach(function (a, i) { a._rank = i + 1; });
     var title = !rows.length ? 'Tidak ada yayasan pengelola SMA dengan filter ini. Hapus salah satu filter.' :
       st.sort === 'score' ? top.label + ' memiliki skor tertinggi (' + fmt.num(top.score, 1) + ')' :
@@ -2503,7 +3237,8 @@
     p.steps = E('div', { class: 'sk-steps', role: 'list' });
     p.next = E('ul', { class: 'sk-next' });
     p.list = E('div', { class: 'sk-plist' });
-    p.store = E('p', { class: 'sk-warn', hidden: true, text: '▲ Daftar tindak lanjut tidak tersimpan di perangkat ini karena penyimpanan browser diblokir.\nEkspor sebelum menutup halaman.' });
+    /* v6 (§7.6): the storage state in one line: memory (no key, blocked, full), an old password, a damaged list */
+    p.store = E('div', { class: 'sk-warn sk-pstore', hidden: true, aria: { live: 'polite' } });
     p.file = E('input', { type: 'file', accept: '.json,application/json', hidden: true });
     p.file.addEventListener('change', function () {
       var file = p.file.files && p.file.files[0];
@@ -2521,17 +3256,21 @@
     });
     p.exportB = guard(btn('Ekspor (JSON)', 'download', function () {
       if (exportBlocked()) return;
-      var name = 'sma-pipeline_cilangkap_' + ymd(today()) + '.json';
-      var text;
-      try { text = SC.pipeline.exportJson(); } catch (e) { text = null; }
-      if (text && download(name, text, 'application/json')) ctx.toast(name + ' tersimpan di komputer ini');
-      else ctx.toast('File tidak dapat disimpan. Coba lagi.', 'warn');
+      /* the export is the staff's explicit action and is not encrypted (§7.5): say so before the file is written */
+      ctx.confirm({ title: 'Ekspor daftar tindak lanjut', body: 'File ini tidak terenkripsi. Simpan hanya di komputer kantor.', ok: 'Ekspor (JSON)', cancel: 'Batal' }).then(function (yes) {
+        if (!yes || !ctx) return;
+        var name = 'sma-pipeline_cilangkap_' + ymd(today()) + '.json';
+        var text;
+        try { text = SC.pipeline.exportJson(); } catch (e) { text = null; }
+        if (text && download(name, text, 'application/json')) ctx.toast(name + ' tersimpan di komputer ini');
+        else ctx.toast('File tidak dapat disimpan. Coba lagi.', 'warn');
+      });
     }, 'btn--secondary btn--bar'));
     p.importB = btn('Impor (JSON)', 'upload', function () { p.file.click(); }, 'btn--secondary btn--bar');
     p.clearB = btn('Kosongkan daftar', 'close', function () {
       var n = Object.keys(pipeAll()).length;
       if (!n) return;
-      ctx.confirm({ title: 'Kosongkan daftar tindak lanjut SMA', body: count(n, 'entri') + ' beserta catatannya akan dihapus dari komputer ini. Ekspor dulu jika perlu salinan.', ok: 'Kosongkan daftar', cancel: 'Batal', danger: true })
+      ctx.confirm({ title: 'Kosongkan daftar tindak lanjut SMA', body: count(n, 'entri') + ' beserta catatannya akan dihapus dari komputer ini. Ekspor dulu jika perlu salinan.\nSalinan terenkripsi yang telah diunduh tidak berubah.', ok: 'Kosongkan daftar', cancel: 'Batal', danger: true })
         .then(function (yes) { if (yes) { try { SC.pipeline.clear(); } catch (e) { /* ignore */ } renderPipe(true); ctx.toast('Daftar tindak lanjut dikosongkan'); } });
     }, 'btn--ghost btn--bar');
     p.ex.el.insertBefore(E('div', { class: 'sk-tools' }, p.exportB, p.importB, p.clearB, p.file), p.ex.body);
@@ -2546,25 +3285,34 @@
     p.prodHost = E('div', { class: 'sk-tools sk-tools--prod' });
     p.ex.body.appendChild(p.prodHost);
     p.ex.body.appendChild(p.list);
-    p.ex.body.appendChild(E('p', { class: 'sk-note', text: 'Catatan kerja hanya tersimpan di browser ini, tanpa angka bank.\nTambahkan SMA atau yayasan dari panel detailnya.\nTahap “Aktif” hanya tanda kerja staf. Status Mandiri tetap dari file cabang.' }));
+    p.ex.body.appendChild(E('p', { class: 'sk-note', text: 'Catatan kerja hanya tersimpan di browser ini, terenkripsi dengan kata sandi dashboard, tanpa angka bank.\nTambahkan sekolah atau yayasan dari kartunya.\nTahap “Aktif” hanya tanda kerja staf. Status Mandiri tetap dari file cabang.' }));
     body.appendChild(p.ex.el);
     ui.work.pipe = p;
   }
   function renderPipe(force) {
     var p = ui.work && ui.work.pipe;
     if (!p) return;
-    var all = pipeAll(), keys = Object.keys(all), fmt = fm();
-    var sig = JSON.stringify([keys.length, keys.map(function (k) { return all[k].t; }), st.pipeStage, st.pipeProd, veil()]);
+    var all = pipeAll(), keys = Object.keys(all), fmt = fm(), line = pipeLine();
+    var sig = JSON.stringify([keys.length, keys.map(function (k) { return all[k].t; }), st.pipeStage, st.pipeProd, veil(), line ? line.text : '', !!SC.idx]);
     if (!force && p.sig === sig) return;
     p.sig = sig;
-    p.store.hidden = pipePersisted();
+    clear(p.store);
+    p.store.hidden = !line;
+    if (line) {
+      p.store.appendChild(E('p', { text: '▲ ' + line.text }));
+      if (line.action === 'followups') p.store.appendChild(btn('Buka di Data & Privasi', 'chev-r', function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:followups' }); }, 'btn--ghost btn--bar'));
+    }
+    p.ex.el.title = pipeSealed() ? SC.pipelineLines.sealed : '';
+    /* entries whose school or yayasan is no longer in the data (§7.3): kept, listed last, marked */
+    var gone = {};
+    if (SC.idx) { try { (SC.pipeline.orphans(knownPipeKey) || []).forEach(function (k) { gone[k] = 1; }); } catch (e) { gone = {}; } }
     var counts = {};
     SC.config.stages.forEach(function (s) { counts[s.id] = 0; });
     keys.forEach(function (k) { counts[all[k].stage] = (counts[all[k].stage] || 0) + 1; });
     var tone = { ok: 0, mid: 0, bad: 0, none: 0 };
     SC.config.stages.forEach(function (s) { tone[STAGE_TONE[s.id] || 'none'] += counts[s.id]; });
     p.ex.set(keys.length ? count(keys.length, 'entri') + ' di daftar tindak lanjut, ' + fmt.int(counts.aktif) + ' aktif' : 'Daftar tindak lanjut masih kosong',
-      keys.length ? 'Jumlah entri per tahap · diisi staf cabang di komputer ini' : 'Tambahkan SMA atau yayasan dari panel detailnya.', 'Sumber: catatan kerja cabang (lokal) · ' + fmt.date(today()));
+      keys.length ? 'Jumlah entri per tahap · diisi staf cabang di komputer ini' : 'Tambahkan sekolah atau yayasan dari kartunya.', 'Sumber: catatan kerja cabang (lokal) · ' + fmt.date(today()));
     var bdata = { acquired: tone.ok, partly: tone.mid, notYet: tone.bad, noData: tone.none };
     var bcfg = { label: 'Tindak lanjut per kelompok tahap', unit: 'entri', labels: { acquired: 'Aktif', partly: 'Dalam proses', notYet: 'Belum dihubungi', noData: 'Ditunda atau batal' }, tableToggle: false };
     if (!p.bar) { p.bar = panelChart('statusBar', p.barHost, bdata, bcfg); } else p.bar.update(bdata, bcfg);
@@ -2608,10 +3356,10 @@
       var ks = shown.filter(function (k) { return all[k].stage === s.id; });
       if (!ks.length) return;
       p.list.appendChild(E('p', { class: 'sk-plist__g', text: s.label + ' · ' + ks.length }));
-      ks.sort(function (a, b) { return (all[a].label || a) < (all[b].label || b) ? -1 : 1; }).forEach(function (k) {
+      ks.sort(function (a, b) { return ((gone[a] ? 1 : 0) - (gone[b] ? 1 : 0)) || ((all[a].label || a) < (all[b].label || b) ? -1 : 1); }).forEach(function (k) {
         var e = all[k], days = SC.daysInStage(e);
-        var row = E('button', { type: 'button', class: 'sk-plist__row sk-plist__row--' + (STAGE_TONE[e.stage] || 'none') },
-          E('span', { class: 'sk-plist__name', text: (e.label || k) + (/^npsn:/.test(k) ? ' · SMA' : ' · yayasan') }),
+        var row = E('button', { type: 'button', class: 'sk-plist__row sk-plist__row--' + (STAGE_TONE[e.stage] || 'none') + (gone[k] ? ' is-gone' : '') },
+          E('span', { class: 'sk-plist__name', text: (e.label || k) + (/^npsn:/.test(k) ? ' · ' + pipeJenis(k) : ' · yayasan') + (gone[k] ? ' · Tidak ada di data terbaru' : '') }),
           E('span', { class: 'sk-plist__meta', text: [owner(e.owner) || 'Belum ada penanggung jawab', (e.products || []).filter(knownProduct).map(productName).join(' · ') || 'belum ada produk', e.program ? (e.program === 'RB' ? 'Referral Biller' : 'GEMPITA') : null, days != null ? count(days, 'hari') + ' di tahap ini' : null].filter(Boolean).join(' · ') }),
           E('span', { class: 'sk-plist__next', text: e.nextStep ? e.nextStep + (e.nextDate ? ' · ' + fmt.date(e.nextDate) : '') : '' }));
         row.addEventListener('click', function () { openPipeKey(k); });
@@ -2619,11 +3367,23 @@
       });
     });
   }
+  /** The school row of a follow-up key 'npsn:<NPSN>': the app's own NPSN, else the OpenStreetMap point the 30 km file matched. */
+  function rowOfKey(key) {
+    var I = SC.idx, m = /^npsn:(\d+)$/.exec(String(key || ''));
+    if (!I || !m) return -1;
+    if (X.idx !== I || !X.uni) smaIdx(I);
+    if (I.npsnIndex.has(m[1])) return I.npsnIndex.get(m[1]);
+    var A = SC.students, r = A && isFn(A.byNpsn) ? A.byNpsn(m[1]) : null;
+    if (r && /^app:/.test(r.id)) { var pm = /^app:(-?[\d.]+),(-?[\d.]+)$/.exec(r.id); if (pm) { for (var k = 0; k < X.uni.length; k++) { var i = X.uni[k]; if (I.lon[i].toFixed(5) === pm[1] && I.lat[i].toFixed(5) === pm[2]) return i; } } }
+    return -1;
+  }
+  function knownPipeKey(k) { var I = SC.idx; if (!I) return true; if (/^npsn:/.test(k)) return rowOfKey(k) >= 0; return I.entByKey.has(k); }
+  function pipeJenis(k) { var i = rowOfKey(k); return i >= 0 ? JENIS_WORD[jenisOf(i)] : 'sekolah'; }
   function openPipeKey(key) {
     var I = SC.idx;
     if (!I) return;
-    var m = /^npsn:(\d+)$/.exec(key);
-    if (m && I.npsnIndex.has(m[1])) { flyNext = true; ctx.select({ kind: 'smaSchool', id: I.npsnIndex.get(m[1]) }); return; }
+    var row = rowOfKey(key);
+    if (row >= 0) { flyNext = true; ctx.select({ kind: 'smaSchool', id: row }); return; }
     var e = I.entByKey.get(key);
     if (e) { flyNext = true; ctx.select({ kind: 'smaYay', id: e.i }); return; }
     ctx.toast('Entri ini tidak ada di daftar sekolah.', 'warn');
@@ -2637,6 +3397,11 @@
     if (meta && Array.isArray(meta.sources)) meta.sources.forEach(function (s) { list.appendChild(E('li', { text: s })); });
     else list.appendChild(E('li', { text: 'Kemendikdasmen Dapodik (Sekolah Kita), OpenStreetMap (Overpass), Overture Maps places 2026-09-23.1. Dimuat bersama daftar sekolah.' }));
     list.appendChild(E('li', { text: 'Sekolah yayasan TNI: Kemendikdasmen Dapodik dan Verval Yayasan (NPYP), 12 Okt 2026.' }));
+    /* v6 (V6_SPEC §8.1): the three school files, each named once its file is in ("Dimuat saat diperlukan" before) */
+    var D30 = SC.students && isFn(SC.students.file30) ? SC.students.file30() : null;
+    list.appendChild(E('li', { text: 'Siswa SMA, SMK dan MA dalam 30 km: Kemendikdasmen (Dapodik, Sekolah Kita, termasuk madrasah; Data Referensi). SMA dalam 15 km diunduh 16 Okt 2026, sekolah lain 18 Okt 2026.' + (D30 ? '' : ' Dimuat saat diperlukan.') }));
+    list.appendChild(E('li', { text: 'Kontak sekolah: Sekolah Kita (Dapodik), Data Referensi Kemendikdasmen, 18 Okt 2026. Situs resmi diperiksa 18 Okt 2026.' + (CD() ? '' : ' Dimuat saat diperlukan.') }));
+    list.appendChild(E('li', { text: 'Kelas biaya: situs resmi sekolah (biaya resmi, dibaca 18 Okt 2026), jenis sekolah, daya beli area (perkiraan, ditandai).' + (TD() ? '' : ' Dimuat saat diperlukan.') }));
     list.appendChild(E('li', { text: 'Batas kecamatan dan kelurahan: OpenStreetMap (ODbL), BPS 2020 melalui OCHA/HDX (CC BY 3.0 IGO), kode Kemendagri.' }));
     var I = SC.idx, fmt = fm(), counts = '';
     if (I) {
@@ -2646,7 +3411,8 @@
     }
     var cav = E('ul', { class: 'sk-bul' }, [
       counts || 'SMA dipisahkan dari MA menurut nama setelah daftar sekolah dimuat.',
-      'Jumlah siswa dan nama yayasan hanya dikumpulkan untuk sekolah swasta Kemendikdasmen dalam 15 km.\nMadrasah dan SMA negeri tidak memiliki data yayasan atau siswa.',
+      'Jumlah siswa SMA, SMK dan MA dalam 30 km dari Dapodik (Sekolah Kita).\nSMA dalam 15 km menggunakan data pilot yang sama dengan Ringkasan.\nMA tidak pernah diperkirakan. Sekolah tanpa data siswa tetap tampil dengan alasannya.',
+      'Perkiraan berarti angka dihitung dari data lain, tidak dari sumber resmi untuk lembaga itu.',
       'Enam SMA dikelola yayasan TNI: Yayasan Hang Tuah (AL), Yayasan Ardhya Garini (AU, sekolah Angkasa) dan Yayasan Kartika Jaya (AD).',
       'Titik pada label kecamatan menunjukkan porsi SMA nasabah Mandiri.\nPembandingnya kecamatan lain yang separuh wilayahnya atau lebih dalam 15 km.\nHijau sepertiga tertinggi, kuning tengah, merah terendah (kunjungi lebih dulu).\nTanpa titik: tidak dinilai. Aturannya sama dengan peta merchant.',
       'Tidak ada data pribadi siswa, guru atau orang tua yang disimpan atau diterima.'
@@ -2659,7 +3425,7 @@
   function openSources() {
     if (!ctx) return;
     drawerSel = null;
-    var model = { eyebrow: 'SEKOLAH (SMA)', title: 'Sumber data dan cakupan', sub: [E('span', { text: 'Setiap angka SMA berasal dari data publik. Status Mandiri hanya dari file cabang.' })],
+    var model = { eyebrow: 'SEKOLAH', title: 'Sumber data dan cakupan', sub: [E('span', { text: 'Setiap angka sekolah berasal dari data publik. Status Mandiri hanya dari file cabang.' }), E('span', { class: 'sk-srcline' }, dapodikBadge(28))],
       body: sourcesBody(), prov: 'Disusun 12 Okt 2026 · data/schools.js, data/tni-schools.js, data/admin-areas.js' };
     ctx.openDrawer(model);
     staggerDrawer(model);
@@ -2686,17 +3452,28 @@
   /** Students block of the school drawer: students per grade, 17+ with its source, the school's own note. */
   function studentsBlock(i) {
     var si = sInfo(i), fmt = fm(), I = SC.idx, kids = [];
-    if (si) {
+    if (si && (si.students != null || si.inactive || si.src === 'pilot')) {
       if (si.inactive) kids.push(E('p', { class: 'sk-dd-status' }, toneChip('none', 'Kemungkinan tidak aktif')));
       var g = si.perGrade;
-      kids.push(kv('Siswa', si.students == null ? '—' : count(si.students, 'siswa') + (si.studentsOfficial ? ' (data resmi)' : ' (perkiraan)')));
+      var sv = si.students == null ? '—' : count(si.students, 'siswa') + (si.studentsOfficial ? ' (data resmi)' : ' (perkiraan)');
+      /* a perkiraan count from the 30 km file carries the row note in its "?" tip (V6_SPEC §3.2) */
+      var tip = si.src === 'file' && si.students != null && !si.studentsOfficial && si.note
+        ? E('span', { class: 'tipbtn sk-help sk-help--inline', tabindex: 0, role: 'note', title: si.note, aria: { label: si.note } }, E('span', { aria: { hidden: 'true' }, text: '?' })) : null;
+      kids.push(kv('Siswa', tip ? E('span', { class: 'sk-kvv' }, E('span', { text: sv }), tip) : sv));
       if (g) kids.push(kv('Per kelas', 'Kelas 10: ' + fmt.int(g.k10) + ' · kelas 11: ' + fmt.int(g.k11) + ' · kelas 12: ' + fmt.int(g.k12)));
       if (!si.inactive) kids.push(kv(K17_LABEL, si.k17 == null ? '—' : k17Words(si)));
       /* item 35(a): the rest of the school opens Tabungan SimPel together with a parent or guardian */
       if (!si.inactive && si.k17 != null && si.students != null) kids.push(kv(U17_LABEL, (si.k17Official ? '' : '± ') + fmt.int(Math.max(0, si.students - si.k17)) + (si.k17Official ? ' (data resmi)' : ' (perkiraan)')));
-      if (si.note) kids.push(E('p', { class: 'sk-note', text: si.note }));
-      if (si.inactive && !si.note) kids.push(E('p', { class: 'sk-note', text: 'Dapodik mencatat 0 siswa. Sekolah ini tidak dihitung.' }));
-      kids.push(E('p', { class: 'sk-note' }, STU_SRC + (si.semester && si.semester !== '2026/2027 Ganjil' ? ' (sekolah ini: ' + si.semester + ')' : '') + '. ', link('Cara menghitung siswa 17+', function () { openMethod(); })));
+      if (si.note && si.src !== 'file') kids.push(E('p', { class: 'sk-note', text: si.note }));
+      if (si.inactive && si.closedLikely) kids.push(E('p', { class: 'sk-note', text: missingWords({ students: null, missing: 'closed' }) }));
+      else if (si.inactive && !si.note) kids.push(E('p', { class: 'sk-note', text: 'Dapodik mencatat 0 siswa. Sekolah ini tidak dihitung.' }));
+      var sem = si.semester && si.semester !== '2026/2027 Ganjil' ? (si.olderTable ? ' (sekolah ini: ' + si.semester + ', data terbaru yang tersedia)' : ' (sekolah ini: ' + si.semester + ')') : '';
+      kids.push(E('p', { class: 'sk-note' }, STU_SRC + sem + '. ', link('Cara menghitung siswa 17+', function () { openMethod(); })));
+    } else if (si && si.missing) {
+      /* no count: the cause in words (§3.2): an OpenStreetMap point, probably closed, no table in Dapodik, or loading */
+      kids.push(kv('Siswa', '—'));
+      kids.push(E('p', { class: 'sk-note', text: missingWords(si) }));
+      if (si.missing === 'failed') kids.push(btn('Coba lagi', 'reset', function () { need30(); }, 'btn--ghost btn--bar'));
     } else if (I.stu[i] >= 0) {
       kids.push(kv('Siswa', count(I.stu[i], 'siswa') + ' · Dapodik, 12 Okt 2026'));
       kids.push(E('p', { class: 'sk-note', text: 'Siswa 17+ hanya dihitung untuk SMA dalam 15 km.' }));
@@ -2705,7 +3482,7 @@
       kids.push(E('p', { class: 'sk-note', text: I.dist[i] > 15 ? 'Data siswa hanya tersedia untuk SMA dalam 15 km.' : 'Jumlah siswa sekolah ini tidak tercatat.' }));
     }
     var pv = si && si.inactive ? 'kemungkinan tidak aktif' : si && si.k17 != null ? k17Words(si, true) + ' siswa 17+' + (si.students != null ? ' · ' + count(si.students, 'siswa') : '')
-      : stuOf(i) >= 0 ? count(stuOf(i), 'siswa') : 'belum tersedia';
+      : stuOf(i) >= 0 ? count(stuOf(i), 'siswa') : si && si.missing === 'loading' ? 'memuat' : 'belum tersedia';
     return blk('Siswa', kids, 'sk-dd--stu', { id: 'siswa', preview: pv, open: true });
   }
   /** "Jarak dari KCP · 4,2 km · ± 14 menit": the value follows the shared switches while the drawer is open.
@@ -2717,10 +3494,11 @@
     return kv('Jarak dari KCP', rl ? E('span', { class: 'sk-dd-distv' }, v, rl) : v);
   }
   /**
-   * The SMA card (also the MA / SMK context points). v5 (item 43, §3.3 and §9): folds Siswa, Lokasi, Produk sasaran,
-   * Status Mandiri and Tindak lanjut (the editor), then Identitas, Yayasan and Sumber; the first two are open by
-   * default. The brief feeds the callout; "+ Tindak lanjut" sits in the card head (quick). o.trail: the kecamatan id
-   * when the school was opened inside that kecamatan's card (crumb "‹ Makasar"; the map keeps its focus).
+   * The school card (every jenis, v6 D14): eight folds in this order: Siswa, Lokasi (open), Kelas biaya, Kontak &
+   * identitas (it absorbs v5's Identitas and Sumber; the register is a real link there), Produk sasaran, Status Mandiri,
+   * Tindak lanjut (the editor), Yayasan. The brief feeds the callout; "+ Tindak lanjut" sits in the card head (quick) for
+   * every school with an NPSN. o.trail: the kecamatan id when the school was opened inside that kecamatan's card (crumb
+   * "‹ Makasar"; the map keeps its focus).
    */
   function schoolModel(i, o) {
     o = o || {};
@@ -2730,9 +3508,7 @@
     var j = jenisOf(i), isSmaRow = j === 'sma';
     var code = codeOf(i), body = [], hints = [];
     var r = distOf(i), dp = distText(r, 'cell'), distShort = dp.km && dp.km !== '—' ? dp.km + (dp.min ? ' · ' + dp.min : '') : '—';
-    if (isSmaRow) body.push(studentsBlock(i));
-    else body.push(blk('Titik pembanding', [E('p', { class: 'sk-note', text: (j === 'ma' ? 'MA (madrasah aliyah) satu jenjang dengan SMA.' : 'SMK adalah sekolah menengah kejuruan.') + '\nTitik ini hanya pembanding di peta dan tidak dihitung.' }),
-      I.stu[i] >= 0 ? kv('Siswa', count(I.stu[i], 'siswa') + ' · Dapodik, 12 Okt 2026') : null], null, { id: 'banding', open: true }));
+    body.push(studentsBlock(i));
     var kid = X.kec ? X.kec[i] : null, kel = X.kel ? kelName(X.kel[i]) : null;
     var coordB = btn('Salin koordinat', 'copy', function () {
       copy(I.lat[i].toFixed(5) + ', ' + I.lon[i].toFixed(5)).then(function () { ctx.toast('Koordinat disalin'); }, function () { ctx.toast('Fitur salin tidak tersedia di browser ini', 'warn'); });
@@ -2745,54 +3521,43 @@
       kid ? kv('Wilayah', (kel ? 'Kel. ' + kel + ' · ' : '') + 'Kec. ' + kecName(kid)) : null,
       veil() ? null : kv('Koordinat', fmt.coord(I.lat[i], I.lon[i], 5)),
       t && t.address ? kv('Alamat', (t.confidence === 'low' ? '≈ ' : '') + t.address) : null,
-      E('div', { class: 'sk-dd-actions' }, zoomB, coordB, kid && isSmaRow ? btn('Lihat kecamatan', 'map', function () { showKec(kid); }, 'btn--ghost btn--bar') : null)
+      E('div', { class: 'sk-dd-actions' }, zoomB, coordB, kid ? btn('Lihat kecamatan', 'map', function () { showKec(kid); }, 'btn--ghost btn--bar') : null)
     ], null, { id: 'lokasi', preview: distShort, open: true }));
-    var pkey = isSmaRow && I.npsn[i] ? 'npsn:' + I.npsn[i] : null;
-    if (isSmaRow) {
-      body.push(productsBlock(i));
-      var stNote = E('p', { class: 'sk-note', text: !V || !V.hasBank ? 'Impor sheet 3_sekolah untuk melihat apakah SMA ini nasabah Mandiri.' : veil() ? 'Disamarkan saat berbagi layar.' : V.demo ? 'Sumber: data contoh (ilustrasi)' : 'Sumber: file sekolah cabang, sheet 3_sekolah (hanya di komputer ini)' });
-      /* repeated in every SMA card before the school file: shown once per browser, then under Sumber › Catatan */
-      if (!V || !V.hasBank) { hints.push(hintRec('sk-import-status', stNote)); stNote = hintNode('sk-import-status', stNote); }
-      var stBlk = blk('Status Mandiri', [
-        E('p', { class: 'sk-dd-status' }, chipEl(code, STATUS[code].label)),
-        V && V.hasBank && !veil() && V.rel.byRow.get(i) ? kv('Produk yang dimiliki', V.rel.byRow.get(i).products.filter(knownProduct).map(productName).join(' · ') || '—') : null,
-        stNote
-      ], 'sk-dd--status', { id: 'status', preview: V && V.hasBank ? STATUS[code].label : 'file sekolah belum diimpor', open: false });
-      demoTag(stBlk.querySelector('.dd-blk__t'), { inline: true, when: !!(V && V.demo) });
-      body.push(stBlk);
-      if (pkey) body.push(pipelineEditor(pkey, I.name[i], e ? [e.key] : []));
-      else body.push(blk('Tindak lanjut', [E('p', { class: 'sk-note', text: 'SMA ini tidak memiliki NPSN, sehingga tidak dapat dilacak sendiri. Tambahkan yayasannya.' })], 'sk-dd--pipe', { id: 'pipe', preview: 'tanpa NPSN', open: false }));
-    }
-    body.push(blk('Identitas', [
-      kv('Jenjang', j === 'ma' ? 'MA (madrasah aliyah)' : j === 'smk' ? 'SMK' : 'SMA'),
-      kv('Jenis', E('span', {}, symLabel(i), I.inf[i] ? ' (tanpa NPSN)' : '')),
-      kv('Catatan data', I.npsn[i] ? 'NPSN ' + I.npsn[i] + ' · ' + (I.src[i] === 2 ? 'daftar yayasan TNI' : 'Dapodik') : 'OpenStreetMap / Overture · tanpa NPSN'),
-      t ? kv('Yayasan TNI', [t.foundation, SC.config.matraFull[t.matra], t.npyp ? 'NPYP ' + t.npyp : null, t.accreditation ? 'Akreditasi ' + t.accreditation : null].filter(Boolean).join(' · ')) : null
-    ], null, { id: 'identitas', preview: I.npsn[i] ? 'NPSN ' + I.npsn[i] : 'tanpa NPSN', open: false }));
-    if (isSmaRow) {
-      var fb = null;
-      if (e) { fb = link(e.label, function () { flyNext = true; ctx.select({ kind: 'smaYay', id: e.i }); }); }
-      body.push(blk('Yayasan', [fb || E('p', { class: 'sk-note', text: I.yay[i] || (I.st[i] === 0 ? 'Sekolah negeri, tanpa yayasan.' : 'Nama yayasan belum tercatat. Data yayasan dari Dapodik hanya ada untuk SMA swasta dalam 15 km.') })],
-        null, { id: 'yayasan', preview: e ? e.label : (I.st[i] === 0 ? 'sekolah negeri' : 'belum tercatat'), open: false }));
-    }
-    var url = I.npsn[i] ? 'https://referensi.data.kemendikdasmen.go.id/pendidikan/npsn/' + I.npsn[i] : (t && t.source ? t.source : null);
-    if (url) {
-      var cp = btn('Salin tautan', 'copy', function () { copy(url).then(function () { ctx.toast('Tautan disalin'); }, function () { ctx.toast('Fitur salin tidak tersedia di browser ini', 'warn'); }); }, 'btn--ghost btn--bar');
-      body.push(blk('Sumber', [E('p', { class: 'sk-url', text: url }), E('p', { class: 'sk-note', text: 'Ditampilkan sebagai teks saja. Dashboard tidak membuka tautan ini.' }), cp],
-        null, { id: 'sumber', preview: I.npsn[i] ? 'Dapodik' : 'OpenStreetMap / Overture', open: false }));
-    }
-    /* at most two chips in the card head (v5 §3.3.1): jenis, then the Mandiri status with the school file, else TNI */
+    body.push(tierBlockFor(i));
+    body.push(contactBlockFor(i));
+    var np = npsnOf(i), pkey = np ? 'npsn:' + np : null;
+    body.push(productsBlock(i));
+    var stNote = E('p', { class: 'sk-note', text: !V || !V.hasBank ? 'Impor sheet 3_sekolah untuk melihat apakah ' + (isSmaRow ? 'SMA' : 'sekolah') + ' ini nasabah Mandiri.' : veil() ? 'Disamarkan saat berbagi layar.' : V.demo ? 'Sumber: data contoh (ilustrasi)' : 'Sumber: file sekolah cabang, sheet 3_sekolah (hanya di komputer ini)' });
+    /* repeated in every school card before the school file: shown once per browser, then under Sumber › Catatan */
+    if (!V || !V.hasBank) { hints.push(hintRec('sk-import-status', stNote)); stNote = hintNode('sk-import-status', stNote); }
+    var stBlk = blk('Status Mandiri', [
+      E('p', { class: 'sk-dd-status' }, chipEl(code, STATUS[code].label)),
+      V && V.hasBank && !veil() && V.rel.byRow.get(i) ? kv('Produk yang dimiliki', V.rel.byRow.get(i).products.filter(knownProduct).map(productName).join(' · ') || '—') : null,
+      stNote
+    ], 'sk-dd--status', { id: 'status', preview: V && V.hasBank ? STATUS[code].label : 'file sekolah belum diimpor', open: false });
+    demoTag(stBlk.querySelector('.dd-blk__t'), { inline: true, when: !!(V && V.demo) });
+    body.push(stBlk);
+    if (pkey) body.push(pipelineEditor(pkey, I.name[i], e ? [e.key] : []));
+    else body.push(blk('Tindak lanjut', [E('p', { class: 'sk-note', text: (isSmaRow ? 'SMA' : 'Sekolah') + ' ini tidak memiliki NPSN, sehingga tidak dapat dilacak sendiri. Tambahkan yayasannya.' })], 'sk-dd--pipe', { id: 'pipe', preview: 'tanpa NPSN', open: false }));
+    var fb = null;
+    if (e) { fb = link(e.label, function () { flyNext = true; ctx.select({ kind: 'smaYay', id: e.i }); }); }
+    body.push(blk('Yayasan', [fb || E('p', { class: 'sk-note', text: I.yay[i] || (I.st[i] === 0 ? 'Sekolah negeri, tanpa yayasan.' : 'Nama yayasan belum tercatat di Dapodik.') })],
+      null, { id: 'yayasan', preview: e ? e.label : (I.st[i] === 0 ? 'sekolah negeri' : 'belum tercatat'), open: false }));
+    /* at most two chips in the card head (§4.4): the jenis symbol, then the Mandiri status with the school file, else the
+       kelas biaya chip (the TNI badge stays in "Kontak & identitas"; the star and the eyebrow still say it) */
     var tags = [symLabel(i)];
-    if (isSmaRow && V && V.hasBank) tags.push(chipEl(code));
-    else if (t) tags.push(tniBadge(t));
+    if (V && V.hasBank) tags.push(chipEl(code));
+    else { var tt = tierOf(i); if (tt) tags.push(tierChipEl(tt)); }
     var gm = veil() ? null : { lat: I.lat[i], lon: I.lon[i] };
+    var src = I.src[i] === 1 ? 'Sumber: OpenStreetMap (ODbL) / Overture Maps · diambil 12 Okt 2026' : 'Sumber: Kemendikdasmen Dapodik · diambil 12 Okt 2026';
     return {
       kind: 'sma', key: 'smaSchool:' + i,
-      eyebrow: ((t ? 'SMA yayasan TNI' : JENIS_WORD[j]) + ' · ' + typeWord(I.st[i])).toUpperCase(),
-      title: I.name[i], tags: tags, body: body, gmaps: gm, demo: !!(isSmaRow && V && V.hasBank && V.demo),
-      prov: (I.src[i] === 1 ? 'Sumber: OpenStreetMap (ODbL) / Overture Maps · diambil 12 Okt 2026' : 'Sumber: Kemendikdasmen Dapodik · diambil 12 Okt 2026') + (isSmaRow && sInfo(i) ? ' · ' + STU_SRC.replace('Data siswa: ', 'siswa: ') : ''),
+      eyebrow: ((t ? JENIS_WORD[j] + ' yayasan TNI' : JENIS_WORD[j]) + ' · ' + typeWord(I.st[i])).toUpperCase(),
+      title: I.name[i], tags: tags.filter(Boolean), body: body, gmaps: gm, demo: !!(V && V.hasBank && V.demo),
+      prov: src + (sInfo(i) ? ' · ' + STU_SRC.replace('Data siswa: ', 'siswa: ') : '') + (TD() ? ' · kelas biaya: situs resmi sekolah, jenis sekolah dan perkiraan' : '') + (CD() ? ' · kontak: Sekolah Kita (Dapodik), Data Referensi · 18 Okt 2026' : ''),
+      provBadge: { src: DAPODIK_LOGO, alt: DAPODIK_ALT, width: 51, height: 24 },
       brief: schoolBrief(i, pkey, distShort, r),
-      quick: isSmaRow ? [pipeQuick(pkey, I.name[i])] : [],
+      quick: [pipeQuick(pkey, I.name[i], isSmaRow)],
       crumb: o.trail ? trailCrumb(o.trail) : null,
       anchor: [I.lon[i], I.lat[i]],
       hints: hints
@@ -2800,20 +3565,21 @@
   }
   function tniBadge(t) { return E('span', { class: 'sk-mono-badge is-gold', title: SC.config.matraFull[t.matra], text: 'TNI ' + t.matra }); }
   /**
-   * The SMA brief (callout, phone peek): siswa 17+ (big), siswa and the distance from KCP; chips jenis and status
-   * (with the school file).
+   * The school brief (callout, phone peek): siswa 17+ (big), siswa and the distance from KCP; chips: the jenis symbol,
+   * then the Mandiri status with the school file, else the kelas biaya chip.
    */
   function schoolBrief(i, pkey, distShort, r) {
     var I = SC.idx, si = sInfo(i), fmt = fm(), nums = [], chips = [symLabel(i)];
-    var isSmaRow = jenisOf(i) === 'sma', n = stuOf(i);
-    if (isSmaRow && si && !si.inactive && si.k17 != null) nums.push({ label: 'Siswa 17+', value: k17Words(si, true), big: true, title: K17_LABEL + (si.k17Official ? ' (data resmi)' : ' (perkiraan)') });
-    if (n >= 0) nums.push({ label: 'Siswa', value: fmt.int(n), title: si && si.inactive ? 'Kemungkinan tidak aktif: Dapodik mencatat 0 siswa' : null });
+    var n = stuOf(i);
+    if (si && !si.inactive && si.k17 != null) nums.push({ label: 'Siswa 17+', value: k17Words(si, true), big: true, title: K17_LABEL + (si.k17Official ? ' (data resmi)' : ' (perkiraan)') });
+    if (n >= 0) nums.push({ label: 'Siswa', value: fmt.int(n), title: si && si.inactive ? 'Kemungkinan tidak aktif' : null });
+    else if (si && si.missing) nums.push({ label: 'Siswa', value: '—', title: missingWords(si) });
     /* short values keep the three numbers on one row of the card head; the minutes go into the label
        ("18,3 km" over "± 39 menit dari KCP"), so the callout still says both while the route chip steps aside */
     var dp = distText(r, 'cell');
     nums.push(dp.km && dp.km !== '—' ? { label: dp.min ? dp.min + ' dari KCP' : 'Dari KCP', value: dp.km, title: distShort + '\n' + distTip(r) } : { label: 'Dari KCP', value: '—', title: distTip(r) });
-    if (isSmaRow && V && V.hasBank) chips.push(chipEl(codeOf(i), STATUS[codeOf(i)].label));
-    else if (I.tni[i] >= 0) chips.push(tniBadge(I.tniRows[I.tni[i]]));
+    if (V && V.hasBank) chips.push(chipEl(codeOf(i), STATUS[codeOf(i)].label));
+    else { var tt = tierOf(i); if (tt) chips.push(tierChipEl(tt)); }
     /* no main action: "Detail" leads in the callout, and "+ Tindak lanjut" (quick) is the card head button and the
        phone's sticky action, where it turns into "✓ Di tindak lanjut" in place */
     void pkey;
@@ -2824,12 +3590,14 @@
     var si = sInfo(i), fmt = fm(), est = si && !si.k17Official ? '± ' : '';
     var k17 = si && !si.inactive && si.k17 != null ? si.k17 : null;
     var u17 = k17 != null && si.students != null ? Math.max(0, si.students - k17) : null;
+    var sk = jenisOf(i) !== 'sma';
     var kids = [
       kv('Tabungan (Livin’ by Mandiri)', k17 != null ? est + fmt.int(k17) + ' siswa 17+, dengan KTP' : 'Jumlah siswa 17+ belum tersedia'),
       kv('Tabungan SimPel', u17 != null ? est + fmt.int(u17) + ' siswa di bawah 17, bersama orang tua atau wali' : 'Jumlah siswa di bawah 17 belum tersedia'),
       kv('QRIS kantin', 'Livin’ Merchant untuk kantin dan koperasi'),
       kv('Referral Biller 2026', 'Fee untuk yayasan. Penagihan SPP melalui Kopra Mandiri Bill Collection dan Bill Reminder harus berjalan lebih dulu'),
       kv('GEMPITA 2026', 'Fee untuk guru, staf, pekerja kantin dan siswa berusia 17+ yang menjadi KOL'),
+      sk ? E('p', { class: 'sk-note', text: 'GEMPITA 2026 berlaku untuk SMA. Cek ketentuan untuk SMK dan MA.' }) : null,
       E('p', { class: 'sk-note', text: 'Satu program per sekolah: keduanya tidak dapat berjalan bersamaan.' })
     ];
     var pv = [k17 != null ? est + fmt.int(k17) + ' siswa 17+' : null, u17 != null ? est + fmt.int(u17) + ' di bawah 17' : null].filter(Boolean).join(' · ');
@@ -2838,26 +3606,36 @@
 
   /* ---- "+ Tindak lanjut" (v5, §3.3.4): one click adds the SMA at stage "Belum dihubungi" (MCD.schools.pipeline) */
 
-  function pipeQuick(key, label) {
-    var q = { id: 'pipe', label: '+ Tindak lanjut', title: key ? 'Tambahkan SMA ini ke daftar tindak lanjut. Tersimpan di komputer ini.' : NO_NPSN,
-      run: function () { return quickAdd(key, label); }, edit: function () { return editPipe(key); } };
+  function pipeQuick(key, label, isSma) {
+    var noKey = isSma === false ? NO_NPSN_SK : NO_NPSN;
+    var q = { id: 'pipe', label: '+ Tindak lanjut', title: key ? 'Tambahkan ' + (isSma === false ? 'sekolah' : 'SMA') + ' ini ke daftar tindak lanjut. Tersimpan di komputer ini.' + (pipeSealed() ? ' ' + SC.pipelineLines.sealed : '') : noKey,
+      run: function () { return quickAdd(key, label, isSma); }, edit: function () { return editPipe(key); } };
     if (!key) { q.disabled = true; return q; }
     var cur = pipeGet(key);
     if (cur) q.done = doneOf(key, cur);
     return q;
   }
+  function pipeSealed() { try { return !!(SC.pipeline && isFn(SC.pipeline.sealed) && SC.pipeline.sealed() && SC.pipeline.persisted()); } catch (e) { return false; } }
+  /** "Tersimpan di komputer ini · {tahap}" (sealed: its title says so); in the memory state (§7.6) the line says that
+      the list only lasts while the page is open, so the card never claims a save that did not happen. */
   function doneOf(key, entry) {
-    return { label: '✓ Di tindak lanjut', text: 'Tersimpan di komputer ini · ' + SC.stageLabel(entry && entry.stage), editLabel: 'Ubah', edit: function () { return editPipe(key); } };
+    var kept = pipePersisted(), ln = kept ? null : pipeLine();
+    return { label: '✓ Di tindak lanjut', text: (kept ? 'Tersimpan di komputer ini · ' : 'Hanya selama halaman terbuka · ') + SC.stageLabel(entry && entry.stage),
+      title: kept ? (pipeSealed() ? SC.pipelineLines.sealed : null) : (ln && ln.text) || SC.pipelineLines.memory, editLabel: 'Ubah', edit: function () { return editPipe(key); } };
   }
-  /** → {ok, text, done?, warn?}: the shell shows text inline (an error in its own words, never a silent failure). */
-  function quickAdd(key, label) {
-    if (!key) return { ok: false, text: NO_NPSN };
+  function savedWords(stage) { return (pipePersisted() ? 'Tersimpan di komputer ini · ' : 'Hanya selama halaman terbuka · ') + SC.stageLabel(stage); }
+  /** The storage line of the list (§7.6): null when sealed and ready, else {tone, text, action?}. */
+  function pipeLine() { try { return SC && isFn(SC.pipelineLine) ? SC.pipelineLine() : null; } catch (e) { return null; } }
+  /** → {ok, text, done?, warn?}: the shell shows text inline (an error in its own words, never a silent failure); in the
+      memory state (§7.6) the text is the storage line ("hanya tersimpan selama halaman terbuka", blocked or full). */
+  function quickAdd(key, label, isSma) {
+    if (!key) return { ok: false, text: isSma === false ? NO_NPSN_SK : NO_NPSN };
     var res = null, P = SC && SC.pipeline;
     try { res = P && isFn(P.quickAdd) ? P.quickAdd(key, label) : (P ? P.set(key, { stage: 'baru' }, { label: label }) : null); } catch (e) { res = null; }
     if (!res || !res.ok) return { ok: false, text: (res && res.error) || 'Daftar tindak lanjut tidak dapat disimpan di komputer ini.' };
     syncPipeEditor(key);
-    var d = doneOf(key, res.entry), warn = !pipePersisted();
-    return { ok: true, text: warn ? 'Daftar tindak lanjut tidak tersimpan di perangkat ini karena penyimpanan browser diblokir. Ekspor sebelum menutup halaman.' : d.text, done: d, warn: warn };
+    var d = doneOf(key, res.entry), warn = !pipePersisted(), ln = warn ? pipeLine() : null;
+    return { ok: true, text: warn ? (ln && ln.text) || SC.pipelineLines.memory : d.text, done: d, warn: warn };
   }
   /** "Ubah": open the Tindak lanjut fold of the card on screen and put the keyboard in its first field. */
   function editPipe(key) {
@@ -3006,43 +3784,49 @@
     var a = V.kec[id], I = SC.idx, fmt = fm();
     var name = kecName(id), k = kecIndex()[id], listFirst = o.listFirst !== false, hints = [];
     if (!a) a = newKecAgg(id);
-    var figs = [kv('SMA dalam ' + st.f.km + ' km', fmt.int(a.n) + (a.n ? ' · ' + fmt.int(a.priv) + ' swasta, ' + fmt.int(a.pub) + ' negeri' + (a.unk ? ', ' + fmt.int(a.unk) + ' belum diketahui' : '') : '')),
-      a.nAll > a.n ? kv('Semua SMA di kecamatan ini', fmt.int(a.nAll)) : null,
-      a.tni ? kv('SMA yayasan TNI', fmt.int(a.tni)) : null,
+    var nn = nounOf();
+    var figs = [kv(Noun() + ' dalam ' + st.f.km + ' km', fmt.int(a.n) + (a.n ? ' · ' + fmt.int(a.priv) + ' swasta, ' + fmt.int(a.pub) + ' negeri' + (a.unk ? ', ' + fmt.int(a.unk) + ' belum diketahui' : '') : '')),
+      a.n && !onlySma() ? kv('Menurut jenis', splitWords({ sma: { n: a.nJ.sma }, smk: { n: a.nJ.smk }, ma: { n: a.nJ.ma } })) : null,
+      a.nAll > a.n ? kv('Semua ' + nn + ' di kecamatan ini', fmt.int(a.nAll)) : null,
+      a.tni ? kv(Noun() + ' yayasan TNI', fmt.int(a.tni)) : null,
       kv('Siswa', a.stuN ? fmt.int(a.stu) + ' di ' + count(a.stuN, 'SMA') : 'Jumlah siswa belum tersedia'),
       V.students && a.stuN ? kv(K17_LABEL, (a.k17Est ? '± ' : '') + fmt.int(a.k17) + (a.k17Est ? ' (sebagian perkiraan)' : ' (data resmi)')) : null,
       V.students && a.u17N ? kv(U17_LABEL, (a.k17Est ? '± ' : '') + fmt.int(a.u17) + (a.k17Est ? ' (sebagian perkiraan)' : ' (data resmi)')) : null,
-      a.inactive ? kv('Kemungkinan tidak aktif', count(a.inactive, 'SMA') + ', tidak dihitung') : null,
-      kv('Jarak dari Mabes TNI', k && isNum(k.distKm) ? fmt.km(k.distKm) : '—')];
+      a.inactive ? kv('Kemungkinan tidak aktif', count(a.inactive, nn) + ', tidak dihitung') : null,
+      kv('Jarak dari Mabes TNI', k && isNum(k.distKm) ? fmt.km(k.distKm) : (a && isNum(a.dist) ? fmt.km(a.dist) : '—'))];
     if (V.hasBank) {
-      figs.unshift(E('p', { class: 'sk-dd-status' }, toneChip(a.n ? BAND_TONE[a.band3 || 'noData'] : 'none', a.n ? fmt.pct(a.cov, 0) + ' SMA-nya nasabah Mandiri' : 'Tidak ada SMA')));
+      figs.unshift(E('p', { class: 'sk-dd-status' }, toneChip(a.n ? BAND_TONE[a.band3 || 'noData'] : 'none', a.n ? fmt.pct(a.cov, 0) + ' ' + nn + '-nya nasabah Mandiri' : 'Tidak ada ' + nn)));
       if (a.n && kecThird(a)) figs.splice(1, 0, kv('Urutan', kecThird(a)));
       figs.push(kv('Status', fmt.int(a.cust) + ' nasabah · ' + fmt.int(a.pros) + ' prospek · ' + fmt.int(a.none) + ' tanpa data'));
     }
     figs.push(E('div', { class: 'sk-dd-actions' }, btn('Perbesar ke kecamatan', 'target', function () { zoomKec(id); }, 'btn--secondary btn--bar')));
     var fb = blk('Angka kecamatan', figs, V.hasBank ? 'sk-dd--status' : null,
-      { id: 'angka', preview: count(a.n, 'SMA') + (V.students && a.stuN ? ' · ' + (a.k17Est ? '± ' : '') + fmt.int(a.k17) + ' siswa 17+' : ''), open: !listFirst });
+      { id: 'angka', preview: count(a.n, nn) + (V.students && a.stuN ? ' · ' + (a.k17Est ? '± ' : '') + fmt.int(a.k17) + ' siswa 17+' : ''), open: !listFirst });
     demoTag(fb.querySelector('.dd-blk__t'), { inline: true, when: V.demo });
     /* every SMA of the kecamatan within the distance, siswa 17+ first (the official age count, else the estimate) */
-    var rows = kecRanked(a), list = E('div', { class: 'sk-dd-list sk-kl', role: 'list', aria: { label: 'SMA di ' + name } });
+    var rows = kecRanked(a), list = E('div', { class: 'sk-dd-list sk-kl', role: 'list', aria: { label: Noun() + ' di ' + name } });
     rows.slice(0, KL_MAX).forEach(function (i) { list.appendChild(E('div', { role: 'listitem', class: 'sk-kl__li' }, kecRow(i, id))); });
     var est = rows.some(function (i) { var s = sInfo(i); return !!(s && s.k17 != null && !s.k17Official); });
     var estNote = est ? E('p', { class: 'sk-note', text: 'Angka dengan ± adalah perkiraan.' }) : null;
     if (estNote) { hints.push(hintRec('sk-estimate', estNote)); estNote = hintNode('sk-estimate', estNote); }
     var more = link('Lihat semua di daftar', function () { goTab('kec'); }, 'sk-kl__more');
     more.title = 'Buka tab Kecamatan di Daftar & grafik';
-    var lb = blk('SMA di ' + name + ', siswa 17+ terbanyak', [
-      rows.length ? list : E('p', { class: 'sk-note', text: 'Tidak ada SMA di sini dengan filter ini.' }),
-      rows.length > KL_MAX ? E('p', { class: 'sk-note', text: '+' + (rows.length - KL_MAX) + ' lainnya. Perbesar peta untuk melihat setiap SMA.' }) : null,
+    /* v6 (§3.5): an empty kecamatan says the scope; at 15 km a link switches to 30 km */
+    var empty = E('p', { class: 'sk-note' }, 'Tidak ada ' + nn + ' dalam ' + st.f.km + ' km di kecamatan ini.' + (filtersActive() ? ' Hapus salah satu filter.' : ''),
+      st.f.km <= 15 ? E('span', {}, ' ', link('Pilih 30 km untuk melihat lebih banyak.', function () { setScope(30); if (ctx) openKec(id); })) : null);
+    var lb = blk(Noun() + ' di ' + name + ', siswa 17+ terbanyak', [
+      rows.length ? list : empty,
+      rows.length > KL_MAX ? E('p', { class: 'sk-note', text: '+' + (rows.length - KL_MAX) + ' lainnya. Perbesar peta untuk melihat setiap ' + nn + '.' }) : null,
       estNote, E('p', { class: 'sk-kl__foot' }, more)
-    ], 'sk-dd--klist', { id: 'daftar', preview: count(rows.length, 'SMA'), open: true });
+    ], 'sk-dd--klist', { id: 'daftar', preview: count(rows.length, nn), open: true });
     /* list first: the list is the card, never folded (phones fold every .dd-blk of a new card until "Semua detail");
        numbers first ("Detail"): it is one more fold under the numbers */
     if (listFirst) { lb.classList.remove('dd-blk'); lb.classList.add('sk-kl-blk'); }
     var body = listFirst ? [lb, fb] : [fb, lb];
     var kb = kecBrief(id);
     if (kb && listFirst) kb.primary = null;     /* the list is on screen already: no "Lihat SMA di kecamatan ini" again */
-    return { kind: 'kec', key: 'kec:' + id, eyebrow: ('Kecamatan' + (k && k.kotaName ? ' · ' + k.kotaName : '')).toUpperCase(), title: name, body: body,
+    var kota = k && k.kotaName ? k.kotaName : (a && a.kota) || '';
+    return { kind: 'kec', key: 'kec:' + id, eyebrow: ('Kecamatan' + (kota ? ' · ' + kota : '')).toUpperCase(), title: name, body: body,
       gmaps: { q: kecQuery(id) }, demo: !!(V.hasBank && V.demo), listFirst: listFirst,
       prov: SRC_SCHOOLS + '; ' + SRC_AREAS + (V.students ? ' · ' + STU_SRC.replace('Data siswa: ', 'siswa: ') : ''),
       brief: kb, anchor: kecAnchor(id), hints: hints };
@@ -3157,7 +3941,7 @@
     var next = E('input', { class: 'input', type: 'text', maxlength: 120, placeholder: 'Langkah berikutnya', value: cur0.nextStep || '', aria: { label: 'Langkah berikutnya' } });
     var nextDate = E('input', { class: 'input', type: 'date', value: cur0.nextDate || '', aria: { label: 'Tanggal langkah berikutnya' } });
     var last = E('input', { class: 'input', type: 'date', value: cur0.lastContact || '', aria: { label: 'Kontak terakhir' } });
-    var note = E('textarea', { class: 'input sk-ta', maxlength: 500, rows: 3, aria: { label: 'Catatan' } });
+    var note = E('textarea', { class: 'input sk-ta', maxlength: 500, rows: 3, placeholder: NOTE_PLACEHOLDER, aria: { label: 'Catatan' } });
     note.value = cur0.note || '';
     var msg = E('p', { class: 'sk-pmsg', aria: { live: 'polite' } });
     var save = btn(pipeGet(key) ? 'Simpan' : 'Tambahkan ke tindak lanjut', 'check', function () {
@@ -3165,7 +3949,7 @@
         stage: stage.value, owner: ownerIn.value, program: prog.value, nextStep: next.value, nextDate: nextDate.value, lastContact: last.value, note: note.value,
         products: boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; })
       }, { label: label, relatedKeys: uniq(related || []) });
-      msg.textContent = res.ok ? 'Tersimpan di komputer ini · ' + SC.stageLabel(res.entry.stage) : res.error;
+      msg.textContent = res.ok ? savedWords(res.entry.stage) : res.error;
       msg.classList.toggle('is-warn', !res.ok);
       if (res.ok) { var t = save.querySelector('span'); if (t) t.textContent = 'Simpan'; refresh(['pipeline']); }
     }, 'btn--primary btn--bar');
@@ -3187,7 +3971,7 @@
       var t = save.querySelector('span');
       if (t) t.textContent = 'Simpan';
       if (!rm.parentNode) acts.appendChild(rm);
-      msg.textContent = 'Tersimpan di komputer ini · ' + SC.stageLabel(c.stage);
+      msg.textContent = savedWords(c.stage);
       msg.classList.remove('is-warn');
     } };
     return block;
@@ -3285,11 +4069,14 @@
     var I = SC.idx, j = jenisOf(i), patch = {};
     if (j === 'ma' && !st.show.ma) setShow({ ma: true });
     if (j === 'smk' && !st.show.smk) setShow({ smk: true });
-    var need = KMS.filter(function (k) { return k >= I.dist[i]; })[0] || 30;
-    if (st.f.km < need) patch.km = need;
+    if (j === 'sma' && st.show.sma === false) setShow({ sma: true });
+    /* v6: the scope widens to 30 km for a school beyond 15 km (stored, as a staff choice would be) */
+    if (I.dist[i] > st.f.km) { if (I.dist[i] > 15) setScope(30, { camera: false }); else patch.km = 15; }
     if ((st.f.type === 'private' && I.st[i] !== 1) || (st.f.type === 'public' && I.st[i] !== 0)) patch.type = 'all';
     if (st.f.tni && I.tni[i] < 0) patch.tni = false;
     if (st.f.inf && I.inf[i]) patch.inf = false;
+    var tk = st.f.tiers ? tierKey(i) : null;
+    if (tk && st.f.tiers.indexOf(tk) < 0) patch.tiers = null;
     if (Object.keys(patch).length) setF(patch, { camera: false });
   }
   function focusRow(i, c) {
@@ -3383,6 +4170,8 @@
     if (!SC.idx) return true;
     var model = showModel(sel, trail);
     if (!model) return false;
+    /* v6 (§9.1): the first school card loads the contacts (and kelas biaya); the card refills when they land */
+    if (sel.kind === 'smaSchool') { needContacts(); needTiers(); }
     drawerSel = sel;
     if (sel.kind === 'smaKec') { st.selKec = String(sel.id); MCD.map.requestRender(); }
     else if (sel.kind === 'smaSchool' && WS() && st.selKec !== (trail || null)) { st.selKec = trail || null; MCD.map.requestRender(); }
@@ -3437,8 +4226,29 @@
       if (keys.indexOf('pipeline') >= 0 && ui.work && ui.work.pipe) ui.work.pipe.sig = '';
       renderWork(false);
     } else renderOverview();
+    syncScopes();
     syncControls();
     syncChips();
+    repaintSummary();
+  }
+  /**
+   * The slim rail shows summary() and pins rebuild from cardFor(): after an in-section change (a jenis, a filter, the
+   * scope, a data file that landed) the shell is told, at most once per frame: MCD.windows.paintSlim when the SHELL lane
+   * exports it, else the state event the shell already listens to for filter changes ({keys: ['filters.schools']};
+   * app.js only re-renders the page head for it, so nothing loops back into refresh()).
+   */
+  var summaryQ = 0;
+  function repaintSummary() {
+    if (summaryQ || !ctx) return;
+    summaryQ = setTimeout(function () {
+      summaryQ = 0;
+      if (!ctx) return;
+      var W0 = WS(), fn = W0 && (W0.paintSlim || W0.refreshSummary);
+      try {
+        if (isFn(fn)) fn.call(W0);
+        else if (MCD.state && isFn(MCD.state.emit)) MCD.state.emit('change', { keys: ['filters.schools'], state: MCD.state.get(), source: ID });
+      } catch (e) { /* the rail repaints on its next sync */ }
+    }, 16);
   }
   function syncControls() {
     if (!ctx) return;
@@ -3498,16 +4308,28 @@
    * summary() → {items: [{value, label, tone?, title}] (≤ 3), filters}: the slim rail. SMA within the distance,
    * siswa 17+ and, with the school file, the share of SMA nasabah Mandiri (else the SMA of TNI foundations).
    */
+  /**
+   * v6 (V6_SPEC §3.6): summary() → {items, filters, scope}. The scope is not a filter (D4): `filters` counts status,
+   * yayasan TNI, tanpa NPSN and kelas biaya only; `scope` is the slim rail's vertical pair (windows.js paints it).
+   * Items: "SMA 15 km" (SMA alone) or "Sekolah 30 km" with the split per jenis and the schools without a count in the
+   * title, "Siswa 17+" ("—" while the 30 km file loads), then "Nasabah %" (school file) or "Yayasan TNI".
+   */
+  function scopeSummary() {
+    return { label: 'Cakupan', value: scopeNow(), options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], title: SCOPE_TIP, aria: SCOPE_ARIA,
+      set: function (v) { setScope(v); } };
+  }
   function summary() {
-    if (!st) return { items: [], filters: 0 };
-    var f = st.f, nf = (f.km !== 15 ? 1 : 0) + (f.type !== 'all' ? 1 : 0) + (f.tni ? 1 : 0) + (f.inf ? 1 : 0);
-    if (!V) return { items: [], filters: nf };
-    var k = V.kpi, fmt = fm(), items = [];
-    items.push({ value: fmt.int(k.n), label: 'SMA ' + f.km + ' km', title: count(k.n, 'SMA') + ' dalam ' + f.km + ' km dari Mabes TNI' + filterWords() });
-    if (V.students && k.stuN) items.push({ value: fmt.int(k.k17), label: 'Siswa 17+', title: fmt.int(k.k17) + ' siswa berusia 17+ (dapat memiliki KTP)' + (k.k17Est ? ', sebagian perkiraan' : '') });
-    if (V.hasBank) items.push({ value: k.n ? fmt.pct(k.cust / k.n, 0) : '—', label: 'Nasabah', tone: 'ok', title: fmt.int(k.cust) + ' dari ' + count(k.n, 'SMA') + ' telah menjadi nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
-    else items.push({ value: fmt.int(k.tni), label: 'Yayasan TNI', title: count(k.tni, 'SMA') + ' dikelola yayasan TNI' });
-    return { items: items.slice(0, 3), filters: nf };
+    if (!st) return { items: [], filters: 0, scope: { label: 'Cakupan', value: scopeGet(), options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], set: function (v) { setScope(v); } } };
+    var f = st.f, nf = activeFilterCount(), sc = scopeSummary();
+    if (!V) return { items: [], filters: nf, scope: sc };
+    var k = V.kpi, fmt = fm(), items = [], nn = nounOf(), km = scopeNow();
+    var t0 = count(k.n, nn) + ' dalam ' + km + ' km dari Mabes TNI' + filterWords() + (!onlySma() ? ' · ' + splitWords(V.byJ) : '') + (k.noData ? ' · ' + count(k.noData, 'sekolah') + ' tanpa data siswa' : '');
+    items.push({ value: fmt.int(k.n), label: (onlySma() ? 'SMA ' : 'Sekolah ') + km + ' km', title: t0 });
+    if (V.students && k.stuN && !k.loading) items.push({ value: fmt.int(k.k17), label: 'Siswa 17+', title: fmt.int(k.k17) + ' siswa berusia 17+ (dapat memiliki KTP)' + (k.k17Est ? ', sebagian perkiraan' : '') });
+    else if (k.loading) items.push({ value: '—', label: 'Siswa 17+', title: f30State() === 'error' ? FAIL30 : LOAD30 });
+    if (V.hasBank) items.push({ value: k.n ? fmt.pct(k.cust / k.n, 0) : '—', label: 'Nasabah', tone: 'ok', title: fmt.int(k.cust) + ' dari ' + count(k.n, nn) + ' telah menjadi nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });
+    else items.push({ value: fmt.int(k.tni), label: 'Yayasan TNI', title: count(k.tni, nn) + ' dikelola yayasan TNI' });
+    return { items: items.slice(0, 3), filters: nf, scope: sc };
   }
   /**
    * workspace() → {rail, drawer, hide} for MCD.windows.adopt (Detail ≥ 1024 px): the left panel is the summary rail,
@@ -3520,7 +4342,7 @@
     setTimeout(syncAdopted, 0);
     return {
       rail: { el: page.el, label: 'Sekolah', icon: 'sec-schools', summary: summary },
-      drawer: { el: w.el, tabs: w.tabHost, title: 'Daftar & grafik SMA', source: SRC_SCHOOLS + ' · ' + STU_SRC, more: function () { openSources(); } },
+      drawer: { el: w.el, tabs: w.tabHost, title: onlySma() ? 'Daftar & grafik SMA' : 'Daftar & grafik sekolah', source: SRC_SCHOOLS + ' · ' + STU_SRC, more: function () { openSources(); } },
       hide: [w.head, w.foot, ui.rail && ui.rail.openWork].filter(Boolean)
     };
   }
@@ -3545,7 +4367,7 @@
     var key = SC.searchKey(q), out = [];
     for (var k = 0; k < I.n && out.length < 8; k++) {
       var i = I.order[k];
-      if (I.jen[i] !== 3 || I.nameKey[i].indexOf(key) < 0) continue;
+      if (I.jen[i] !== 3 || I.nameKey[i].indexOf(key) < 0 || SC.smaClass(I.name[i], !!I.npsn[i]) === 2) continue;
       var dKcp = distText(distOf(i));
       out.push({ group: 'SMA', label: I.name[i], sub: 'SMA · ' + (dKcp && dKcp !== '—' ? dKcp + ' dari KCP' : fm().km(I.dist[i]) + ' dari Mabes TNI'), run: (function (row) {
         return function () { flyNext = true; if (ctx) ctx.select({ kind: 'smaSchool', id: row }); else if (MCD.app && MCD.app.navigate) { MCD.app.navigate(ID); setTimeout(function () { flyNext = true; if (ctx) ctx.select({ kind: 'smaSchool', id: row }); }, 600); } };
@@ -3553,24 +4375,47 @@
     }
     return out;
   }
+  /** v6: SMK and MA names for "Cari" (their own provider, after the SMA): a hit turns its jenis on and opens it. */
+  function searchSkMa(q) {
+    SC = SC || MCD.schools || null;
+    var I = SC && SC.idx;
+    if (!I || !q || String(q).trim().length < 3) return [];
+    var key = SC.searchKey(q), out = [];
+    for (var k = 0; k < I.n && out.length < 8; k++) {
+      var i = I.order[k];
+      if (I.dist[i] > 30 || I.nameKey[i].indexOf(key) < 0) continue;
+      var w = I.jen[i] === 4 ? 'SMK' : I.jen[i] === 3 && SC.smaClass(I.name[i], !!I.npsn[i]) === 2 ? 'MA' : null;
+      if (!w) continue;
+      var dKcp = distText(distOf(i));
+      out.push({ group: 'SMK dan MA', label: I.name[i], sub: w + ' · ' + (dKcp && dKcp !== '—' ? dKcp + ' dari KCP' : fm().km(I.dist[i]) + ' dari Mabes TNI'), run: (function (row) {
+        return function () { if (ctx) focusRow(row); else if (MCD.app && MCD.app.navigate) { MCD.app.navigate(ID); setTimeout(function () { if (ctx) focusRow(row); }, 600); } };
+      })(i) });
+    }
+    return out;
+  }
   var searchDone = false;
-  /* load time: "Cari" finds SMA from every section once the school list is loaded (empty until then) */
-  if (MCD.searchProviders && typeof MCD.searchProviders === 'object') { MCD.searchProviders.sma = function (q) { return searchSma(q); }; searchDone = true; }
+  /* load time: "Cari" finds SMA (and, v6, SMK and MA) from every section once the school list is loaded (empty until then) */
+  if (MCD.searchProviders && typeof MCD.searchProviders === 'object') {
+    MCD.searchProviders.sma = function (q) { return searchSma(q); };
+    MCD.searchProviders.sekolah = function (q) { return searchSkMa(q); };
+    searchDone = true;
+  }
   function registerSearch() {
     if (searchDone) return;
     var A = MCD.app;
     if (!A || !isFn(A.registerSearch)) return;
-    try { A.registerSearch('sma', searchSma); searchDone = true; } catch (e) { /* the shell keeps its own entries */ }
+    try { A.registerSearch('sma', searchSma); A.registerSearch('sekolah', searchSkMa); searchDone = true; } catch (e) { /* the shell keeps its own entries */ }
   }
 
   /* =============================================================== contract */
 
   var SPEC = {
-    lede: 'SMA dalam 15 dan 30 km dari Mabes TNI, dengan jumlah siswa dan siswa 17+.\nLihat SMA terdekat dari KCP.\nSiswa 17+ untuk Tabungan, siswa di bawah 17 untuk Tabungan SimPel.',
+    lede: 'SMA, SMK dan MA dalam 15 km atau 30 km dari Mabes TNI, dengan jumlah siswa dan siswa 17+.\nLihat kelas biaya dan kontak lembaga setiap sekolah.\nSiswa 17+ untuk Tabungan, siswa di bawah 17 untuk Tabungan SimPel.',
     shows: [
-      'Setiap SMA di peta: lingkaran biru = negeri, kuning = swasta, bintang biru tua = yayasan TNI',
-      'Titik lebih besar = siswa lebih banyak. MA (belah ketupat) dan SMK (kotak) dapat ditampilkan sebagai titik kecil abu-abu',
-      'Siswa 17+ dan siswa di bawah 17 per SMA dan per kecamatan, dengan jarak dan waktu dari KCP',
+      'Setiap sekolah di peta: lingkaran = SMA, kotak = SMK, belah ketupat = MA',
+      'Biru = negeri, kuning = swasta, bintang biru tua = SMA yayasan TNI. Titik lebih besar = siswa lebih banyak',
+      'Siswa 17+ dan siswa di bawah 17 per sekolah dan per kecamatan, dengan jarak dan waktu dari KCP',
+      'Kelas biaya dari biaya resmi, jenis sekolah atau perkiraan, dan kontak lembaga dari daftar resmi',
       'Setelah file sekolah diimpor: lingkar hijau = nasabah Mandiri, lingkar merah = prospek',
       'Urutan yayasan, ketentuan Referral Biller dan GEMPITA, kalkulator dan tindak lanjut di tampilan Detail'
     ],
@@ -3578,7 +4423,7 @@
     dataKeys: [],
     emptyFirst: false,
     blocks: [],
-    source: 'Sumber: Kemendikdasmen Dapodik, OpenStreetMap, Overture Maps (12 Okt 2026) · siswa: Dapodik 2026/2027 Ganjil · file sekolah: sheet 3_sekolah',
+    source: 'Sumber: Kemendikdasmen Dapodik, OpenStreetMap, Overture Maps (12 Okt 2026) · siswa: Dapodik 2026/2027 Ganjil · kontak dan kelas biaya: 18 Okt 2026 · file sekolah: sheet 3_sekolah',
     cards: function () { return []; }
   };
 
@@ -3590,21 +4435,56 @@
       ui = {};
       handles = [];
       distSwitches = [];
+      scopeSwitches = [];
+      ctlSets = [];
       drawerDist = null;
       if (!st) st = loadState();
+      else st.f.km = scopeGet();            /* the scope of this browser tab (another section or the slim rail may have set it) */
       st.workOpen = !!(st.openOnMount && isDeep());
       st.openOnMount = false;
       saveUi = debounce(function () {
-        sset(UI_KEY, { v: 2, tab: st.tab, sort: st.sort, mapShow: st.mapShow, kecAll: st.kecAll, wide: st.wide, listSort: st.listSort, topSort: st.topSort, show: { ma: !!st.show.ma, smk: !!st.show.smk }, showV: 2 });
+        sset(UI_KEY, { v: 2, tab: st.tab, sort: st.sort, mapShow: st.mapShow, kecAll: st.kecAll, kecSort: st.kecSort, wide: st.wide, listSort: st.listSort, topSort: st.topSort,
+          show: { sma: st.show.sma !== false, ma: !!st.show.ma, smk: !!st.show.smk }, showV: 2 });
       }, 400);
       saveCalc = debounce(function () { var inputs = {}; SC.config.calcFields.forEach(function (f) { inputs[f.k] = st.calc[f.k]; }); sset(CALC_KEY, { v: 2, inputs: inputs, target: st.calcTarget, t: new Date().toISOString() }); }, 400);
       host.classList.add('sk-host');
-      var spec = Object.assign({}, SPEC, { primary: isDeep() ? null : { label: 'Lihat daftar SMA', icon: 'chev-r', run: function () { goTab('list'); } } });
+      var spec = Object.assign({}, SPEC, { primary: isDeep() ? null : { label: onlySma() ? 'Lihat daftar SMA' : 'Lihat daftar sekolah', icon: 'chev-r', run: function () { goTab('list'); } } });
       page = c.page(spec);
+      /* one polite live region for the scope announcement ("Cakupan 30 km. 1.234 sekolah tampil.") */
+      ui.live = E('p', { class: 'sr-only', aria: { live: 'polite', atomic: 'true' } });
+      page.body.appendChild(ui.live);
       if (isDeep()) { buildRail(page.body); buildWork(host); syncWork(); }
       else buildOverview(page.body);
       registerMap();
       registerSearch();
+      /* v6: the scope set elsewhere in this tab (the slim rail, another control), the lazy data files, the seal */
+      try { var so = scopeApi().on(function () { if (ctx && st) applyScope(scopeGet(), { quiet: true }); }); if (isFn(so)) offs.push(so); } catch (e) { /* the controls still work */ }
+      offs.push(SC.on('data', debounce(function (d) {
+        if (!ctx) return;
+        V = null;
+        refresh(['data30']);
+        if (MCD.map && MCD.map.requestRender) MCD.map.requestRender();
+        if (ctx.requestRender) ctx.requestRender(['ext']);
+        refreshOpenCard();
+        void d;
+      }, 60)));
+      /* §7.4: the old plain list moved into the sealed store: one line, once (the migration may run before this mount) */
+      var migratedNote = function () {
+        if (seenMigrated || !ctx) return;
+        var mg = false;
+        try { mg = isFn(SC.pipeline.migrated) && SC.pipeline.migrated(); } catch (e) { mg = false; }
+        if (mg) { seenMigrated = true; ctx.toast('Daftar tindak lanjut SMA kini terenkripsi di komputer ini.'); }
+      };
+      var onSeal = function (e) {
+        var d = e && e.detail;
+        if (d && (d.change === 'migrated' || d.migrated) && (!d.name || d.name === SC.pipeline.name)) migratedNote();
+        if (ctx && isDeep() && st.tab === 'pipe') renderPipe(true);
+      };
+      document.addEventListener('mcd:seal', onSeal);
+      offs.push(function () { document.removeEventListener('mcd:seal', onSeal); });
+      try { SC.pipeline.ready().then(migratedNote, function () { /* the tab names the state */ }); } catch (e) { /* ignore */ }
+      if (wants30()) need30();
+      scheduleLazy();
       offs.push(SC.on('pipeline', debounce(function () { if (ctx && isDeep() && st.tab === 'pipe') renderPipe(true); if (ctx && isDeep() && st.tab === 'yay') renderYay(); }, 60)));
       offs.push(MCD.state.on('reset', function (e) { if (e && e.scope === 'filters') resetF(); }));
       /* the 17+ shares changed (the "?" method): every 17+ figure is recomputed */
@@ -3615,19 +4495,20 @@
       offs.push(function () { window.removeEventListener('mcd:distance', onDistEvt); });
       c.registerCommands(function () {
         var out = [
-          { label: 'Sekolah · SMA dalam 15 km', run: function () { setF({ km: 15 }, { camera: true }); }, kw: 'sma sekolah 15' },
-          { label: 'Sekolah · SMA dalam 30 km', run: function () { setF({ km: 30 }, { camera: true }); }, kw: 'sma sekolah 30' },
-          { label: 'Sekolah · Hanya SMA yayasan TNI', run: function () { setF({ tni: !st.f.tni }); goTab('list'); }, kw: 'hang tuah kartika angkasa yasarini tni yayasan' },
-          { label: 'Sekolah · ' + (st.show.ma ? 'Sembunyikan titik MA' : 'Tampilkan titik MA (madrasah aliyah)'), run: function () { setShow({ ma: !st.show.ma }); }, kw: 'madrasah aliyah ma titik' },
-          { label: 'Sekolah · ' + (st.show.smk ? 'Sembunyikan titik SMK' : 'Tampilkan titik SMK'), run: function () { setShow({ smk: !st.show.smk }); }, kw: 'smk kejuruan titik' },
+          { label: 'Sekolah · Cakupan 15 km', run: function () { setScope(15, { camera: true }); }, kw: 'sma smk ma sekolah 15 cakupan pilot' },
+          { label: 'Sekolah · Cakupan 30 km', run: function () { setScope(30, { camera: true }); }, kw: 'sma smk ma sekolah 30 cakupan' },
+          { label: 'Sekolah · Hanya sekolah yayasan TNI', run: function () { setF({ tni: !st.f.tni }); goTab('list'); }, kw: 'hang tuah kartika angkasa yasarini tni yayasan' },
+          { label: 'Sekolah · ' + (st.show.ma ? 'Sembunyikan MA' : 'Tampilkan MA (madrasah aliyah)'), run: function () { setShow({ ma: !st.show.ma }); }, kw: 'madrasah aliyah ma jenis' },
+          { label: 'Sekolah · ' + (st.show.smk ? 'Sembunyikan SMK' : 'Tampilkan SMK'), run: function () { setShow({ smk: !st.show.smk }); }, kw: 'smk kejuruan jenis' },
+          { label: 'Sekolah · Arti kelas biaya', run: function () { needTiers().then(function () { openTierHelp(); }); }, kw: 'kelas biaya spp uang pangkal premium atas menengah reguler' },
           { label: 'Sekolah · Cara menghitung siswa 17+', run: function () { openMethod(); }, kw: 'siswa 17 ktp cif rekening porsi kelas' },
-          { label: 'Sekolah · Hapus filter SMA', run: function () { resetF(); }, kw: 'reset filter' },
-          { label: 'Sekolah · Daftar SMA', run: function () { goTab('list'); }, kw: 'daftar leads csv ekspor' },
-          { label: 'Sekolah · SMA per kecamatan', run: function () { goTab('kec'); }, kw: 'kecamatan grafik' },
+          { label: 'Sekolah · Hapus filter', run: function () { resetF(); }, kw: 'reset filter' },
+          { label: 'Sekolah · Daftar sekolah', run: function () { goTab('list'); }, kw: 'daftar sma leads csv ekspor' },
+          { label: 'Sekolah · Sekolah per kecamatan', run: function () { goTab('kec'); }, kw: 'kecamatan grafik' },
           { label: 'Sekolah · Urutan yayasan', run: function () { goTab('yay'); }, kw: 'yayasan peringkat urutan' },
           { label: 'Sekolah · Program dan kalkulator', run: function () { goTab('prog'); }, kw: 'program referral biller gempita fee kalkulator casa' },
           { label: 'Sekolah · Tindak lanjut', run: function () { goTab('pipe'); }, kw: 'pipeline tindak lanjut tahap' },
-          { label: 'Sekolah · Ekspor daftar SMA (CSV)', run: function () { exportSchools(); }, kw: 'unduh csv ekspor sekolah leads' },
+          { label: 'Sekolah · Ekspor daftar sekolah (CSV)', run: function () { exportSchools(); }, kw: 'unduh csv ekspor sekolah sma leads' },
           { label: 'Sekolah · Impor nasabah sekolah (sheet 3_sekolah)', run: function () { ctx.navigate('data'); }, kw: 'impor nasabah sekolah' }
         ];
         if (V && SC.idx) {
@@ -3666,6 +4547,8 @@
       }
       syncControls.sig = '';
       refresh(keys);
+      /* D7: "Samarkan nama" hides the contacts of the card on screen at once (no tel:, mailto: or site link left) */
+      if (keys.some(function (k) { return k.indexOf('privacy') === 0; })) refreshOpenCard();
     },
     unmount: function () {
       offs.forEach(function (f) { try { f(); } catch (e) { /* ignore */ } });
@@ -3681,6 +4564,10 @@
       if (ctx && isFn(ctx.filterChips)) { try { ctx.filterChips([]); } catch (e) { /* ignore */ } }
       applyZones(true);
       distSwitches = [];
+      scopeSwitches = [];
+      ctlSets = [];
+      lazyTimers.forEach(clearTimeout);
+      lazyTimers = [];
       drawerDist = null;
       drawerSel = null;
       dropOwnFocus();
@@ -3712,6 +4599,9 @@
       /* MCD.app.focus({section: 'schools', kind: 'sma', id}) → 'focus:sma:<npsn | school row>': fly there, open it */
       var fm0 = /^focus:sma:(.+)$/.exec(String(action || ''));
       if (fm0) { requestFocus(fm0[1]); return true; }
+      /* v6 (§3.6): 'schools:scope:<15|30>' (before the mount it is stored and the mount picks it up) */
+      var sm = /^schools:scope:(15|30)$/.exec(String(action || ''));
+      if (sm) { if (ctx && st) setScope(+sm[1]); else { try { scopeApi().set(ID, +sm[1]); } catch (e) { /* ignore */ } } return true; }
       if (!ctx) return false;
       /* Ringkasan "Lihat di peta Sekolah" (SMA drill-down): open that kecamatan here (drawer, Kecamatan tab, map focus) */
       var km = /^schools:kec:(\d\d\.\d\d\.\d\d)$/.exec(String(action || ''));
@@ -3745,8 +4635,19 @@
         if (!computeView()) return null;
         var kec = {};
         Object.keys(V.kec).forEach(function (id) { var a = V.kec[id]; kec[id] = { n: a.n, nAll: a.nAll, priv: a.priv, pub: a.pub, unk: a.unk, stu: a.stu, k17: a.k17, u17: a.u17, rows: a.rows.length }; });
-        return { kpi: Object.assign({}, V.kpi), legend: legendCounts(), kec: kec, ctxMa: V.ctxMa.length, ctxSmk: V.ctxSmk.length, show: Object.assign({}, st.show), mix: Object.assign({}, V.mix) };
+        return { kpi: Object.assign({}, V.kpi), legend: legendCounts(), kec: kec, ctxMa: V.ctxMa.length, ctxSmk: V.ctxSmk.length, show: { ma: !!st.show.ma, smk: !!st.show.smk }, jenis: shownJenis(), mix: Object.assign({}, V.mix),
+          byJ: JSON.parse(JSON.stringify(V.byJ)), rows: V.rows.slice(), hidden: V.hidden, tierCounts: Object.assign({}, V.tierCounts), tiers: V.tiers, n: Object.assign({}, V.n) };
       },
+      /* v6 (tests/schools-v6.test.mjs): scope, jenis, kelas biaya and kontak pieces without a mounted DOM */
+      sInfo: function (i) { SC = SC || MCD.schools; if (SC && SC.idx) smaIdx(SC.idx); if (!st) st = loadState(); return sInfo(i); },
+      setShow: function (patch) { if (!st) st = loadState(); st.show = Object.assign({}, st.show, patch || {}); V = null; },
+      setScope: function (v) { setScope(v); }, scopeGet: function () { return scopeGet(); }, scopeApi: function () { return scopeApi(); },
+      tierOf: function (i) { return tierOf(i); }, tierKey: function (i) { return tierKey(i); }, tierBlockFor: function (i) { SC = SC || MCD.schools; if (SC && SC.idx) smaIdx(SC.idx); return tierBlockFor(i); },
+      contactBlockFor: function (i) { SC = SC || MCD.schools; if (SC && SC.idx) smaIdx(SC.idx); if (!st) st = loadState(); return contactBlockFor(i); },
+      contactCsv: function (i) { return contactCsv(i); }, tierCsv: function (i) { return tierCsv(i); },
+      badgesOn: function (ms) { return badgesOn(ms); }, mapLayers: function (ms) { return mapLayers(null, ms); }, legend: function (ms) { return legend(null, ms); },
+      jenisOf: function (i) { SC = SC || MCD.schools; if (SC && SC.idx) smaIdx(SC.idx); return jenisOf(i); }, rowOfKey: function (k) { return rowOfKey(k); },
+      searchSkMa: function (q) { return searchSkMa(q); }, idOf: function (i) { return rowId(i); },
       reset: function () { st = null; V = null; },
       kecPopup: function (id) { return V ? kecPopup(id) : null; }, tipKec: function (id) { return V ? tipKec(id) : null; },
       distStack: function (r) { return distText(r, 'cell'); }, distModeWords: function () { return distModeWords(); },

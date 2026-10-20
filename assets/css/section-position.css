@@ -1,0 +1,229 @@
+/* ==========================================================================
+ * Section 8 · Posisi cabang (assets/js/section-position.js), docs/V7_SPEC.md §6 and §6.8.
+ * One page, no map: head and goal line, the four gap cards in one fixed order, then (Detail) "Booking per
+ * produk" beside "Kredit menurut produk" (60 / 40) and the fold "Semua KPI". 1366×768: the four cards in one
+ * row; 1024–1279 and 768–1023: 2 × 2; phones: stacked, one action per row (chips as full-width rows with "›").
+ * Glass cards as on Ringkasan (frosted fill, soft highlight, a status rule on top); bars are single-hue
+ * gradients on the product tokens (--p-ksm, --p-kpr, --p-kkb, --p-cc, --p-oth). Status is always a word,
+ * colour only adds to it. Colours only through tokens, so Terang and Gelap recolour in place. No animation.
+ * Print (D28): while the page is mounted (body.pos-noprint) print shows only the .pos-print line.
+ * Every rule is scoped by a .pos- class.
+ * ========================================================================== */
+
+.pos {
+  display: grid; gap: 14px; width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 0 24px; min-width: 0;
+  color: var(--text-1); font: 400 14px/20px var(--font-sans);
+}
+.pos [hidden] { display: none !important; }
+.pos p { margin: 0; }
+
+/* ── Head: eyebrow, file line, rank ───────────────────────────────────── */
+.pos-head { display: grid; gap: 4px; min-width: 0; }
+.pos-eyebrow { font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.pos-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.pos-file__t { font-weight: 500; color: var(--text-1); }
+.pos-fresh--1::before, .pos-fresh--2::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 0;
+  background: var(--status-mid);
+}
+.pos-rank { font-variant-numeric: tabular-nums; }
+.pos-btn { min-height: 36px; height: auto; padding: 6px 12px; gap: 6px; font: 600 13px/18px var(--font-sans); white-space: nowrap; }
+.pos-btn--sm { min-height: 32px; padding: 4px 10px; }
+.pos-link {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 2px; border: 0; background: none; cursor: pointer;
+  font: 500 13px/18px var(--font-sans); color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
+}
+.pos-link:hover { text-decoration-color: currentColor; }
+
+/* ── Goal line (a KPI card) ───────────────────────────────────────────── */
+.pos-goal {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; min-width: 0; padding: 10px 16px;
+  border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
+  background: var(--glass-card-flat, var(--surface-raised)); box-shadow: var(--glass-hl-card, none);
+}
+.pos-goal__v { font: 400 18px/26px var(--font-serif); color: var(--text-1); }
+.pos-goal__n { font: 400 28px/32px var(--font-serif); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.pos-goal__m { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* ── The four gap cards ───────────────────────────────────────────────── */
+.pos-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; min-width: 0; align-items: stretch; }
+.pos-card {
+  --pos-glow: transparent;
+  position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px 9px;
+  border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
+  background: radial-gradient(160px 90px at 100% 0%, var(--pos-glow), transparent 72%), var(--grad-card, var(--surface-raised));
+  box-shadow: var(--glass-hl-card, none), var(--glass-shadow-sm, none); overflow: hidden;
+}
+.pos-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--grad-accent, var(--signal)); pointer-events: none; }
+.pos-card--ok { --pos-glow: var(--status-ok-a20); }
+.pos-card--mid { --pos-glow: var(--status-mid-a20); }
+.pos-card--bad { --pos-glow: var(--status-bad-a20); }
+.pos-card--ok::before { background: var(--grad-status-ok, var(--status-ok)); }
+.pos-card--mid::before { background: var(--grad-status-mid, var(--status-mid)); }
+.pos-card--bad::before { background: var(--grad-status-bad, var(--status-bad)); }
+.pos-card--none::before { background: var(--grad-status-none, var(--status-none)); }
+.pos-card__t { margin: 0; font: 600 13px/16px var(--font-sans); color: var(--text-1); }
+.pos-card__big { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 10px; min-width: 0; }
+.pos-card__v { font: 400 26px/29px var(--font-serif); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; }
+.pos-card__u { font: 400 12px/16px var(--font-sans); color: var(--text-2); letter-spacing: 0; }
+.pos-card__rank { font: 400 12px/16px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-card__m { font: 400 12px/17px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pos-card__m--ok, .pos-card__m--mid, .pos-card__m--bad { color: var(--text-1); }
+.pos-card__m--ok::before, .pos-card__m--mid::before, .pos-card__m--bad::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 0;
+}
+.pos-card__m--ok::before { background: var(--status-ok); }
+.pos-card__m--mid::before { background: var(--status-mid); }
+.pos-card__m--bad::before { background: var(--status-bad); }
+.pos-card__miss { margin-top: 4px; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
+.pos-card__note { margin-top: 4px; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.pos-conc { margin-top: 2px; font: 400 12px/16px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pos-conc--full { color: var(--text-1); }
+.pos-limit {
+  display: block; margin-top: 2px; padding-left: 8px; border-left: 2px solid var(--status-mid);
+  font: 600 12px/16px var(--font-sans); color: var(--text-1);
+}
+
+/* KSM · KPR · KKB under the booking card */
+.pos-sub { display: grid; gap: 0; margin: 3px 0 0; padding: 2px 0 0; list-style: none; border-top: 1px solid var(--rule); }
+.pos-sub__row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.pos-sub__go, .pos-sub__line {
+  display: flex; align-items: baseline; gap: 6px; flex: 1 1 180px; min-width: 0; min-height: 18px; padding: 1px 0;
+  border: 0; background: none; color: var(--text-1); text-align: left; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums;
+}
+.pos-sub__go { cursor: pointer; }
+.pos-sub__go:hover .pos-sub__t { text-decoration: underline; text-underline-offset: 2px; }
+.pos-sub__k { flex: none; width: 30px; font-weight: 600; }
+.pos-sub__t { flex: 1 1 auto; min-width: 0; color: var(--text-2); }
+.pos-sub__a { flex: none; color: var(--text-2); }
+.pos-sub__row .pos-chips { margin: 0; padding: 0; }
+
+/* chips: a place chip, then a task chip (ids only in data-*) */
+.pos-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 5px; min-width: 0; }
+.pos-chip { min-height: 28px; height: auto; padding: 3px 10px; gap: 4px; font: 500 12px/16px var(--font-sans); white-space: nowrap; }
+.pos-chip__go { display: none; }
+.pos--simple .pos-chip { min-height: 40px; }            /* Sederhana: targets of 40 px */
+
+/* ── Detail: Booking per produk (60) beside Kredit menurut produk (40) ── */
+.pos-panels { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; align-items: start; min-width: 0; }
+.pos-x {
+  display: grid; gap: 8px; min-width: 0; padding: 14px 16px;
+  border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
+  background: var(--grad-card, var(--surface-raised)); box-shadow: var(--glass-hl-card, none), var(--glass-shadow-sm, none);
+}
+.pos-x__t { margin: 0; font: 400 var(--fs-section, 18px)/var(--lh-section, 24px) var(--font-serif); color: var(--text-1); }
+.pos-x:focus, .pos-prow:focus { outline: none; }
+.pos-x:focus-visible, .pos-prow:focus-visible { outline: 2px solid var(--signal, currentColor); outline-offset: 2px; }
+.pos-prow { display: grid; gap: 2px; min-width: 0; padding: 8px 0 6px; border-top: 1px solid var(--rule); scroll-margin: 96px; }
+.pos-x__t + .pos-prow { border-top: 0; padding-top: 2px; }
+.pos-prow__h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; }
+.pos-prow__k { font: 600 14px/18px var(--font-sans); }
+.pos-prow__c { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pos-prow__m { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pos-prow__f { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 4px 12px; min-width: 0; }
+.pos-prow__i { display: grid; gap: 0; flex: 1 1 220px; min-width: 0; }
+.pos-prow .pos-chips { flex: 0 1 auto; justify-content: flex-end; margin: 0; padding: 0; }
+
+.pos-bar {
+  position: relative; height: 12px; margin: 3px 0 4px; border-radius: 6px;
+  background: var(--surface-well, rgba(128, 128, 128, .14)); box-shadow: inset 0 0 0 1px var(--rule);
+}
+.pos-bar__fill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 2px; border-radius: 6px; }
+.pos-bar__tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text-1); }
+/* single-hue glass: the product colour under a soft top highlight */
+.pos-fill--ksm, .pos-fill--kpr, .pos-fill--kkb, .pos-fill--cc, .pos-fill--oth {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 65%);
+}
+.pos-fill--ksm { background-color: var(--p-ksm); }
+.pos-fill--kpr { background-color: var(--p-kpr); }
+.pos-fill--kkb { background-color: var(--p-kkb); }
+.pos-fill--cc { background-color: var(--p-cc); }
+.pos-fill--oth { background-color: var(--p-oth); }
+
+.pos-share {
+  display: flex; height: 16px; margin: 2px 0; border-radius: 8px; overflow: hidden;
+  background: var(--surface-well, rgba(128, 128, 128, .14)); box-shadow: inset 0 0 0 1px var(--rule);
+}
+.pos-share__seg { flex: none; height: 100%; min-width: 2px; box-shadow: inset -1px 0 0 var(--surface-solid, transparent); }
+.pos-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; }
+.pos-legend__i { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pos-legend__sw { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+
+/* ── Fold "Semua KPI" ─────────────────────────────────────────────────── */
+.pos-all {
+  min-width: 0; padding: 4px 16px; border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
+  background: var(--glass-card-flat, var(--surface-raised));
+}
+.pos-fold {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 0; border: 0; background: none; cursor: pointer;
+  color: var(--text-1); text-align: left; font: 600 14px/20px var(--font-sans);
+}
+.pos-fold__i { flex: none; width: 14px; color: var(--text-2); }
+.pos-all__body { padding: 0 0 12px; }
+.pos-tbl__wrap { overflow-x: auto; min-width: 0; }
+.pos-tbl { width: 100%; border-collapse: collapse; font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; }
+.pos-tbl th, .pos-tbl td { padding: 6px 8px; border-top: 1px solid var(--rule); vertical-align: top; text-align: left; }
+.pos-tbl thead th { border-top: 0; font: 600 12px/16px var(--font-sans); color: var(--text-2); white-space: nowrap; }
+.pos-tbl__g th { padding-top: 14px; border-top: 0; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+.pos-tbl__k { font-weight: 500; color: var(--text-1); min-width: 180px; }
+.pos-tbl__l { display: block; }
+.pos-tbl__line { display: block; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.pos-num { text-align: right; white-space: nowrap; }
+.pos-tbl thead th:nth-child(n+2):nth-child(-n+6) { text-align: right; }
+.pos-tbl__miss { color: var(--text-2); }
+.pos-tbl__chips .pos-chips { margin: 0; padding: 0; flex-wrap: wrap; }
+.pos-dim { color: var(--text-2); }
+
+/* ── Source line and ⓘ Sumber ─────────────────────────────────────────── */
+.pos-src { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.pos-src__line { flex: 1 1 320px; min-width: 0; }
+.pos-src__btn { font-size: 12px; }
+.pos-src__body { flex: 1 1 100%; display: grid; gap: 4px; padding: 6px 0 0; }
+.pos-src__list { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.pos-src__w--warn { color: var(--text-1); }
+
+/* ── States: no file, Data contoh, home branch missing ───────────────── */
+.pos-state {
+  display: grid; justify-items: start; gap: 12px; max-width: 640px; padding: 20px 22px;
+  border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
+  background: var(--glass-card-flat, var(--surface-raised));
+}
+.pos-state__t { font: 400 15px/22px var(--font-sans); color: var(--text-1); }
+
+/* ── Breakpoints (§6.8) ──────────────────────────────────────────────── */
+@media (max-width: 1279px) {
+  .pos-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1023px) {
+  .pos-panels { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .pos { gap: 12px; }
+  .pos-cards { grid-template-columns: minmax(0, 1fr); }
+  .pos-goal { padding: 10px 14px; }
+  /* one action per row: chips as full-width rows with "›" */
+  .pos-chips { flex-direction: column; align-items: stretch; }
+  .pos-chip { width: 100%; min-height: 44px; justify-content: space-between; white-space: normal; text-align: left; }
+  .pos-chip__go { display: inline; }
+  .pos-sub__row { flex-direction: column; align-items: stretch; }
+  .pos-btn, .pos-link { min-height: 44px; }
+  /* the KPI table as stacked rows: label, then its values under their column names */
+  .pos-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .pos-tbl, .pos-tbl tbody { display: block; }
+  .pos-tbl__r { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--rule); }
+  .pos-tbl__g { display: block; }
+  .pos-tbl__g th { display: block; }
+  .pos-tbl__r > th, .pos-tbl__r > td { display: block; padding: 0; border: 0; text-align: left; }
+  .pos-tbl__r > td::before { content: attr(data-label); display: block; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+  .pos-tbl__k, .pos-tbl__chips, .pos-tbl__miss { grid-column: 1 / -1; }
+  .pos-num { white-space: normal; }
+}
+
+/* ── Print (D28): one line instead of the page ───────────────────────── */
+.pos-print { display: none; }
+@media print {
+  body.pos-noprint { background: white !important; }
+  body.pos-noprint > *:not(.pos-print) { display: none !important; }
+  body.pos-noprint > .pos-print { display: block !important; margin: 20mm 16mm; color: black; font: 400 12pt/1.4 var(--font-sans); }
+}

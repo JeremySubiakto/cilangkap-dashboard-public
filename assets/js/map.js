@@ -55,17 +55,34 @@
  *   MCD.map.kit                  palette, atlas, glyphs, hexbin, helpers (read-only)
  *
  * ZONES (COPY_STYLE_EN item 30) · POINTS AND SYMBOLS (item 34)
- *   MCD.map.setZones({mode:'kecamatan15'} | {mode:'radius', km} | {mode:'none'}) → zones in effect
+ *   MCD.map.setZones({mode:'kecamatan15'} | {mode:'kecamatan', km: 30} | {mode:'radius', km} | {mode:'none'}) → zones in effect
  *     'kecamatan15' (default): the 33 focus kecamatan clear, the 26 outer-ring kecamatan under one soft shade,
  *     everything beyond under a stronger veil (MCD.territory.zones()); 'radius': clear inside a circle around
  *     Mabes TNI, veil beyond (KPR, 30 km). The call belongs to the section on screen; a posture may also carry
  *     `zones`. MCD.map.zones() → {mode, km?}. The 15 km fit keeps every focus chip clear of the panels.
+ *     v6 (V6_SPEC §3.3) {mode:'kecamatan', km: 30} (or 'kecamatan30'): the same three zones for the 30 km scope, from
+ *     MCD.territory.zones(30): the 103 kecamatan at least half inside 30 km clear, the 15 others of the file under the
+ *     shade, the veil beyond; {mode:'kecamatan', km <= 15} is 'kecamatan15'. A change redraws the section layers, and the
+ *     map state carries the zones (ms.zones), so MCD.territory.layers() draws the 30 km outlines and chips by itself.
+ *     The built-in 'campus' posture (Kampus) opens on these 30 km zones.
  *   MCD.map.focusPoint({lon, lat, zoom?, kind?, id?, drawer?}) flies there (zoom 16) and reports a pick {kind, id, focus:true}
  *     once the camera has arrived, so the registered popup / drawer opens. On a desktop the point lands left of the
  *     drawer; a layout change during the flight re-aims it instead of cancelling it.
  *   MCD.map.symbolSprite({shape:'circle'|'diamond'|'rsq', fill:[r,g,b], ring?, star?, px}) → cached sprite
  *     {id, url, canvas, width, height, anchorX, anchorY, mask:false, px, dpr}: a deck IconLayer icon (getIcon,
  *     getSize = px) and a data URL for legends. spriteAtlas([sprite…]) → {iconAtlas, iconMapping}.
+ *     v6 (V6_SPEC D9): shape 'shield' (universitas, institut) and 'triangle' (sekolah tinggi, politeknik, akademi, desain
+ *     dan kursus); hollow: true = an empty outline (other campus points of the same PT). Legend glyphs 'shield',
+ *     'shieldHollow', 'tri', 'triHollow' (kit.glyphSVG), and legend rows {shape, rgb, hollow?} draw the sprite itself.
+ *   MCD.map.tierSprite({level 1-4, basis:'biaya'|'jenis'|'perkiraan', theme:'day'|'night', px}) → the kelas biaya badge
+ *     (V6_SPEC D6, §4.3): "signal bars", 4 Premium · 3 Atas · 2 Menengah · 1 Reguler, filled = from the published fee or
+ *     the type, empty = perkiraan; one neutral ink (navy + white keyline in Terang, near-white + dark keyline in Gelap);
+ *     null for level 0 (no badge). tierAtlas({theme, px}) (byName '1f'…'4e'), tierOffset(symbolPx, sprite) → [dx, dy]
+ *     for getPixelOffset (top-right of the symbol), tierSVG({level, basis, theme, size}), tierGeom(spec) (the rectangles).
+ *     Legend rows {glyph:'tier', level, basis | 'both', label} (one badge, or a filled and an empty one) and
+ *     {tiers:[{level, basis, word}], label} (the four glyphs with their words under them).
+ *   Selection kinds of Kampus (V6_SPEC §6.3): 'campus' and 'campusSite' are points (they draw their route); 'cpKec' is a
+ *     kecamatan (focus mode, no route), like 'smaKec'. Sections register their positions (registerSelectable).
  *     badgeSprite({matra:'AL'|'AD'|'AU'|'GAB', jenis:'markas'|'perumahan'|'rs', theme, px}): the pangkalan badge.
  *   Pangkalan TNI: every site with MCD.ref.pangkalanOf(site) draws as a round badge (layer 'sites-badges'), a
  *     permanent layer with its own legend group "Pangkalan TNI".
@@ -671,7 +688,12 @@
   }
   function shapePath(ctx, shape, cx, cy, r) {
     ctx.beginPath();
-    if (shape === 'diamond') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath(); }
+    if (shape === 'shield' || shape === 'triangle') {
+      /* v6 (V6_SPEC D9): the campus shapes, unit polygons shared with the legend glyphs (SHIELD_PTS, TRI_PTS) */
+      var pts = shape === 'shield' ? SHIELD_PTS : TRI_PTS;
+      for (var i = 0; i < pts.length; i++) { var x = cx + pts[i][0] * r, y = cy + pts[i][1] * r; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+      ctx.closePath();
+    } else if (shape === 'diamond') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath(); }
     else if (shape === 'rsq') {
       var s = r * 0.86, q = s * 0.34;
       ctx.moveTo(cx - s + q, cy - s); ctx.lineTo(cx + s - q, cy - s); ctx.arcTo(cx + s, cy - s, cx + s, cy - s + q, q);
@@ -681,27 +703,69 @@
     } else ctx.arc(cx, cy, r, 0, Math.PI * 2);
   }
   var STAR_NAVY = [0, 61, 121];
+  /* v6 (V6_SPEC D9, §6.3): the campus shapes in a unit box (radius 1, y down), centred on the anchor. A shield (universitas,
+     institut): flat top, straight sides, curved to a point; a triangle (sekolah tinggi, politeknik, akademi, desain dan
+     kursus). The same points draw the map sprite (shapePath) and the legend glyph (GLYPHS). */
+  function quadPts(p0, c, p1, n) {
+    var out = [];
+    for (var i = 1; i <= n; i++) {
+      var t = i / n, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, d = t * t;
+      out.push([a * p0[0] + b * c[0] + d * p1[0], a * p0[1] + b * c[1] + d * p1[1]]);
+    }
+    return out;
+  }
+  var SHIELD_PTS = [[-0.84, -0.92], [0.84, -0.92], [0.84, -0.04]]
+    .concat(quadPts([0.84, -0.04], [0.82, 0.58], [0, 0.92], 6))
+    .concat(quadPts([0, 0.92], [-0.82, 0.58], [-0.84, -0.04], 6))
+    .map(function (p) { return [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]; });
+  var TRI_PTS = [[0, -0.9], [0.98, 0.8], [-0.98, 0.8]];
+  var SYMBOL_SHAPES = { circle: 1, diamond: 1, rsq: 1, shield: 1, triangle: 1 };
+  /* the legend glyphs of the campus shapes (glyphSVG 'shield', 'shieldHollow', 'tri', 'triHollow'): the same points; the
+     hollow ones cut the inside out (even-odd), around the shield's middle and the triangle's incentre */
+  function scalePts(pts, f, cx, cy) { return pts.map(function (p) { return [cx + (p[0] - cx) * f, cy + (p[1] - cy) * f]; }); }
+  GLYPHS.shield = [{ p: SHIELD_PTS }];
+  GLYPHS.shieldHollow = [{ p: SHIELD_PTS }, { p: scalePts(SHIELD_PTS, 0.56, 0, -0.06) }];
+  GLYPHS.tri = [{ p: TRI_PTS }];
+  GLYPHS.triHollow = [{ p: TRI_PTS }, { p: scalePts(TRI_PTS, 0.5, 0, 0.234) }];
   /**
-   * symbolSprite({shape:'circle'|'diamond'|'rsq', fill:[r,g,b], ring?:[r,g,b], star?:bool, px}) → cached sprite
-   * {id, url, canvas, width, height, anchorX, anchorY, mask:false, px, dpr} (device pixels; draw it at `px`
-   * CSS pixels: IconLayer getSize = px). A thin keyline (white, or `ring`) keeps the symbol readable on any
-   * map; `star` adds a small navy star at the top right (SMA yayasan TNI, item 34).
+   * symbolSprite({shape:'circle'|'diamond'|'rsq'|'shield'|'triangle', fill:[r,g,b], ring?:[r,g,b], star?:bool, hollow?:bool, px})
+   * → cached sprite {id, url, canvas, width, height, anchorX, anchorY, mask:false, px, dpr, shape, hollow} (device pixels;
+   * draw it at `px` CSS pixels: IconLayer getSize = px). A thin keyline (white, or `ring`) keeps the symbol readable on any
+   * map; `star` adds a small navy star at the top right (SMA yayasan TNI, item 34). v6 (V6_SPEC D9): 'shield' and
+   * 'triangle' for Kampus; `hollow` draws the shape as an empty outline (a band in `fill` between two keylines, nothing
+   * inside: "Titik kosong = kampus lain dari perguruan tinggi yang sama"). Unknown shapes are circles.
    */
   function symbolSprite(spec) {
     spec = spec || {};
-    var shape = spec.shape === 'diamond' || spec.shape === 'rsq' ? spec.shape : 'circle';
+    var shape = SYMBOL_SHAPES[spec.shape] ? spec.shape : 'circle', hollow = !!spec.hollow;
     var px = clamp(finite(+spec.px) ? +spec.px : 12, 4, 64), dpr = spriteDpr();
     var fill = Array.isArray(spec.fill) ? spec.fill : [31, 95, 209], ring = Array.isArray(spec.ring) ? spec.ring : null;
-    var key = 'sym|' + shape + '|' + rgbKey(fill) + '|' + rgbKey(ring) + '|' + (spec.star ? 1 : 0) + '|' + px + '|' + dpr;
+    var key = 'sym|' + shape + '|' + rgbKey(fill) + '|' + rgbKey(ring) + '|' + (spec.star ? 1 : 0) + '|' + px + '|' + dpr + (hollow ? '|h' : '');
     if (SPRITES[key]) return SPRITES[key];
     var size = Math.ceil(px * dpr), c = newCanvas(size, size);
     if (c) {
       var ctx = c.ctx, cx = size / 2, cy = size / 2, lw = Math.max(1, dpr * (px >= 14 ? 1.5 : 1.2));
       var r = size / 2 - lw / 2 - (spec.star ? size * 0.06 : 0.5);
-      shapePath(ctx, shape, cx, cy, r);
-      ctx.fillStyle = cssRgb(ring || [255, 255, 255]); ctx.fill();
-      shapePath(ctx, shape, cx, cy, r - lw);
-      ctx.fillStyle = cssRgb(fill); ctx.fill();
+      var keyCss = cssRgb(ring || [255, 255, 255]);
+      ctx.lineJoin = 'round';
+      if (hollow) {
+        /* the outline: a band of the fill colour on its centre line, a keyline on both sides of it, nothing inside */
+        var band = Math.max(1.5 * dpr, size * 0.15), rc = size / 2 - 0.5 - (spec.star ? size * 0.06 : 0) - lw - band / 2;
+        shapePath(ctx, shape, cx, cy, rc);
+        ctx.lineWidth = band + 2 * lw; ctx.strokeStyle = keyCss; ctx.stroke();
+        ctx.lineWidth = band; ctx.strokeStyle = cssRgb(fill); ctx.stroke();
+      } else if (shape === 'shield' || shape === 'triangle') {
+        /* the new shapes keep an even keyline along every edge: the keyline is a stroke, the fill covers its inner half */
+        var rf = size / 2 - lw - 0.5 - (spec.star ? size * 0.06 : 0);
+        shapePath(ctx, shape, cx, cy, rf);
+        ctx.lineWidth = 2 * lw; ctx.strokeStyle = keyCss; ctx.stroke();
+        ctx.fillStyle = cssRgb(fill); ctx.fill();
+      } else {
+        shapePath(ctx, shape, cx, cy, r);
+        ctx.fillStyle = keyCss; ctx.fill();
+        shapePath(ctx, shape, cx, cy, r - lw);
+        ctx.fillStyle = cssRgb(fill); ctx.fill();
+      }
       if (spec.star) {
         var sr = size * 0.24, sx = size - sr - 0.5, sy = sr + 0.5;
         starPath(ctx, sx, sy, sr, sr * 0.45);
@@ -709,7 +773,8 @@
         ctx.stroke(); ctx.fill();
       }
     }
-    SPRITES[key] = lazyUrl({ id: key, canvas: c ? c.cv : null, width: size, height: size, anchorX: size / 2, anchorY: size / 2, mask: false, px: px, dpr: dpr }, c ? c.cv : null);
+    SPRITES[key] = lazyUrl({ id: key, canvas: c ? c.cv : null, width: size, height: size, anchorX: size / 2, anchorY: size / 2, mask: false, px: px, dpr: dpr,
+      shape: shape, hollow: hollow }, c ? c.cv : null);
     return SPRITES[key];
   }
   /** spriteAtlas([sprite…]) → {iconAtlas: canvas, iconMapping: {id: {x, y, width, height, anchorX, anchorY, mask}}}: one deck atlas. */
@@ -850,6 +915,126 @@
     var at = spriteAtlas(list);
     if (!at.byName) { at.byName = ids; }
     return at;
+  }
+
+  /* ------------------------------------------------ kelas biaya badge (v6, V6_SPEC D6, §4.3) */
+  /* A small "signal bars" badge beside a school or campus symbol: 4 bars Premium, 3 Atas, 2 Menengah, 1 Reguler, none for
+     "Belum diketahui". Filled bars = the tier comes from the published fee or the school type (basis 'biaya' / 'jenis');
+     empty bars (an outline with the keyline colour inside) = perkiraan. The tier is carried by the NUMBER and the FILL of
+     the bars only (colour-blind safe, no clash with the green / red Mandiri status): one neutral ink, Mandiri navy with a
+     white keyline in Terang, near-white with a dark keyline in Gelap, so every bar edge keeps >= 3:1 on both base maps.
+     Axis-aligned rectangles only (fillRect), so the canvas sprite, the legend SVG and the greyscale test draw the same
+     pixels. Geometry in CSS px (u = px / 14): keyline k, gap and outline width bd = 1 px up to 27 px; bars bottom-aligned,
+     heights 2/5, 3/5, 4/5 and 5/5 of the inner height (a step of a fifth between levels), so the one-bar Reguler badge —
+     the most common one — is a short bar, never a dot. Bar width bw >= 4 with a hole of at least 2 px, widened until the
+     empty bar's hole is >= 30 % of the bar, so filled and empty differ by at least that much ink at every level and
+     size, also on a 1× screen (at 14 px: 4 px bars, Reguler 4 × 5, Premium 4 × 12, the badge 21 × 14). */
+  var TIER_INK = {
+    day:   { ink: [0, 61, 121], key: [255, 255, 255] },
+    night: { ink: [241, 245, 249], key: [10, 15, 23] }
+  };
+  function tierTheme(t) { t = String(t || '').toLowerCase(); return t === 'night' || t === 'dark' || t === 'gelap' ? 'night' : 'day'; }
+  /**
+   * tierGeom({level 0-4, basis, px?, dpr?}) → {level, filled, px, dpr, w, h, wPx, hPx, rects: [{x, y, w, h, role: 'key' | 'ink' |
+   * 'hole'}]} in device px (dpr 1 = CSS px); draw 'key' first, then 'ink', then 'hole' (in the keyline colour). Level 0: no rects.
+   */
+  function tierGeom(spec) {
+    spec = spec || {};
+    var level = clamp(Math.round(+spec.level || 0), 0, 4);
+    var px = clamp(finite(+spec.px) ? Math.round(+spec.px) : 14, 10, 48);
+    var dpr = finite(+spec.dpr) && +spec.dpr >= 1 ? Math.round(+spec.dpr) : 1;
+    var u = px / 14, k = Math.max(1, Math.round(u)), gap = Math.max(1, Math.round(u)), bd = Math.max(1, Math.round(u * 0.75));
+    var H = px, hin = H - 2 * k, filled = spec.basis !== 'perkiraan';
+    var hs = [0, 1, 2, 3].map(function (i) { return Math.min(hin, Math.max(2 * bd + 2, Math.round(hin * (2 + i) / 5))); });
+    /* the shortest bar sets the width: its hole (bw - 2 bd) × (h - 2 bd) must be >= 30 % of the bar, so empty reads as empty */
+    var bw = Math.max(4, Math.round(4 * u), 2 * bd + 2);
+    while ((bw - 2 * bd) * (hs[0] - 2 * bd) < 0.3 * bw * hs[0] && bw < 4 * px) bw++;
+    var W = 2 * k + 4 * bw + 3 * gap;
+    var keys = [], inks = [], holes = [];
+    for (var i = 0; i < level; i++) {
+      var bh = hs[i], x = k + i * (bw + gap), y = H - k - bh;
+      keys.push({ x: x - k, y: y - k, w: bw + 2 * k, h: bh + 2 * k, role: 'key' });
+      inks.push({ x: x, y: y, w: bw, h: bh, role: 'ink' });
+      if (!filled) holes.push({ x: x + bd, y: y + bd, w: bw - 2 * bd, h: bh - 2 * bd, role: 'hole' });
+    }
+    var rects = keys.concat(inks, holes).map(function (r) { return { x: r.x * dpr, y: r.y * dpr, w: r.w * dpr, h: r.h * dpr, role: r.role }; });
+    return { level: level, filled: filled, px: px, dpr: dpr, w: W * dpr, h: H * dpr, wPx: W, hPx: H, rects: rects };
+  }
+  /**
+   * tierSprite({level 1-4, basis: 'biaya' | 'jenis' | 'perkiraan', theme: 'day' | 'night', px?}) → cached sprite
+   * {id, url, canvas, width, height, anchorX, anchorY, mask: false, px, dpr, wPx, hPx, level, basis, filled, theme} (the shape of
+   * symbolSprite; draw it at getSize = px, the badge's height in CSS px, default 14), or null for level 0 ("Belum diketahui":
+   * no badge). Place it at the symbol's top-right with tierOffset(symbolPx, sprite).
+   */
+  function tierSprite(spec) {
+    spec = spec || {};
+    var level = clamp(Math.round(+spec.level || 0), 0, 4);
+    if (!level) return null;
+    var th = tierTheme(spec.theme), dpr = spriteDpr();
+    var g = tierGeom({ level: level, basis: spec.basis, px: spec.px, dpr: dpr });
+    var basis = g.filled ? (spec.basis === 'jenis' ? 'jenis' : 'biaya') : 'perkiraan';
+    var key = 'tier|' + level + '|' + (g.filled ? 'f' : 'e') + '|' + th + '|' + g.px + '|' + dpr;
+    if (SPRITES[key]) return SPRITES[key];
+    var c = newCanvas(g.w, g.h), ink = TIER_INK[th];
+    if (c) {
+      var ctx = c.ctx, css = { key: cssRgb(ink.key), ink: cssRgb(ink.ink), hole: cssRgb(ink.key) };
+      g.rects.forEach(function (r) { ctx.fillStyle = css[r.role]; ctx.fillRect(r.x, r.y, r.w, r.h); });
+    }
+    /* the canvas height is px × dpr, so getSize = px draws it at its own pixels; the width follows the aspect */
+    SPRITES[key] = lazyUrl({ id: key, canvas: c ? c.cv : null, width: g.w, height: g.h, anchorX: g.w / 2, anchorY: g.h / 2, mask: false,
+      px: g.px, dpr: dpr, wPx: g.wPx, hPx: g.hPx, level: level, basis: basis, filled: g.filled, theme: th }, c ? c.cv : null);
+    return SPRITES[key];
+  }
+  /** tierAtlas({theme, px?}) → one deck atlas of the 8 badges (levels 1–4, filled and empty) with byName {'1f', '1e', …, '4e'} → id. */
+  function tierAtlas(spec) {
+    spec = spec || {};
+    var list = [], ids = {};
+    [1, 2, 3, 4].forEach(function (lv) {
+      [['f', 'biaya'], ['e', 'perkiraan']].forEach(function (b) {
+        var sp = tierSprite({ level: lv, basis: b[1], theme: spec.theme, px: spec.px });
+        if (sp) { list.push(sp); ids[lv + b[0]] = sp.id; }
+      });
+    });
+    var at = spriteAtlas(list);
+    if (!at.byName) at.byName = ids;
+    return at;
+  }
+  /** tierOffset(symbolPx, badge | badgePx) → [dx, dy] CSS px for getPixelOffset: the badge's lower-left corner on the
+      symbol's edge at its top-right (the 45° line, about half the symbol's size from its centre), so it never covers the
+      symbol's centre or its status colour. */
+  function tierOffset(symbolPx, badge) {
+    var sp = finite(+symbolPx) ? +symbolPx : 12;
+    var w = badge && typeof badge === 'object' ? badge.wPx : tierGeom({ level: 4, px: badge }).wPx;
+    var h = badge && typeof badge === 'object' ? badge.hPx : tierGeom({ level: 4, px: badge }).hPx;
+    var c = Math.round(sp * 0.36);
+    return [c + w / 2, -(c + h / 2)];
+  }
+  /** tierSVG({level, basis, theme, size?}) → <svg> of the badge for legends and cards (the same rectangles as the sprite at that
+      size; size = height in CSS px, default 14). Drawn at its own pixels (no scaling), so the 1 px outline of an empty bar
+      stays one crisp pixel. Level 0 → null. */
+  function tierSVG(spec) {
+    spec = spec || {};
+    var size = finite(+spec.size) ? Math.round(+spec.size) : 14;
+    var g = tierGeom({ level: spec.level, basis: spec.basis, px: size, dpr: 1 });
+    if (!g.level) return null;
+    var ink = TIER_INK[tierTheme(spec.theme)];
+    var svg = DOC.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + g.w + ' ' + g.h);
+    svg.setAttribute('width', String(g.w));
+    svg.setAttribute('height', String(g.h));
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('shape-rendering', 'crispEdges');
+    svg.setAttribute('class', 'mcd-glyph mcd-tier');
+    var fill = { key: cssRgb(ink.key), ink: cssRgb(ink.ink), hole: cssRgb(ink.key) };
+    g.rects.forEach(function (r) {
+      var el = DOC.createElementNS(SVGNS, 'rect');
+      el.setAttribute('x', String(r.x)); el.setAttribute('y', String(r.y));
+      el.setAttribute('width', String(r.w)); el.setAttribute('height', String(r.h));
+      el.setAttribute('fill', fill[r.role]);
+      svg.appendChild(el);
+    });
+    return svg;
   }
 
   /* ---------------------------------------------------------------- hexbin */
@@ -1250,7 +1435,9 @@
       view: S.view, theme: S.theme, palette: S.pal,
       veil: S.veil, reveal: S.reveal, radiusKm: S.radiusKm, hover: S.hover, hoverKey: S.hoverKey, selection: S.selection,
       layerSet: S.layerSet, layers: S.layers, time: S.time, branch: branchLL(), mabes: MABES_CENTROID,
-      beforeId: DECK_BEFORE, fontsReady: S.fontsReady, reducedMotion: reduced(), kit: kit
+      beforeId: DECK_BEFORE, fontsReady: S.fontsReady, reducedMotion: reduced(), kit: kit,
+      /* v6: the zones in effect ({mode, km?}); MCD.territory.layers() picks its kecamatan set from it */
+      zones: zonesNow()
     };
   }
   function mapState() { return baseState(); }
@@ -1399,7 +1586,7 @@
   function sectionLayers() {
     var ms = mapState();
     var key = [S.derivedSeq, ms.zoomQ, S.hoverKey, stableKey(S.selection), S.layerSet, isPlan(), S.veil, S.postureKey,
-      stableKey(S.layers), S.radiusKm, S.fontsReady, S.sectionVersion, S.view, S.pal].join('|');
+      stableKey(S.layers), S.radiusKm, S.fontsReady, S.sectionVersion, S.view, S.pal, ms.zones ? ms.zones.mode + (ms.zones.km || '') : ''].join('|');
     if (key === S.sectionCache.key) return S.sectionCache;
     var base = [], top = [];
     sectionKeys().forEach(function (k) {
@@ -2413,7 +2600,10 @@
      clears a circle around Mabes TNI instead (KPR: 30 km) with the veil beyond it. Day, night, street and
      satellite each have their own veil colour; the shade sits above the base map (and the satellite names)
      and under every map line, label and point. */
-  var ZONE_MODES = { kecamatan15: 1, radius: 1, none: 1 };
+  /* v6 (V6_SPEC §3.3): {mode: 'kecamatan', km: 30} is the same three zones for the 30 km scope (Sekolah at 30 km, Kampus):
+     the 103 kecamatan at least half inside 30 km clear, the 15 others of the file under the soft shade, the veil beyond
+     (MCD.territory.zones(30)). {mode: 'kecamatan', km: 15} (or no km) is 'kecamatan15'. */
+  var ZONE_MODES = { kecamatan15: 1, kecamatan: 1, radius: 1, none: 1 };
   /* one neutral grey per basemap (never a data colour): a soft shade over the ring, a second layer of the same
      tone beyond it, so the streets fade step by step (total beyond ≈ 0.8 on the street map, ≈ 0.63 on the Day
      satellite). The satellite DIMS in both themes (fix 16 Oct 2026): its place names and site labels are light ink
@@ -2428,6 +2618,7 @@
   var ZONE = { override: null, applied: '', data: '' };
   function normZones(z) {
     if (z === false || z === 'none') return { mode: 'none' };
+    if (z === 'kecamatan30') z = { mode: 'kecamatan', km: 30 };
     if (typeof z === 'string') z = { mode: z };
     if (!z || typeof z !== 'object') return { mode: 'kecamatan15' };
     var mode = ZONE_MODES[z.mode] ? z.mode : 'kecamatan15';
@@ -2436,9 +2627,13 @@
       if (!(km > 0)) return { mode: 'kecamatan15' };
       return { mode: 'radius', km: km };
     }
+    /* the data holds two kecamatan sets (in15, inCircle = 30 km): anything above 15 km is the 30 km set */
+    if (mode === 'kecamatan') return +z.km > 15 ? { mode: 'kecamatan', km: 30 } : { mode: 'kecamatan15' };
     return { mode: mode };
   }
-  function zoneData() { var T = MCD.territory; try { return T && isFn(T.zones) ? T.zones() : null; } catch (e) { return null; } }
+  function isKecZones(z) { return !!z && (z.mode === 'kecamatan15' || z.mode === 'kecamatan'); }
+  /** The kecamatan zone set of MCD.territory: 15 km (item 30) or, with km 30, the 30 km set (v6). */
+  function zoneData(km) { var T = MCD.territory; try { return T && isFn(T.zones) ? T.zones(km === 30 ? 30 : undefined) : null; } catch (e) { return null; } }
   /** The zones in effect: a setZones() call by the current section, else the posture's `zones`, else 'kecamatan15'. */
   function zoneSpec() {
     var p = S.posture || {};
@@ -2462,15 +2657,15 @@
   function ringSign(r) { return signedArea(r); }           /* > 0: counter-clockwise (lon east, lat north) */
   function applyZones() {
     if (!S.map || !S.ready) return;
-    var z = zoneSpec(), Z = z.mode === 'kecamatan15' ? zoneData() : null;
-    if (z.mode === 'kecamatan15' && !Z) z = { mode: 'none' };
+    var z = zoneSpec(), Z = isKecZones(z) ? zoneData(z.km) : null;
+    if (isKecZones(z) && !Z) z = { mode: 'none' };
     var c = ringCenter(), dataKey = z.mode + '|' + (z.km || '') + '|' + (z.mode === 'radius' ? c.join(',') : '');
     var srcR = S.map.getSource('zoneRing'), srcB = S.map.getSource('zoneBeyond');
     if (!srcR || !srcB) return;
     if (dataKey !== ZONE.data) {
       ZONE.data = dataKey;
       try {
-        if (z.mode === 'kecamatan15') {
+        if (isKecZones(z)) {
           srcR.setData(worldMinus(Z.focusOutline()));
           srcB.setData(worldMinus(Z.unionOutline()));
         } else if (z.mode === 'radius') {
@@ -2481,24 +2676,31 @@
     }
     var ink = zoneInk(), both = 1 - (1 - ink.ring) * (1 - ink.beyond);
     setPaint('zone-ring', 'fill-color', ink.color); setPaint('zone-beyond', 'fill-color', ink.color);
-    setPaint('zone-ring', 'fill-opacity', z.mode === 'kecamatan15' ? ink.ring : (z.mode === 'radius' ? both : 0));
-    setPaint('zone-beyond', 'fill-opacity', z.mode === 'kecamatan15' ? ink.beyond : 0);
+    setPaint('zone-ring', 'fill-opacity', isKecZones(z) ? ink.ring : (z.mode === 'radius' ? both : 0));
+    setPaint('zone-beyond', 'fill-opacity', isKecZones(z) ? ink.beyond : 0);
     var key = stableKey(z);
     if (key !== ZONE.applied) { ZONE.applied = key; queueLegend(); emit('zones', z); }
   }
   /**
-   * setZones({mode:'kecamatan15'} | {mode:'radius', km} | {mode:'none'}) → the zones in effect.
+   * setZones({mode:'kecamatan15'} | {mode:'kecamatan', km: 30} | {mode:'radius', km} | {mode:'none'}) → the zones in effect.
    * The call belongs to the section on screen (body[data-section] while it mounts, else the map's section) and
    * ends when another section takes the map; that section gets its posture's zones (default 'kecamatan15').
+   * A change redraws the section layers: MCD.territory chips and outlines follow the kecamatan set (v6).
    */
   function setZones(spec) {
-    var z = normZones(spec);
+    var z = normZones(spec), before = stableKey(zonesNow());
     var owner = (spec && spec.section) || (DOC.body && DOC.body.getAttribute && DOC.body.getAttribute('data-section')) || S.section;
     ZONE.override = Object.assign({ section: owner }, z);
     applyZones();
-    return zoneSpec();
+    if (S.ready && stableKey(zonesNow()) !== before) requestRender();
+    /* the zones this call put in effect for its owner. While a section mounts (body[data-section] is already the new
+       one) the map still shows the previous section, so zoneSpec() would answer with that section's zones and the new
+       section would read its mode as "not supported" (Kampus fell back to the 30 km circle, fix round 19 Oct 2026). */
+    return owner === S.section ? zonesNow() : zonesOf(Object.assign({}, ZONE.override));
   }
-  function zonesNow() { var z = zoneSpec(); return z.mode === 'kecamatan15' && !zoneData() ? { mode: 'none' } : z; }
+  /** a kecamatan zone set without its data (no MCD.territory, an admin file without inCircle) draws as 'none' */
+  function zonesOf(z) { return isKecZones(z) && !zoneData(z.km) ? { mode: 'none' } : z; }
+  function zonesNow() { return zonesOf(zoneSpec()); }
   /* Fit padding for the 15 km focus (item 30): the focus chips are about 180 px wide, so the camera keeps half a
      chip of room on both sides, and every focus label point is inside the fit (Pasar Minggu, Cilandak, Cinere,
      Setu and Cileungsi lie at the edge of the circle). */
@@ -3004,6 +3206,9 @@
     /* item 30: KPR keeps its own 30 km circle, clear inside, the veil beyond (a section may still call setZones) */
     property: { imagery: 'full', camera: 'ring30', rings: 'property', layerSet: 'property', deck: true, zones: { mode: 'radius', km: 30 } },
     schools: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'schools', deck: true },
+    /* v6 (V6_SPEC §6.1, §6.3): Kampus opens on its 30 km scope, the 30 km kecamatan zones by default (the section still
+       calls setZones: {mode: 'kecamatan15'} at 15 km) */
+    campus: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true, zones: { mode: 'kecamatan', km: 30 } },
     data: { imagery: 'dimmed', camera: null, rings: null, layerSet: null, deck: false }
   };
   /* ticker (beacon pulse, selection halo) runs only in Overview (§E.13) */
@@ -3228,6 +3433,8 @@
       if (!W.WebGL2RenderingContext) return false;
       var c = DOC.createElement('canvas'), gl = c.getContext('webgl2');
       if (!gl) return false;
+      /* the GPU's texture side limit (many phones: 8192): canvas atlases such as the kecamatan chips stay inside it */
+      try { if (isFn(gl.getParameter)) S.maxTexture = +gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0; } catch (e) { S.maxTexture = 0; }
       var ext = gl.getExtension('WEBGL_lose_context');
       if (ext) ext.loseContext();
       return true;
@@ -3504,9 +3711,9 @@
         { area: { color: ink.color, alpha: both }, label: 'Pudar: di luar ' + fmtInt(z.km) + ' km' }
       ] };
     }
-    var Z = zoneData();
+    var Z = zoneData(z.km), zkm = z.mode === 'kecamatan' ? 30 : 15;
     return { id: 'zones', title: 'Area', rows: [
-      { area: { color: ink.color, alpha: 0 }, label: 'Jelas: ' + fmtInt(Z.focus.length) + ' kecamatan dalam 15 km' },
+      { area: { color: ink.color, alpha: 0 }, label: 'Jelas: ' + fmtInt(Z.focus.length) + ' kecamatan dalam ' + zkm + ' km' },
       { area: { color: ink.color, alpha: ink.ring }, label: 'Agak pudar: ' + fmtInt(Z.ring.length) + ' kecamatan tetangga' },
       { area: { color: ink.color, alpha: both }, label: 'Pudar: lebih jauh' }
     ] };
@@ -3578,12 +3785,36 @@
     try { var ctx = cv.getContext('2d'); if (ctx) ctx.drawImage(src, 0, 0, cv.width, cv.height); } catch (e) { /* an empty square */ }
     return cv;
   }
+  /** A legend row {shape, rgb, hollow?}: the map's own sprite (symbolSprite at 18 px, copied from its canvas), else the SVG glyph. */
+  function shapeLegend(r) {
+    var sp = symbolSprite({ shape: r.shape, fill: Array.isArray(r.rgb) ? r.rgb : C.text2, hollow: !!r.hollow, px: 18 });
+    if (sp && sp.canvas) return legendCanvas(sp.canvas, 18);
+    var name = { shield: 'shield', triangle: 'tri', diamond: 'diamond', rsq: 'rsquare', circle: 'circle' }[r.shape] || 'circle';
+    if (r.hollow) name = { shield: 'shieldHollow', tri: 'triHollow', diamond: 'diamondHollow', rsquare: 'rsqOutline', circle: 'ring' }[name];
+    return glyphSVG(name, r.rgb, 10, r.alpha);
+  }
+  /** The kelas biaya scale row {tiers: [{level, basis, word}], label?}: each badge over its word ("Reguler · Menengah · Atas ·
+      Premium"); the words are the row's text, so a screen reader reads them in order. */
+  function tierScaleRow(r) {
+    var row = h('div', 'lg__row lg__row--tiers'), box = h('div', 'lg__tiers');
+    r.tiers.forEach(function (t) {
+      if (!t) return;
+      var cell = h('span', 'lg__tier'), sv = tierSVG({ level: t.level, basis: t.basis, theme: S.theme, size: 16 });
+      if (sv) cell.appendChild(sv);
+      cell.appendChild(h('span', 'lg__tier-word', String(t.word || '')));
+      box.appendChild(cell);
+    });
+    row.appendChild(box);
+    if (r.label) row.setAttribute('title', r.label);
+    return row;
+  }
   function renderLegend() {
     var el = S.dom.legend;
     if (!el) return;
     var model = legendModel();
     /* colours are part of the key: status swatches read --status-* tokens, which change with the theme */
-    var key = stableKey({ g: model.groups.map(function (g) { return [g.title, g.ramp, g.note, (g.rows || []).map(function (r) { return [r.label, r.count, r.glyph, r.rgb, r.line, r.alpha, r.width, r.text, r.imgKey || '', r.area, r.muted]; })]; }), n: model.notes });
+    var key = stableKey({ g: model.groups.map(function (g) { return [g.title, g.ramp, g.note, (g.rows || []).map(function (r) { return [r.label, r.count, r.glyph, r.rgb, r.line, r.alpha, r.width, r.text, r.imgKey || '', r.area, r.muted,
+      r.level, r.basis, r.tiers, r.shape, r.hollow]; })]; }), n: model.notes, t: S.theme });
     if (key === S.legendKey) return;
     S.legendKey = key;
     while (el.firstChild) el.removeChild(el.firstChild);
@@ -3592,6 +3823,8 @@
       grp.setAttribute('data-group', g.id || '');
       if (g.title) grp.appendChild(h('div', 'lg__title t-eyebrow', g.title));
       (g.rows || []).forEach(function (r) {
+        /* v6 (V6_SPEC §4.3): the kelas biaya scale, the four bar glyphs in a line with their words under them */
+        if (Array.isArray(r.tiers)) { grp.appendChild(tierScaleRow(r)); return; }
         var row = h('div', 'lg__row');
         var gl = h('span', 'lg__glyph');
         /* glyphs: a line (borders, rings), 'chip' (a kecamatan label), 'badge' (a visit number), 'none', or a dot / shape */
@@ -3601,6 +3834,14 @@
         else if (r.area) { var ar = h('span', 'lg__area'), veil = h('i', null); veil.style.background = r.area.color; veil.style.opacity = String(r.area.alpha); ar.appendChild(veil); gl.appendChild(ar); }
         else if (r.glyph === 'chip') gl.appendChild(h('span', 'lg__chip' + (r.muted ? ' lg__chip--muted' : '')));
         else if (r.glyph === 'badge') gl.appendChild(h('span', 'lg__badge', r.text || '1'));
+        else if (r.glyph === 'tier') {
+          /* one badge, or with basis 'both' a filled and an empty one side by side (the "Batang berisi … Batang kosong" row) */
+          (r.basis === 'both' ? ['biaya', 'perkiraan'] : [r.basis]).forEach(function (b) {
+            var tv = tierSVG({ level: r.level, basis: b, theme: S.theme, size: 14 });
+            if (tv) { gl.classList.add('lg__glyph--tier'); gl.appendChild(tv); }
+          });
+        }
+        else if (r.shape && SYMBOL_SHAPES[r.shape]) gl.appendChild(shapeLegend(r));
         else if (r.glyph !== 'none') gl.appendChild(glyphSVG(r.glyph || 'circle', r.rgb, 10, r.alpha));
         row.appendChild(gl);
         row.appendChild(h('span', 'lg__label', r.label));
@@ -5024,6 +5265,9 @@
     night: { line: [26, 95, 209], casing: [255, 255, 255], link: [160, 196, 255], linkA: 210 }
   };
   var ROUTE_DRAW_EARLY = 0.6;            /* the line starts drawing when the flight that frames it is 60% done */
+  /* Kinds that never draw a route. v6 (V6_SPEC §6.3): Kampus' 'campus' (a PT's main point) and 'campusSite' (another campus
+     point, id '<row id>#<n>') are points and draw their route ('campusSite' is not '^site$'); 'cpKec' ends in "Kec", so it
+     is a kecamatan: it focuses (isKecKind) and draws no route. tests/map-v6.test.mjs pins the three. */
   var NO_ROUTE_KINDS = /cluster|area|yay|kec|tile|ring|^site$|mabes|territory/i;
   var RT = { key: '', seq: 0, phase: 'off', dest: null, route: null, cum: null, t: 0, a: 1, t0: 0, raf: 0, full: null,
     text: null, fit: false, chip: null, dash: null, dashKey: '', manual: false, prefit: '', fitFlight: 0, early: 0, approx: '' };
@@ -5961,6 +6205,8 @@
     fonts: { sans: FONT_SANS, mono: FONT_MONO },
     atlas: buildAtlas, glyphSVG: glyphSVG, glyphNames: GLYPH_ORDER.slice(),
     symbolSprite: symbolSprite, badgeSprite: badgeSprite, spriteAtlas: spriteAtlas, matraRGB: MATRA_RGB,
+    tierSprite: tierSprite, tierAtlas: tierAtlas, tierGeom: tierGeom, tierOffset: tierOffset, tierSVG: tierSVG, tierInk: TIER_INK,
+    shapes: { shield: SHIELD_PTS, triangle: TRI_PTS },
     easing: { outExpo: outExpo, inOutCubic: inOutCubic, camera: easeCamera, standard: easeStandard },
     geo: { haversineKm: haversineKm, bearingDeg: bearingDeg, destination: destination, circle: circleRing, bbox: bboxOf, pointInRing: pointInRing },
     fmt: { int: fmtInt, dec: fmtDec, rp: fmtRp, km: fmtKm, pct: fmtPct, coord: fmtCoord, bandRp: bandRp },
@@ -5975,7 +6221,8 @@
     setLayout: setLayout, setPosture: setPosture, preset: preset, presets: presetList,
     setLayers: setLayers, setLayerSet: setLayerSet,
     setHover: setHover, select: select, focusSite: focusSite, focusPoint: focusPoint,
-    /** item 30: setZones({mode:'kecamatan15'} | {mode:'radius', km} | {mode:'none'}) · zones() → the zones in effect */
+    /** item 30: setZones({mode:'kecamatan15'} | {mode:'radius', km} | {mode:'none'}) · zones() → the zones in effect;
+        v6: {mode:'kecamatan', km: 30} (the 30 km kecamatan zones, MCD.territory.zones(30)) */
     setZones: setZones, zones: zonesNow,
     /** item 38: kecamatan focus mode. focusArea({kind:'kecamatan', id, source?, reserveRight?, camera?}) → boolean;
         clearFocus({reason?, source?}); focused() → kecamatan id | null; focusState() → {id, phase, p, name, sources, lite, settled}.
@@ -5994,8 +6241,14 @@
         setLayout(pad, {still: true}) keeps the map content still on screen. A point inside the focused kecamatan, or with
         extra.trail, keeps the focus (signal 'trail'); the route chip waits while MCD.windows.calloutKey() is its point. */
     positionOf: positionOf, keepTargets: keepTargets, routeScreen: routeScreen, nudge: nudge, fitRoute: fitRoute,
-    /** item 34: cached canvas sprites for deck IconLayer and legends */
+    /** item 34: cached canvas sprites for deck IconLayer and legends (v6: shapes 'shield' and 'triangle', `hollow`) */
     symbolSprite: symbolSprite, badgeSprite: badgeSprite, spriteAtlas: spriteAtlas,
+    /** fix round 19 Oct 2026: the GPU's MAX_TEXTURE_SIZE as probed at init (0 = not known yet) */
+    maxTextureSize: function () { return S.maxTexture || 0; },
+    /** v6 (V6_SPEC D6, §4.3): the kelas biaya badge. tierSprite({level 1-4, basis, theme, px}) → sprite | null (level 0);
+        tierAtlas({theme, px}) → atlas with byName '1f'…'4e'; tierOffset(symbolPx, sprite) → [dx, dy]; tierSVG({level, basis,
+        theme, size}) → <svg> for legends and cards; tierGeom(spec) → the rectangles (QA and tests) */
+    tierSprite: tierSprite, tierAtlas: tierAtlas, tierOffset: tierOffset, tierSVG: tierSVG, tierGeom: tierGeom,
     flyTo: flyTo, fitBounds: fitBounds,
     getCamera: getCamera, setCamera: setCamera, intro: intro,
     setView: setView, setTheme: setTheme, getView: function () { return S.view; }, getTheme: function () { return S.theme; },

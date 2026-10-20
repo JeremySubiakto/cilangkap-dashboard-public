@@ -8,7 +8,10 @@
  *
  *   'grid'   MCD.travel (assets/js/travel.js + data/travel-grid.js): our own road network from the branch,
  *            100 m cells over about ±16 km, normal traffic (calibrated to TomTom 2025 Jakarta).
- *            precision 'jalan'.
+ *            precision 'jalan'. Beyond the inner box, 15-31 km: the outer grid (data/travel-grid-outer.js, 200 m
+ *            cells, same rules; v6, item 45), loaded on first use. While it loads, of() returns the next source's
+ *            value with pending: true, and format() writes 'Menghitung jarak…'; once it is there (or failed) the
+ *            window event 'mcd:distance' fires with changed: 'outer', so sections render again.
  *   'tabel'  window.MCD_TRAVEL (data/travel-times.js): OSRM routes per kelurahan / kecamatan up to about
  *            39 km, scaled to the exact point. Its minutes are FREE-FLOW (empty roads): converted to normal
  *            traffic × 1,6 (TomTom 2025 Jakarta, congestion 59,8%). precision 'perkiraan'.
@@ -31,12 +34,14 @@
  *       → {km, min, minPeak, precision: 'jalan'|'perkiraan'|'garis-lurus', source: 'grid'|'tabel'|'garis',
  *          noToll: {km, min, minPeak} | null, viaToll, basis} | null (bad input)
  *       basis: 'exact-grid' | 'nearby' (grid), 'kelurahan' | 'kecamatan' (tabel), 'garis'
+ *       grid: 'outer' when the value comes from the outer grid (15-31 km); pending: true while the outer grid loads
+ *       (the numbers are then the table's or the straight line's, to sort by; show format()'s 'Menghitung jarak…')
  *       Grid rule (fix 16 Oct 2026): the main value is the route WITHOUT toll roads when that route is faster,
  *       or ties within 0,05 menit and is shorter (the grid's toll search can snap to the toll carriageway and
  *       come out longer for the same time); viaToll is then false. noToll is always the toll-free route.
  *   format(r, {peak?, noToll?}) → '4,2 km · ± 14 menit' · '4,2 km · ± 18 menit (jam sibuk)' ·
- *       '850 m · ± 3 menit' · '31,4 km · ± 1 jam 5 menit' · '—'. A missing peak / noToll option follows the
- *       shared toggle; pass false to switch it off for one call.
+ *       '850 m · ± 3 menit' · '31,4 km · ± 1 jam 5 menit' · '—' · 'Menghitung jarak…' (r.pending). A missing peak /
+ *       noToll option follows the shared toggle; pass false to switch it off for one call.
  *   tip(r, {peak?, noToll?}) → plain Indonesian tooltip, one idea per line ('\n')
  *   sortNearest(items, getLonLat?, {noToll?, areaOf?}) → new array, nearest by time first; ties by km,
  *       then input order; items without a value last, in input order. getLonLat(item) returns [lon, lat],
@@ -51,8 +56,11 @@
  *       label, tip} | null> (item 36): the line from KCP along the roads, from data/travel-routes.js, loaded once
  *       through MCD.app.lazy('travel-routes'). Offline: no routing request ever leaves the computer. The same route
  *       as of() (line, label and lists agree); a missing noToll follows the "Motor (tanpa tol)" toggle. Never rejects.
- *   preload() → Promise<boolean> (item 41): the same one load of the route data, started early by the shell when a map
- *       section with routes opens (never rejects; false when it cannot load).
+ *   preload({outer?}) → Promise<boolean> (item 41): the same one load of the route data, started early by the shell when
+ *       a map section with routes opens (never rejects; false when it cannot load). outer: true also loads the outer grid
+ *       and its routes (the 30 km view).
+ *   state() → {grid, outer, outerRoutes} (v6): grid true when the inner grid is ready; outer / outerRoutes 'idle' |
+ *       'loading' | 'ready' | 'error' | 'unavailable' (MCD.travel.outerState()). 'loading' = show 'Menghitung jarak…'.
  *   directionsUrl(lon, lat) → 'https://www.google.com/maps/dir/?api=1&origin=<KCP lat,lon>&destination=<lat,lon>
  *       &travelmode=driving' | null: coordinates only, 5 decimals. directionsLink(lon, lat, {compact?, label?}) →
  *       the "Rute di Google Maps" <a> (new tab, noopener noreferrer) | null. Opens only on a click.
@@ -135,21 +143,27 @@
     opts = opts || {};
     var pf = peakFactor();
 
-    // 1 · our own road grid (about ±16 km)
-    var T = grid();
+    // 1 · our own road grid (about ±16 km; beyond it the outer grid to about 31 km, v6)
+    var T = grid(), pending = false;
     if (T) {
+      hookOuter();
       var g = null;
       try { g = T.at(lon, lat); } catch (e) { g = null; }
       if (g && g.precision && g.precision !== 'none' && isNum(g.km) && isNum(g.min)) {
         var nt = g.noToll && isNum(g.noToll.km) && isNum(g.noToll.min)
           ? { km: g.noToll.km, min: g.noToll.min, minPeak: g.noToll.min * pf } : null;
+        var out;
         if (noTollWins(g, nt)) {
-          return { km: nt.km, min: nt.min, minPeak: nt.minPeak, precision: 'jalan', source: 'grid',
+          out = { km: nt.km, min: nt.min, minPeak: nt.minPeak, precision: 'jalan', source: 'grid',
             noToll: nt, viaToll: false, basis: g.precision };
+        } else {
+          out = { km: g.km, min: g.min, minPeak: g.min * pf, precision: 'jalan', source: 'grid',
+            noToll: nt, viaToll: !!g.viaToll, basis: g.precision };
         }
-        return { km: g.km, min: g.min, minPeak: g.min * pf, precision: 'jalan', source: 'grid',
-          noToll: nt, viaToll: !!g.viaToll, basis: g.precision };
+        if (g.grid === 'outer') out.grid = 'outer';
+        return out;
       }
+      pending = !!(g && g.pending);   // the outer grid is loading: a value below for sorting, 'Menghitung jarak…' shown
     }
 
     // 2 · OSRM table per kelurahan / kecamatan, free flow → normal traffic
@@ -161,15 +175,50 @@
       } catch (e2) { est = null; }
       if (est && isNum(est.km) && isNum(est.min)) {
         var line = est.basis === 'garis lurus', m = est.min * freeToNormal();
-        return { km: est.km, min: m, minPeak: m * pf, precision: line ? 'garis-lurus' : 'perkiraan',
+        var tr = { km: est.km, min: m, minPeak: m * pf, precision: line ? 'garis-lurus' : 'perkiraan',
           source: line ? 'garis' : 'tabel', noToll: null, viaToll: false, basis: line ? 'garis' : (est.basis || 'kelurahan') };
+        if (pending) tr.pending = true;
+        return tr;
       }
     }
 
     // 3 · straight line
     var o = origin(), d = haversineKm(o[0], o[1], lon, lat);
     var km = Math.max(d * CIRCUITY, FLOOR_KM), mm = Math.max(1, km / LINE_KMH * 60);
-    return { km: km, min: mm, minPeak: mm * pf, precision: 'garis-lurus', source: 'garis', noToll: null, viaToll: false, basis: 'garis' };
+    var lr = { km: km, min: mm, minPeak: mm * pf, precision: 'garis-lurus', source: 'garis', noToll: null, viaToll: false, basis: 'garis' };
+    if (pending) lr.pending = true;
+    return lr;
+  }
+
+  /* ------------------------------------------------------------ outer grid state (v6) */
+
+  var PENDING_TEXT = 'Menghitung jarak…';
+  var hooked = false;
+
+  /** Once: when the outer grid finishes loading (or fails), announce 'mcd:distance' {changed: 'outer'} so every
+   *  section renders its distances again (the shell schedules the 'distance' update on that event). */
+  function hookOuter() {
+    if (hooked) return;
+    var T = grid();
+    if (!T || typeof T.onOuter !== 'function') return;
+    hooked = true;
+    var last = null;
+    try {
+      T.onOuter(function (st) {
+        var g = st && st.grid;
+        if (g === last) return;
+        var was = last;
+        last = g;
+        if (g === 'ready' || (g === 'error' && was === 'loading')) announce('outer');
+      });
+    } catch (e) { hooked = false; }
+  }
+
+  /** {grid, outer, outerRoutes}: the inner grid is ready; the outer grid's and routes' load state. */
+  function state() {
+    var T = grid(), st = null;
+    try { st = T && typeof T.outerState === 'function' ? T.outerState() : null; } catch (e) { st = null; }
+    return { grid: gridReady(), outer: st ? st.grid : 'unavailable', outerRoutes: st ? st.routes : 'unavailable' };
   }
 
   function valid(r) { return !!(r && isNum(r.km) && isNum(r.min)); }
@@ -211,6 +260,7 @@
   }
 
   function format(r, opts) {
+    if (r && r.pending) return PENDING_TEXT;
     if (!valid(r)) return '—';
     var s = shown(r, wants(opts)), tags = [];
     if (s.peak) tags.push('jam sibuk');
@@ -219,6 +269,7 @@
   }
 
   function tip(r, opts) {
+    if (r && r.pending) return 'Jarak dari KCP sedang dihitung.\nData jalan untuk 16–31 km sedang dimuat.';
     if (!valid(r)) return 'Jarak belum dapat dihitung untuk titik ini.';
     var w = wants(opts), lines = [];
     lines.push(r.source === 'garis'
@@ -318,10 +369,25 @@
    * flight. Idempotent (shares the one pending load with route()); never rejects (false: locked, file missing, no grid).
    * The shell calls it a moment after Merchant, Sekolah or KPR mounts (app.js schedulePreload), never on pages.
    */
-  function preload() {
+  function preload(opts) {
     var p;
     try { p = routesTravel(); } catch (e) { return Promise.resolve(false); }
-    return Promise.resolve(p).then(function (t) { return !!t; }, function () { return false; });
+    var inner = Promise.resolve(p).then(function (t) { return !!t; }, function () { return false; });
+    if (!(opts && opts.outer)) return inner;
+    var q;
+    try { q = outerTravel(); } catch (e2) { q = Promise.resolve(null); }
+    return Promise.all([inner, Promise.resolve(q).then(function (t) { return !!t; }, function () { return false; })])
+      .then(function (v) { return v[0] && v[1]; }, function () { return false; });
+  }
+
+  /** MCD.travel with the outer grid and its routes loaded (v6, points 16-31 km), or null. Never rejects. */
+  function outerTravel() {
+    var T = grid();
+    if (!T || typeof T.loadOuterRoutes !== 'function') return Promise.resolve(null);
+    hookOuter();
+    var p;
+    try { p = Promise.resolve(T.loadOuterRoutes()); } catch (e) { return Promise.resolve(null); }
+    return p.then(function (ok) { return ok ? T : null; }, function () { return null; });
   }
 
   /**
@@ -335,14 +401,17 @@
    *   noToll     true when this is the route without toll roads (asked, or the better one)
    *   label      '6,2 km · ± 18 menit' (+ '(jam sibuk)' / '(tanpa tol)' as format() writes them); tip: tip()
    * A missing opts.noToll follows the shared "Motor (tanpa tol)" toggle. Where no toll-free route exists the car
-   * route is given (noToll false). null: a bad point, the point is outside the road grid (about 16 km), the
-   * route data cannot load (before sign-in, file missing) or was built from another grid. Never rejects.
+   * route is given (noToll false). null: a bad point, the point is outside both road grids (about 31 km), the
+   * route data cannot load (before sign-in, file missing) or was built from another grid. Never rejects. Beyond the inner
+   * grid (16-31 km, v6) the outer grid and its routes load first (MCD.travel.loadOuterRoutes()).
    */
   function route(lon, lat, opts) {
     if (!isNum(lon) || !isNum(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90) return Promise.resolve(null);
     opts = opts || {};
     var wantNT = opts.noToll == null ? noTollOn() : !!opts.noToll;
-    return routesTravel().then(function (T) {
+    var T0 = grid(), outer = false;
+    try { outer = !!(T0 && typeof T0.gridFor === 'function' && T0.gridFor(lon, lat) === 'outer'); } catch (e0) { outer = false; }
+    return (outer ? outerTravel() : routesTravel()).then(function (T) {
       if (!T) return null;
       var g = null;
       try { g = T.at(lon, lat); } catch (e) { g = null; }
@@ -458,7 +527,8 @@
   }
   function announce(changed) {
     if (!root || typeof root.dispatchEvent !== 'function') return;
-    var detail = { peak: prefs.peak, noToll: prefs.noToll, changed: changed };
+    var p = prefsNow();   // the 'outer' announcement may come before any toggle was read
+    var detail = { peak: p.peak, noToll: p.noToll, changed: changed };
     try {
       var ev = null;
       if (typeof root.CustomEvent === 'function') ev = new root.CustomEvent(EVENT, { detail: detail });
@@ -570,10 +640,12 @@
     return g;
   }
 
+  hookOuter();   // MCD.travel loads before this file in index.html; of() and route() retry when it was not there yet
+
   return {
     KEY: KEY, EVENT: EVENT,
     of: of, format: format, tip: tip, sortNearest: sortNearest,
-    route: route, preload: preload, directionsUrl: directionsUrl, directionsLink: directionsLink,
+    route: route, preload: preload, state: state, directionsUrl: directionsUrl, directionsLink: directionsLink,
     peakOn: peakOn, setPeak: setPeak, noTollOn: noTollOn, setNoToll: setNoToll, on: on, controls: controls,
     peakFactor: peakFactor, ready: ready, available: available, sourceLine: sourceLine
   };

@@ -22,6 +22,11 @@
  *   {rail, side, col: {right, left}, drawer: {state, h}, float: {<kind>: {x, y, w, h}}}}, folds: {'<kind>|<block>':
  *   bool}, hints: {<hintId>: 1}}: layout only, never an id, a name, a number or a place.
  *
+ * Card and callout kinds (model.kind; open folds and float sizes are remembered per kind): 'kec', 'sma', 'yay', 'poi',
+ *   'lvm', 'project', 'area', 'site'; v6 (V6_SPEC §6.3–§6.5) 'pt', the Kampus card and callout (selections 'campus' and
+ *   'campusSite' are points with a route link; 'cpKec' is a kecamatan). The slim rail paints summary().scope as the
+ *   15 km / 30 km pair (paintScope).
+ *
  * Pure maths (no DOM) are exported as MCD.windows._pure for tests/windows-v5.test.mjs.
  * ========================================================================== */
 (function (W, MCD) {
@@ -64,7 +69,9 @@
     guideFold: 'Panel dilipat agar peta lebih luas.', resetDone: 'Tata letak kartu kembali ke awal.',
     gmaps: 'Buka di Google Maps', route: 'Rute di Google Maps',
     calloutMore: 'Tekan Detail untuk semua angka.', filters: function (n) { return n + ' filter'; },
-    sheetAria: 'Detail pilihan', quickDone: '✓ Di tindak lanjut', edit: 'Ubah'
+    sheetAria: 'Detail pilihan', quickDone: '✓ Di tindak lanjut', edit: 'Ubah',
+    /* v6 (V6_SPEC §3.1, §11): the slim rail's scope pair */
+    scope: 'Cakupan', scopeAria: 'Cakupan jarak dari Mabes TNI'
   };
 
   /* ------------------------------------------------------------------ small helpers */
@@ -862,34 +869,150 @@
     if (Math.abs(v) >= 10000) return String((v / 1000).toFixed(1)).replace('.', ',').replace(/,0$/, '') + ' rb';
     return F && F.int ? F.int(v) : String(Math.round(v));
   }
+  /**
+   * summaryOf(mod) → {items (≤ 3), filters, scope}: the section's summary() as the slim rail paints it. v6 (V6_SPEC
+   * §3.6): `scope` = {label, value, options: [{v, label}], set(v), title?} | null, the 15 km / 30 km switch of Sekolah
+   * and Kampus; it is a view setting, so `filters` never counts it (D4).
+   */
   function summaryOf(modIn) {
     var mod = modIn || (AD && AD.cur && AD.cur.mod);
     var s = null;
     try { if (mod && isFn(mod.summary)) s = mod.summary(); } catch (e) { s = null; }
     if (Array.isArray(s)) s = { items: s };
     s = s || {};
-    return { items: (s.items || []).slice(0, 3), filters: isNum(s.filters) ? s.filters : 0 };
+    return { items: (s.items || []).slice(0, 3), filters: isNum(s.filters) ? s.filters : 0, scope: scopeOf(s.scope) };
+  }
+  /** A usable scope from summary().scope: 2–3 options with a number and a label, and a set(v); else null. */
+  function scopeOf(sc) {
+    if (!sc || typeof sc !== 'object' || !Array.isArray(sc.options) || !isFn(sc.set)) return null;
+    var opts = sc.options.filter(function (o) { return o && isNum(+o.v) && o.label != null && String(o.label); }).slice(0, 3)
+      .map(function (o) { return { v: +o.v, label: String(o.label) }; });
+    if (opts.length < 2) return null;
+    return { label: sc.label ? String(sc.label) : T.scope, value: +sc.value, options: opts, set: sc.set, title: sc.title ? String(sc.title) : '' };
   }
   function buildSlim(cfg, onOpen) {
     onOpen = onOpen || toggleRail;
     var open = h('button', { type: 'button', class: 'ws-slim__open', title: T.openPanelOf(cfg.label) + ' ( [ )', 'aria-label': T.openPanelOf(cfg.label), 'aria-keyshortcuts': '[' }, [icon('chev-r'), h('span', { class: 'ws-slim__open-t', text: T.openPanel })]);
     var kpis = h('div', { class: 'ws-slim__kpis', role: 'list' });
     var badge = h('span', { class: 'ws-slim__badge', hidden: true });
+    /* v6: the scope pair (15 km over 30 km) between the label and the numbers; built on the first summary that has one */
+    var scope = h('div', { class: 'ws-slim__scope', hidden: true });
     var el = h('aside', { class: 'ws-slim panel', role: 'region', 'aria-label': T.railRegion(cfg.label), 'data-map-occluder': '' }, [
       open,
       h('span', { class: 'ws-slim__sec', 'aria-hidden': 'true' }, [icon(cfg.icon || 'layers')]),
       h('span', { class: 'ws-slim__lbl', text: cfg.short || cfg.label }),
-      badge, kpis
+      scope, badge, kpis
     ]);
     open.addEventListener('click', function (e) { e.stopPropagation(); onOpen(); });
     el.addEventListener('click', function (e) { if (e.target === el || (e.target.closest && e.target.closest('.ws-slim__kpi, .ws-slim__sec, .ws-slim__lbl'))) onOpen(); });
-    return { el: el, kpis: kpis, open: open, badge: badge };
+    return { el: el, kpis: kpis, open: open, badge: badge, scope: scope, pair: null };
   }
   function paintSlim() {
     if (AD && AD.slim) paintSlimEl(AD.slim, summaryOf());
-    if (GUIDE_SLIM) paintSlimEl(GUIDE_SLIM, summaryOf(curMod()));
+    if (GUIDE_SLIM && GUIDE_SLIM.el.isConnected !== false) paintSlimEl(GUIDE_SLIM, summaryOf(curMod()));
   }
+  /**
+   * v6 (V6_SPEC §3.6, V1): the slim rail repainted on the next frame. A scope is a view setting, not MCD.state (D4), and
+   * Kampus keeps its scope and filters in memory, so no state 'change' reaches the rail; the pair, MCD.inst.scope.on
+   * and MCD.app's render pass (paintSummary) call this instead. Several calls in one frame paint once; as in MCD.app's
+   * schedule(), a timer stands in when a heavy map frame (the camera move of a scope change) holds the next frame back.
+   */
+  var SLIM_Q = null;
+  function paintSoon() {
+    if (SLIM_Q) return;
+    var q = SLIM_Q = { f: 0, t: 0 };
+    var run = function () {
+      if (SLIM_Q !== q) return;
+      SLIM_Q = null;
+      clearTimeout(q.t);
+      if (q.f && isFn(W.cancelAnimationFrame)) W.cancelAnimationFrame(q.f);
+      if (booted()) paintSlim();
+    };
+    q.f = raf(run);
+    q.t = setTimeout(run, 120);
+  }
+  /** MCD.inst.scope.on → paintSoon, once per scope store (institutions.js loads first; adopt() and the guide fold retry). */
+  var SCOPE_SRC = null;
+  function watchScope() {
+    var I = MCD.inst, S = I && I.scope;
+    if (!S || !isFn(S.on) || S === SCOPE_SRC) return;
+    SCOPE_SRC = S;
+    safe(S.on, S, [function () { paintSoon(); }]);
+  }
+
+  /**
+   * The slim rail's scope pair (V6_SPEC §2, §3.1): div.seg.ws-scope[role=radiogroup][aria-orientation=vertical] with one
+   * button[role=radio] per option (60 × 32 px, "15 km" over "30 km"), aria-checked on the value; Tab lands on the checked
+   * one; ↑ ↓ (and ← →) move and choose, Home / End the first and last. No visible label: the title says it. A click
+   * calls scope.set(v) (the section moves every other switch and announces the count); the pair marks the choice at
+   * once. The buttons are kept and only their state changes, so the keyboard focus survives the repaint that follows.
+   */
+  function paintScope(slim, sc) {
+    var host = slim.scope;
+    if (!host) return;
+    if (!sc) { host.hidden = true; if (slim.pair) { clear(host); slim.pair = null; } return; }
+    var shape = JSON.stringify(sc.options) + '|' + sc.label;
+    if (!slim.pair || slim.pair.shape !== shape) {
+      clear(host);
+      var group = h('div', { class: 'seg ws-scope', role: 'radiogroup', 'aria-orientation': 'vertical', 'aria-label': T.scopeAria });
+      var btns = sc.options.map(function (o) {
+        var b = h('button', { type: 'button', class: 'seg__opt ws-scope__opt', role: 'radio', 'aria-checked': 'false', tabindex: '-1', 'data-v': String(o.v), text: o.label });
+        b.addEventListener('click', function (e) { e.stopPropagation(); chooseScope(slim, o.v, false); });
+        return b;
+      });
+      btns.forEach(function (b) { group.appendChild(b); });
+      group.addEventListener('keydown', function (e) { scopeKey(slim, e); });
+      host.appendChild(group);
+      slim.pair = { shape: shape, group: group, btns: btns, opts: sc.options, set: sc.set, value: null };
+    }
+    var P = slim.pair;
+    P.set = sc.set;
+    host.hidden = false;
+    P.group.setAttribute('title', sc.title || T.scopeAria);
+    markScope(P, sc.value);
+  }
+  function markScope(P, v) {
+    P.value = v;
+    var any = P.opts.some(function (o) { return o.v === v; });
+    P.btns.forEach(function (b, i) {
+      var on = P.opts[i].v === v;
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.setAttribute('tabindex', on || (!any && i === 0) ? '0' : '-1');
+      b.classList.toggle('is-active', on);
+    });
+  }
+  function chooseScope(slim, v, focus) {
+    var P = slim.pair;
+    if (!P) return;
+    var i = -1;
+    P.opts.forEach(function (o, k) { if (o.v === v) i = k; });
+    if (i < 0) return;
+    if (focus && P.btns[i] && isFn(P.btns[i].focus)) P.btns[i].focus();
+    if (P.value === v) return;
+    markScope(P, v);
+    safe(P.set, null, [v]);
+    /* the numbers follow on the next frame (the section has moved by then); a refused value is re-marked from summary() */
+    paintSoon();
+  }
+  function scopeKey(slim, e) {
+    var P = slim.pair;
+    if (!P || !e) return;
+    var cur = -1, n = P.opts.length;
+    P.opts.forEach(function (o, k) { if (o.v === P.value) cur = k; });
+    if (cur < 0) cur = 0;
+    var to = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') to = (cur + 1) % n;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') to = (cur - 1 + n) % n;
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = n - 1;
+    if (to == null) return;
+    if (isFn(e.preventDefault)) e.preventDefault();
+    if (isFn(e.stopPropagation)) e.stopPropagation();
+    chooseScope(slim, P.opts[to].v, true);
+  }
+
   function paintSlimEl(slim, s) {
+    paintScope(slim, s.scope);
     var sig = JSON.stringify([s.filters].concat(s.items.map(function (x) { return [x.value, x.label, x.tone, x.title]; })));
     if (sig === slim.sig) return;
     slim.sig = sig;
@@ -961,6 +1084,7 @@
       A.slim = buildSlim({ label: label, short: spec.rail.short, icon: spec.rail.icon });
       cur.host.appendChild(A.slim.el);
       A.created.push(A.slim.el);
+      watchScope();
     }
     if (drawerEl) {
       drawerEl.classList.add('ws-drawer');
@@ -1947,9 +2071,14 @@
     }
     return out;
   }
+  /**
+   * A point gets "Rute di Google Maps"; a kecamatan, an area, a yayasan, a cluster or the Mabes TNI plate does not.
+   * v6: the Kampus card kind 'pt' and the selection kinds 'campus' / 'campusSite' are points ('site' alone is the
+   * map's TNI site kind, as map.js NO_ROUTE_KINDS reads it); 'cpKec' is a kecamatan.
+   */
   function pointKind(model, sel) {
     var k = String((model && model.kind) || (sel && sel.kind) || '');
-    return !/kec|area|yay|cluster|tile|ring|territory|site|mabes/i.test(k) && !!k;
+    return !/kec|area|yay|cluster|tile|ring|territory|^site$|mabes/i.test(k) && !!k;
   }
   function calloutSpec(model, sel, anchor, opts) {
     var b = brief(model);
@@ -2922,6 +3051,7 @@
       if (host) {
         GUIDE_SLIM = buildSlim({ label: (entry && entry.label) || '', icon: 'sec-' + section() }, function () { GUIDE_OPEN = true; guideFold(false); });
         host.appendChild(GUIDE_SLIM.el);
+        watchScope();
         var g = model();
         if (isFn(GUIDE_SLIM.el.style.setProperty)) { GUIDE_SLIM.el.style.setProperty('top', g.stage.y + 'px'); GUIDE_SLIM.el.style.setProperty('height', g.stage.h + 'px'); }
         paintSlimEl(GUIDE_SLIM, summaryOf(curMod()));
@@ -3225,7 +3355,7 @@
         refQ.raf = 0;
         var ks = refQ.keys.splice(0);
         if (!booted()) return;
-        if (AD) paintSlim();
+        paintSlim();                                 /* the adopted rail's slim or the Sederhana guide's (each guarded) */
         if (ks.indexOf('privacy.veil') >= 0 || ks.indexOf('privacy.reveal') >= 0) closeCallout('privacy');
         if (CARDS.some(function (c) { return !c.isDrawer && c.open; })) refreshPins(ks);
       });
@@ -3238,8 +3368,10 @@
     });
     MCD.state.on('data', function () { queue(['data']); });
   }
+  /* v6: a scope moved by any switch (the full rail, the guide, an action, another tab of the pair) repaints the slim pair */
+  watchScope();
   if (W && isFn(W.addEventListener)) {
-    W.addEventListener('mcd:distance', function () { if (booted()) { if (AD) paintSlim(); if (CARDS.some(function (c) { return !c.isDrawer && c.open; })) refreshPins(['distance']); } });
+    W.addEventListener('mcd:distance', function () { if (booted()) { paintSlim(); if (CARDS.some(function (c) { return !c.isDrawer && c.open; })) refreshPins(['distance']); } });
     var rz = 0;
     W.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { if (booted()) { obstacles(true); relayout('viewport', { still: true, instant: true }); } }, 140); });
   }
@@ -3285,6 +3417,8 @@
     // 3 workspace adoption
     adopt: adopt, unadopt: unadopt,
     setRail: function (s) { setRail(s, true); }, rail: function () { return AD ? AD.rail : null; },
+    /** v6: repaint the slim rail from summary() now (MCD.app's render pass, after the section's update). */
+    paintSummary: function () { if (booted()) paintSlim(); },
     setDrawer: function (s) { setDrawer(s); }, drawer: function () { return AD ? AD.drawer : null; },
     // 4 housekeeping
     tidy: tidy, pin: pin,

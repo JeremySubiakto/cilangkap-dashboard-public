@@ -99,7 +99,7 @@ body[data-view="overview"] .tb-deep { display: none; }
 .nav__btn[aria-current="page"] .nav__icon { background: var(--metal); color: var(--canvas); }
 .nav__btn[aria-current="page"] .nav__here { display: block; }
 .nav__btn[aria-current="page"] .nav__key { display: none; }
-/* The full names ("Data & Privacy") from 600 px: the row of five fits; phones keep the short names */
+/* The full names ("Data & Privasi") from 600 px: the row of six fits; phones keep the short names */
 @media (min-width: 600px) {
   .nav__long { display: inline; }
   .nav__short { display: none; }
@@ -805,6 +805,12 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 .nav__label, .nav__btn[aria-current="page"] .nav__label { font-weight: 600; }
 .nav__here, .nav__key { display: none !important; }
 .nav__btn[aria-current="page"]::after { bottom: -4px; }
+/* v6: six sections (Kampus). The row of icons and full names is 713 px wide; between 600 and 767 px the icons step
+   aside so every name fits without a hidden end (labels only, the accent line still marks the active one) */
+@media (min-width: 600px) and (max-width: 767px) {
+  .nav__icon { display: none; }
+  .nav__btn { padding: 0 10px; }
+}
 .tb-status { height: 32px; font: 500 13px/1 var(--font-sans); border-radius: 16px; padding: 0 12px; border-color: var(--rule-strong); }
 .tb-status:not(.is-empty):not(.is-demo) .tb-status__dot { background: var(--status-ok); }
 .tb-status.is-empty { color: var(--text-2); }
@@ -980,7 +986,7 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
   .rail--r.is-open, [data-slideover].is-open { visibility: visible; transition: transform var(--dur-panel-in) var(--ease-enter), visibility 0s; }
 }
 
-/* Phones (< 600 px, A-15): a fixed bottom tab bar with the five sections; the section row is hidden; the page
+/* Phones (< 600 px, A-15): a fixed bottom tab bar with the six sections (v6); the section row is hidden; the page
    flows under a map hero (no hero on Ringkasan and Data & Privasi); the primary action sticks to the bottom */
 #tabbar { display: none; }
 @media (max-width: 599px) {
@@ -995,7 +1001,8 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--glass-solid); border-top: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
   }
-  .tabbar__list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
+  /* v6: six sections (Kampus, V6_SPEC §2): 65 px per tab at 390, 60 at 360; labels stay 12 px and never overflow */
+  .tabbar__list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
   .tabbar__btn {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     width: 100%; height: var(--tabbar-h); padding: 0 2px; font: 500 12px/14px var(--font-sans); color: var(--text-2);
@@ -1072,7 +1079,7 @@ body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) 
 .nav.has-ink .nav__btn[aria-current="page"]::after { opacity: 0; }
 /* phones: the tab bar's marker moves one column per step (its own width = one column) */
 .tabbar__list { position: relative; }
-.tabbar__ink { position: absolute; left: 0; top: 0; width: 20%; height: 3px; list-style: none; pointer-events: none; opacity: 0; transition: transform var(--dur-base) var(--ease-out); }
+.tabbar__ink { position: absolute; left: 0; top: 0; width: calc(100% / 6); height: 3px; list-style: none; pointer-events: none; opacity: 0; transition: transform var(--dur-base) var(--ease-out); }
 .tabbar__ink::before { content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 3px; border-radius: 0 0 2px 2px; background: var(--grad-accent); }
 .tabbar__list.has-ink .tabbar__ink { opacity: 1; }
 .tabbar__list.has-ink .tabbar__btn[aria-current="page"]::before { opacity: 0; }

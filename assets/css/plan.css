@@ -1,0 +1,212 @@
+/* ==========================================================================
+ * Rencana kunjungan (assets/js/plan.js; docs/V7_SPEC.md §7, D14, D15, D36).
+ * One card body for every frame: a pin or the active sheet (MCD.windows), the 360 px slide-over on page sections
+ * and at 768–1023 px, the full sheet (86 %) on phones with a sticky Maps row. Tokens only (tokens.css, brand.css);
+ * both themes come from the tokens. Text 12 px or larger, weights ≤ 600, targets ≥ 40 px in Sederhana and 44 px on
+ * phones. Motion: transforms and opacity only, instant under prefers-reduced-motion. No inline styles in markup.
+ * ========================================================================== */
+
+/* ── 1 · Own frames: slide-over and phone sheet ───────────────────────────── */
+.pl-frame {
+  position: fixed; z-index: var(--z-drawer); display: flex; flex-direction: column; min-height: 0;
+  color: var(--text-1); background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); border-radius: var(--r-glass);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
+  opacity: 0; translate: 16px 0;
+  transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-base) var(--ease-out);
+}
+.pl-frame.is-in { opacity: 1; translate: 0 0; }
+.pl-frame.is-instant { transition: none; }
+.pl-frame--over {
+  top: calc(var(--topbar-h) + var(--filterbar-h) + var(--inset)); right: var(--inset); bottom: var(--inset);
+  width: 360px; max-width: calc(100vw - 2 * var(--inset));
+}
+.pl-frame--full {
+  left: 0; right: 0; bottom: 0; height: 86vh; height: 86dvh; max-height: calc(100vh - var(--s-6));
+  border-radius: var(--r-glass) var(--r-glass) 0 0; border-bottom: 0;
+  translate: 0 24px;
+}
+.pl-frame--full.is-in { translate: 0 0; }
+.pl-frame__head {
+  display: flex; align-items: center; gap: var(--s-2); flex: none;
+  padding: var(--s-3) var(--s-3) var(--s-2) var(--s-4); border-bottom: 1px solid var(--rule);
+}
+.pl-frame__title {
+  flex: 1 1 auto; min-width: 0; margin: 0;
+  font: 600 12px/16px var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.pl-frame__title:focus { outline: none; }
+.pl-frame__title:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--r-ctl); }
+.pl-frame__close { flex: none; }
+.pl-frame__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s-3) var(--s-4) var(--s-4); }
+.pl-frame__sticky {
+  position: sticky; bottom: 0; flex: none; display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center;
+  padding: var(--s-2) var(--s-4) calc(var(--s-2) + env(safe-area-inset-bottom, 0px));
+  background: var(--glass-sticky); border-top: 1px solid var(--rule);
+}
+.pl-frame__sticky .btn { min-height: 44px; }
+.pl-frame__sticky .pl-maps { flex: 1 1 auto; justify-content: center; }
+.pl-sticky__close { flex: none; margin-left: auto; }
+
+/* ── 2 · Card body ────────────────────────────────────────────────────────── */
+.pl-host { min-width: 0; }
+.pl-card { min-width: 0; font: 400 13px/20px var(--font-sans); color: var(--text-1); }
+.pl-card__body { display: grid; gap: var(--s-3); min-width: 0; }
+.pl-sum { margin: 0; font: 500 13px/19px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.pl-sum--err, .pl-line--err { color: var(--text-1); }
+.pl-state {
+  margin: 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-ctl);
+  font: 400 12px/17px var(--font-sans); color: var(--text-2);
+  background: var(--glass-card-flat); border: 1px solid var(--glass-border-card);
+}
+
+/* "Pengaturan" fold: closed by default, one-line preview (D36) */
+.pl-fold { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.pl-fold__btn {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%; min-height: 36px; padding: var(--s-1) 0;
+  border: 0; background: none; cursor: pointer; text-align: left; color: var(--text-1);
+  font: 600 12px/16px var(--font-sans);
+}
+.pl-fold__btn:hover .pl-fold__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+.pl-fold__chev { width: 14px; height: 14px; flex: none; color: var(--text-3); transition: rotate var(--dur-fast) var(--ease-out); }
+.pl-fold.is-open .pl-fold__chev { rotate: 90deg; }
+.pl-fold__t { flex: none; }
+.pl-fold__pv {
+  flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+.pl-fold.is-open .pl-fold__pv { visibility: hidden; }
+.pl-fold__body { display: grid; gap: var(--s-3); padding: var(--s-1) 0 var(--s-3); }
+.pl-fold__body[hidden] { display: none; }
+.pl-set__row { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.pl-set__row--col { flex-direction: column; align-items: stretch; gap: var(--s-1); }
+.pl-set__l { font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.pl-set__row > .pl-set__l { flex: 0 0 auto; min-width: 72px; }
+.pl-select {
+  min-height: 32px; padding: 0 var(--s-2); border-radius: var(--r-ctl);
+  font: 500 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1);
+  background: var(--surface-raised); border: 1px solid var(--rule-strong);
+}
+.pl-set__check { gap: var(--s-2); cursor: pointer; font: 500 13px/18px var(--font-sans); color: var(--text-1); }
+.pl-check { width: 16px; height: 16px; margin: 0; accent-color: var(--signal); }
+
+/* segmented radio groups (Waktu per kunjungan, Kendaraan, the order switch) */
+.pl-seg { display: flex; width: 100%; height: auto; min-width: 0; }
+.pl-seg .pl-seg__opt { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 4px 8px; cursor: pointer; white-space: normal; text-align: center; border: 0; background: none; }
+.pl-seg .pl-seg__opt[aria-checked="true"] { cursor: default; }
+.pl-order .pl-seg__opt { flex-direction: column; gap: 2px; padding: 6px 8px; }
+.pl-order__l { font: 500 12px/16px var(--font-sans); }
+.pl-order__t { font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pl-order .pl-seg__opt[aria-checked="true"] .pl-order__t { color: inherit; }
+
+/* ── 3 · Stops: two lines each (D36) ──────────────────────────────────────── */
+.pl-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; counter-reset: none; }
+.pl-stop {
+  position: relative; display: grid; gap: 2px; padding: var(--s-2) var(--s-1) var(--s-2) 0;
+  border-radius: var(--r-ctl); border-bottom: 1px solid var(--rule);
+}
+.pl-stop:last-child { border-bottom: 0; }
+.pl-stop__l1 { display: grid; grid-template-columns: 28px 22px 16px minmax(0, 1fr) 32px; align-items: center; gap: var(--s-1) 6px; min-width: 0; }
+.pl-stop__l2 {
+  margin: 0; padding-left: calc(28px + 6px + 22px + 6px);
+  font: 400 12px/17px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums;
+}
+.pl-arr { font-weight: 600; color: var(--text-1); }
+.pl-sep { color: var(--text-3); }
+.pl-grip, .pl-more {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 32px; padding: 0;
+  border: 0; border-radius: var(--r-ctl); background: none; color: var(--text-3); cursor: grab; touch-action: none;
+}
+.pl-more { width: 32px; cursor: pointer; touch-action: auto; }
+.pl-grip .icon { width: 14px; height: 14px; }
+.pl-more__g { font: 600 16px/1 var(--font-sans); }
+.pl-grip:hover, .pl-more:hover, .pl-more[aria-expanded="true"] { color: var(--text-1); background: var(--glass-card-hover); }
+.pl-num {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+  background: var(--text-1); color: var(--glass-solid);
+}
+.pl-kind.icon { width: 16px; height: 16px; color: var(--text-2); }
+.pl-name { min-width: 0; }
+.pl-name__t { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/18px var(--font-sans); }
+.pl-stop.is-veiled .pl-name__t { letter-spacing: 0.06em; }
+.pl-warn {
+  display: flex; gap: 6px; align-items: flex-start; margin: 2px 0 0; padding-left: calc(28px + 6px + 22px + 6px);
+  font: 400 12px/17px var(--font-sans); color: var(--text-2);
+}
+.pl-back + .pl-warn { padding-left: 0; }
+.pl-warn__i.icon { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--status-mid); }
+
+/* drag and keyboard pick-up */
+.pl-stop.is-picked { background: var(--glass-card-hover); box-shadow: inset 0 0 0 1px var(--signal); }
+.pl-stop.is-dragging { z-index: 2; background: var(--glass-solid); box-shadow: var(--glass-shadow-sm); opacity: 0.94; }
+.pl-stop.is-dragging .pl-grip { cursor: grabbing; }
+.pl-stop.is-drop-before { box-shadow: inset 0 2px 0 var(--signal); }
+.pl-stop.is-drop-after { box-shadow: inset 0 -2px 0 var(--signal); }
+
+/* ⋮ menu: Naikkan · Turunkan · Hapus dari rencana */
+.pl-menu {
+  position: absolute; z-index: 3; top: 36px; right: 0; display: grid; min-width: 180px; padding: var(--s-1);
+  background: var(--glass-solid); border: 1px solid var(--glass-border); border-radius: var(--r-ctl);
+  box-shadow: var(--glass-shadow-sm);
+}
+.pl-menu__i {
+  min-height: 36px; padding: 0 var(--s-3); border: 0; border-radius: var(--r-ctl); background: none; text-align: left; cursor: pointer;
+  font: 500 13px/18px var(--font-sans); color: var(--text-1);
+}
+.pl-menu__i:hover:not(:disabled), .pl-menu__i:focus-visible { background: var(--glass-card-hover); }
+.pl-menu__i:disabled { color: var(--text-3); cursor: default; }
+
+/* ── 4 · Lines, footer and links ──────────────────────────────────────────── */
+.pl-back { display: flex; align-items: center; gap: 6px; margin: 0; font: 600 12px/17px var(--font-sans); font-variant-numeric: tabular-nums; }
+.pl-back__i.icon { width: 14px; height: 14px; color: var(--text-3); }
+.pl-line { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-2); }
+.pl-line--traffic { color: var(--text-3); }
+.pl-line--coords { color: var(--text-1); font-weight: 500; }
+.pl-foot { display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--rule); }
+.pl-links { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.pl-maps { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.pl-maps .icon { width: 13px; height: 13px; flex: none; }
+.pl-clear { justify-self: start; padding: 0 var(--s-2); }
+.pl-confirm { display: grid; gap: var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-ctl); background: var(--glass-card-flat); border: 1px solid var(--glass-border-card); }
+.pl-confirm p { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-1); }
+.pl-confirm__b { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* empty today, "Rencana kemarin" and "Gunakan lagi" */
+.pl-empty { display: grid; gap: var(--s-3); }
+.pl-empty__t { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.pl-prev { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding-top: var(--s-2); border-top: 1px solid var(--rule); }
+.pl-prev__t { margin: 0; font: 500 13px/18px var(--font-sans); color: var(--text-1); }
+
+/* ── 5 · Focus, Sederhana, phones ─────────────────────────────────────────── */
+.pl-card button:focus-visible, .pl-card a:focus-visible, .pl-card select:focus-visible, .pl-card input:focus-visible,
+.pl-frame__sticky .btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+body[data-view="overview"] .pl-card .btn, body[data-view="overview"] .pl-fold__btn,
+body[data-view="overview"] .pl-seg .pl-seg__opt, body[data-view="overview"] .pl-menu__i, body[data-view="overview"] .pl-select { min-height: 40px; }
+body[data-view="overview"] .pl-grip, body[data-view="overview"] .pl-more { width: 40px; height: 40px; }
+body[data-view="overview"] .pl-stop__l1 { grid-template-columns: 40px 22px 16px minmax(0, 1fr) 40px; }
+body[data-view="overview"] .pl-stop__l2, body[data-view="overview"] .pl-stop .pl-warn { padding-left: calc(40px + 6px + 22px + 6px); }
+@media (max-width: 767px) {
+  .pl-card .btn, .pl-fold__btn, .pl-seg .pl-seg__opt, .pl-menu__i, .pl-select { min-height: 44px; }
+  .pl-grip, .pl-more { width: 44px; height: 44px; }
+  .pl-stop__l1 { grid-template-columns: 44px 22px 16px minmax(0, 1fr) 44px; }
+  .pl-stop__l2, .pl-stop .pl-warn { padding-left: calc(44px + 6px + 22px + 6px); }
+  .pl-frame__body { padding: var(--s-3); }
+}
+
+/* ── 6 · Fallbacks ────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .pl-frame, .pl-frame.is-in, .pl-fold__chev { transition: none; }
+  .pl-frame { translate: 0 0; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pl-frame { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pl-frame { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media print {
+  .pl-frame, .pl-menu { display: none; }
+}

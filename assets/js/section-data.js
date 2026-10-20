@@ -37,6 +37,21 @@
  *   two repeated hints show once per browser (MCD.windows.hint); Privasi gains "Atur ulang tata letak kartu"
  *   (MCD.windows.resetLayout; the layout key mcd.ui.windows.v1 belongs to the shell and holds no name, number or place).
  *
+ * v6 (COPY_STYLE_EN item 45, docs/V6_SPEC.md §7.5-7.6 and §8; MCD.seal, MCD.app.lazy files feature-detected):
+ *   - Simpan & kata sandi: the card "Tindak lanjut di komputer ini" (entries per list, the state word "Terenkripsi" /
+ *     "Hanya selama halaman terbuka" / "Perlu kata sandi lama", the damaged and memory lines, "Buka dengan kata sandi lama"
+ *     in a small dialog that hands the password to MCD.seal and clears the field at once, "Hapus daftar lama",
+ *     "Hapus tindak lanjut dari komputer ini" through MCD.seal.purge()); action 'data:followups' opens it. Saving is allowed
+ *     when only follow-ups exist (keepAny), removals included (MCD.seal.hasFollowups: a list emptied by removals still
+ *     saves, so the removal reaches another computer), and the bullets say the lists travel in the encrypted copy;
+ *     "Hapus semua data dari dashboard" says the lists stay.
+ *   - Pengaturan & sumber: eight source rows for the v6 data (Dapodik and PDDikti badges on a white tile), the
+ *     "perkiraan" lines and the two gap lines (Dapodik schools not on the map, unplaced PT) once their files are in;
+ *     lazy files that are not in show "Dimuat saat diperlukan" and are never loaded from here.
+ *   - Privasi: institutional contacts only, the follow-up encryption, the new browser keys (sealed lists, the 15 / 30 km
+ *     scope per tab, the Kampus list view).
+ *   No password, key or follow-up entry is ever written, logged or shown by this file.
+ *
  * Colour code (COPY_STYLE_EN item 11) for a file: green = up to date, amber =
  * update due / not saved yet, red = out of date, grey = not imported. The age
  * limits are an assumption for a monthly report and are said in the legend.
@@ -395,11 +410,13 @@
       if (m.asOf && (!asOf || m.asOf > asOf)) asOf = m.asOf;
       if (m.source !== 'vault') allVault = false;
     });
-    var ex = googleSet(sets);
+    var ex = googleSet(sets), fu = followups(), fuKeep = fu.carry;   // entries or removals (tombstones) to carry
     return { sets: sets, cat: cat, loaded: loaded, rows: rows, asOf: asOf, primaryN: primaryN, primaryLoaded: primaryLoaded,
-      any: loaded.length > 0, allVault: loaded.length > 0 && allVault, worst: worst, extra: ex,
-      // what "Simpan salinan terenkripsi" writes: the files above plus the Google key and place IDs (items 32-33)
-      keepAny: loaded.length > 0 || ex.n > 0,
+      any: loaded.length > 0, allVault: loaded.length > 0 && allVault, worst: worst, extra: ex, fu: fu,
+      // what "Simpan salinan terenkripsi" writes: the files above plus the Google key and place IDs (items 32-33) and,
+      // since v6, the sealed follow-up lists (V6_SPEC §7.5: saving is allowed when only follow-ups exist)
+      keepAny: loaded.length > 0 || ex.n > 0 || fuKeep,
+      fuOnly: fuKeep && !loaded.length && !ex.n,
       keepVault: (loaded.length > 0 || ex.n > 0) && (!loaded.length || allVault) && (!ex.n || ex.source === 'vault') };
   }
   /** The Google key / place-ID dataset of MCD.places (not a file, never listed as one): {n, source, pending}. */
@@ -414,6 +431,72 @@
   }
   function loadedOf(rs, key) { return rs.loaded.filter(function (x) { return x.c.key === key; })[0] || null; }
 
+  /* ---------------------------------------- follow-ups (v6, V6_SPEC §7; MCD.seal feature-detected) */
+
+  // The two sealed lists: the store name of MCD.seal and the section's own Pipeline (counts, status).
+  var FU_STORES = [
+    { name: 'schools.pipeline', label: 'Sekolah', pipe: function () { return MCD.schools && MCD.schools.pipeline; } },
+    { name: 'campus.pipeline', label: 'Kampus', pipe: function () { return MCD.campus && MCD.campus.pipeline; } }
+  ];
+  var FU_MEMORY = {
+    'no-key': 'Tindak lanjut hanya tersimpan selama halaman terbuka. Penyimpanan terenkripsi belum aktif.',
+    'no-crypto': 'Tindak lanjut hanya tersimpan selama halaman terbuka. Penyimpanan terenkripsi belum aktif.',
+    'no-storage': 'Daftar tindak lanjut tidak tersimpan di perangkat ini karena penyimpanan browser diblokir. Ekspor sebelum menutup halaman.',
+    quota: 'Penyimpanan browser penuh. Ekspor daftar, lalu hapus entri lama.'
+  };
+  var FU_OLD = 'Daftar tindak lanjut lama terenkripsi dengan kata sandi sebelumnya.';
+  var FU_DAMAGED = 'Daftar tindak lanjut di komputer ini rusak dan tidak dapat dibuka. Daftar baru dimulai.';
+  var FU_TRAVELS = 'Daftar tindak lanjut SMA dan kampus ikut tersimpan.';
+  // every entry removed (or "Kosongkan daftar") with no file: the save carries the removals (D15 / V9)
+  var FU_REMOVALS = 'Simpan salinan terenkripsi agar entri yang dihapus juga terhapus di komputer lain';
+  function isFn(f) { return typeof f === 'function'; }
+  function call(fn, self, args) { try { return fn.apply(self, args || []); } catch (e) { return undefined; } }
+  /** MCD.seal when it has the parts this page uses (SEAL lane); without it the lists live in memory only. */
+  function sealApi() { var Sl = MCD.seal; return Sl && typeof Sl === 'object' && isFn(Sl.store) ? Sl : null; }
+  function fuStore(name) { var Sl = sealApi(), st = Sl ? call(Sl.store, Sl, [name]) : null; return st && typeof st === 'object' ? st : null; }
+  /** Entries in one list: the section's Pipeline count, else the sealed store's data (tombstones are never entries). */
+  function fuCount(d) {
+    var P = d.pipe(), n = P && isFn(P.count) ? call(P.count, P) : null;
+    if (isNum(n)) return n;
+    var st = fuStore(d.name), x = st && isFn(st.data) ? call(st.data, st) : null;
+    var m = x && x.data && typeof x.data === 'object' ? x.data : x;
+    return m && typeof m === 'object' ? Object.keys(m).length : 0;
+  }
+  /** 'loading' | 'ready' | 'memory' | 'old-password' | 'damaged' for one list (the store's own word first). */
+  function fuStatus(d) {
+    var st = fuStore(d.name), s = st && isFn(st.status) ? call(st.status, st) : null;
+    if (typeof s === 'string') return s;
+    var P = d.pipe();
+    s = P && isFn(P.status) ? call(P.status, P) : null;
+    return typeof s === 'string' ? s : 'memory';
+  }
+  /**
+   * The follow-up lists as this page shows them: {sealed, travels, total, lists: [{name, label, n, status}], state:
+   * 'encrypted' | 'memory' | 'old', word, tone, reason, old, damaged, carry, removals}. `travels`: the lists go into the
+   * encrypted copy (MCD.seal.vaultExport, the shell writes them as payload.followups). `carry`: the copy has something
+   * of them to carry, live entries or removals (D15 / V9: a save that carries a removal removes the entry on another
+   * computer), read from MCD.seal.hasFollowups() when seal.js gives it, else live entries only. `removals`: carry
+   * with no live entry left (every entry removed, or "Kosongkan daftar").
+   */
+  function followups() {
+    var Sl = sealApi(), lists = FU_STORES.map(function (d) { return { name: d.name, label: d.label, n: fuCount(d), status: Sl ? fuStatus(d) : 'memory' }; });
+    var total = lists.reduce(function (a, l) { return a + l.n; }, 0);
+    var gstate = Sl && isFn(Sl.state) ? call(Sl.state, Sl) : null, reason = Sl && isFn(Sl.reason) ? call(Sl.reason, Sl) : null;
+    var memory = !Sl || gstate === 'memory' || lists.every(function (l) { return l.status === 'memory'; });
+    var old = lists.some(function (l) { return l.status === 'old-password'; }), damaged = lists.some(function (l) { return l.status === 'damaged'; });
+    var state = old ? 'old' : (memory ? 'memory' : 'encrypted');
+    var travels = !!(Sl && isFn(Sl.vaultExport)) && !memory;
+    var has = travels && isFn(Sl.hasFollowups) ? call(Sl.hasFollowups, Sl) : undefined;   // a throw falls back to the count
+    var carry = travels && (typeof has === 'boolean' ? has : total > 0);
+    return {
+      sealed: !!Sl, travels: travels, total: total, lists: lists, state: state, old: old, damaged: damaged,
+      carry: carry, removals: carry && total === 0,
+      word: { encrypted: 'Terenkripsi', memory: 'Hanya selama halaman terbuka', old: 'Perlu kata sandi lama' }[state],
+      tone: state === 'encrypted' ? 'ok' : 'mid',
+      reason: memory ? (FU_MEMORY[reason] || FU_MEMORY['no-key']) : null
+    };
+  }
+
   /* Save flow that staff can finish (UX_FIX_PLAN C-05). A download is not a save: the card stays amber
      "Telah diunduh, belum dipasang" until a sign-in reads a vault at least as new as the last download.
      The download time is kept under mcd.data.lastDownload (a non-secret timestamp, A-10). */
@@ -422,13 +505,17 @@
   function vaultCreated() { var v = W.MCD_VAULT; return v && typeof v.created === 'string' ? v.created : null; }
   /** true when the last downloaded copy is newer than the vault this page opened (not installed yet). */
   function downloadPending() { var d = lastDownload(), c = vaultCreated(); return !!(d && (!c || c < d)); }
-  /** Save state: 'demo' | 'empty' | 'downloaded' | 'invault' | 'todo'. */
+  /**
+   * Save state: 'demo' | 'empty' | 'downloaded' | 'invault' | 'todo' | 'fu'. 'fu' (v6): no file and no Google key, only
+   * the follow-up lists, which already stay encrypted on this computer; a save carries them to another computer.
+   */
   function saveState(rs) {
     if (demoOn()) return 'demo';
     var any = rs.keepAny != null ? rs.keepAny : rs.any, allVault = rs.keepVault != null ? rs.keepVault : rs.allVault;
     var changed = S.changed || !!(rs.extra && rs.extra.pending);   // a Google key or new place IDs count as a change
     if (!any) return 'empty';
     if (S.savedAt && !changed) return 'downloaded';
+    if (rs.fuOnly) return 'fu';
     if (allVault && !changed) return downloadPending() ? 'downloaded' : 'invault';
     return 'todo';
   }
@@ -438,7 +525,8 @@
       empty: { tone: 'none', word: 'Belum ada yang disimpan', value: 'Belum ada' },
       downloaded: { tone: 'mid', word: 'Telah diunduh, belum dipasang', value: 'Belum dipasang' },
       invault: { tone: 'ok', word: 'Tersimpan', value: 'Tersimpan' },
-      todo: { tone: 'mid', word: 'Belum disimpan', value: 'Belum disimpan' }
+      todo: { tone: 'mid', word: 'Belum disimpan', value: 'Belum disimpan' },
+      fu: { tone: 'none', word: 'Hanya tindak lanjut', value: 'Tindak lanjut' }
     }[ss];
   }
 
@@ -830,7 +918,8 @@
   }
   function removeAll() {
     ctx.confirm({ title: 'Hapus semua data yang diimpor', danger: true, ok: 'Hapus semua data', cancel: 'Batal',
-      body: 'Semua file yang diimpor dan data dari salinan terenkripsi akan dihapus dari dashboard ini.\nData peta publik tetap ada. File asli Anda dan data/vault.js tidak berubah.' })
+      body: 'Semua file yang diimpor dan data dari salinan terenkripsi akan dihapus dari dashboard ini.\nData peta publik tetap ada. File asli Anda dan data/vault.js tidak berubah.' +
+        (sealApi() ? '\nDaftar tindak lanjut tidak ikut terhapus.' : '') })
       .then(function (yes) {
         if (!yes) return;
         try { MCD.data.clearAll({}); } catch (e) { if (W.console) W.console.warn('[data] clear failed', e && e.message); }
@@ -1006,7 +1095,8 @@
       empty: 'Setelah impor, simpan salinan berkata sandi agar data terbuka saat masuk berikutnya.',
       downloaded: 'File vault.js telah diunduh. Pasang di folder data agar data terbuka saat masuk berikutnya.',
       invault: 'Data dibuka dari salinan terenkripsi dan belum berubah. Tidak perlu disimpan.',
-      todo: 'Data impor hanya ada sampai dashboard dikunci. Simpan agar terbuka saat masuk berikutnya.'
+      todo: 'Data impor hanya ada sampai dashboard dikunci. Simpan agar terbuka saat masuk berikutnya.',
+      fu: 'Daftar tindak lanjut tersimpan terenkripsi di komputer ini. Simpan salinan agar terbawa ke komputer lain.'
     }[ss];
     var sharedSave = sharedCard({ kind: 'vault', key: 'vault', eyebrow: 'Penyimpanan', title: 'Salinan terenkripsi', chips: [{ text: st.word, tone: st.tone }],
       numbers: [], note: { text: saveWords, tone: st.tone } });
@@ -1782,7 +1872,9 @@
       downloaded: ['todo', 'Telah diunduh' + (S.savedAt ? ' pukul ' + F().time(S.savedAt) + ' WIB' : '') + ', belum dipasang. Ikuti langkah di bawah, lalu masuk kembali agar data terbaca.'],
       invault: ['ok', 'Tersimpan: data ini dibuka dari salinan terenkripsi dan belum berubah. Tidak perlu disimpan lagi.'],
       todo: ['todo', (rs.loaded.length ? fm0(rs.loaded.length) + ' jenis data (' + fm0(rs.rows) + ' baris) akan disimpan. ' + (rs.extra && rs.extra.n ? 'Kunci Google dan ID tempat Google ikut disimpan. ' : '')
-        : 'Kunci Google dan ID tempat Google akan disimpan. ') + (S.savedAt ? 'Berubah sejak diunduh pukul ' + F().time(S.savedAt) + ' WIB.' : 'Belum disimpan sejak masuk.')]
+        : 'Kunci Google dan ID tempat Google akan disimpan. ') + (rs.fu && rs.fu.carry ? FU_TRAVELS + ' ' : '') +
+        (S.savedAt ? 'Berubah sejak diunduh pukul ' + F().time(S.savedAt) + ' WIB.' : 'Belum disimpan sejak masuk.')],
+      fu: ['none', 'Belum ada file yang diimpor. ' + (rs.fu && rs.fu.removals ? FU_REMOVALS + '.' : 'Simpan salinan terenkripsi agar daftar tindak lanjut terbawa ke komputer lain.')]
     }[ss];
     ui.saveState.className = 'dp-savest is-' + msg[0];
     ui.saveState.appendChild(el('span', { class: 'dp-savest__dot', 'aria-hidden': 'true' }));
@@ -1793,7 +1885,8 @@
       empty: 'Simpan salinan terenkripsi setelah impor agar data terbuka saat masuk berikutnya',
       downloaded: 'Salinan telah diunduh, tetapi belum dipasang di folder data',
       invault: 'Data telah tersimpan di salinan terenkripsi',
-      todo: S.savedAt ? 'Perubahan sejak unduhan terakhir belum masuk ke salinan' : 'Data impor hanya ada sampai dashboard dikunci. Simpan salinan terenkripsi agar tidak hilang.'
+      todo: S.savedAt ? 'Perubahan sejak unduhan terakhir belum masuk ke salinan' : 'Data impor hanya ada sampai dashboard dikunci. Simpan salinan terenkripsi agar tidak hilang.',
+      fu: rs.fu && rs.fu.removals ? FU_REMOVALS : 'Simpan salinan terenkripsi agar daftar tindak lanjut terbawa ke komputer lain'
     }[ss];
     if (ui.saveBtn) {
       var b = ui.saveBtn;
@@ -1845,7 +1938,9 @@
     x.el.appendChild(el('ul', { class: 'dp-bullets' }, [
       el('li', { text: 'Hanya data nyata yang disimpan, yaitu file di tab File dimuat. Data contoh tidak pernah disimpan.\nPengaturan yang telah ada di salinan tetap dipertahankan.' }),
       el('li', { text: 'Kata sandi tetap sama. Setiap penyimpanan menggunakan IV acak yang baru.\nUntuk mengganti kata sandi, lihat bagian di bawah.' }),
-      el('li', { text: 'Data merchant atau nasabah tidak pernah diekspor tanpa enkripsi. Jauhkan salinan lama vault.js dari folder bersama.' })
+      el('li', { text: 'Data merchant atau nasabah tidak pernah diekspor tanpa enkripsi. Jauhkan salinan lama vault.js dari folder bersama.' }),
+      // v6 (V6_SPEC §7.5): the sealed follow-up lists go into the copy (payload.followups), only when MCD.seal can export them
+      sealApi() && isFn(MCD.seal.vaultExport) ? el('li', { text: FU_TRAVELS }) : null
     ]));
     x.el.appendChild(el('div', { class: 'dp-sep' }));
     x.el.appendChild(el('h3', { class: 'dp-h3', text: 'Hapus data' }));
@@ -1856,6 +1951,186 @@
     ui.saveX = x;
     return x.el;
   }
+
+  /* --- Tindak lanjut di komputer ini (v6, V6_SPEC §7.5-7.6) ----------------- */
+
+  /**
+   * The card in Simpan & kata sandi: entries per list, the state word, the lines for an old password, a damaged list or
+   * memory only, and the actions. Rebuilt in place (renderFollowups) on every MCD.seal event and after each action.
+   */
+  function followupsBlock() {
+    var x = exhibit('dp-followups', 'Tindak lanjut di komputer ini', 'Daftar kerja staf untuk sekolah dan kampus · hanya di browser ini', null,
+      'Sumber: catatan kerja staf di browser ini · terenkripsi dengan kata sandi dashboard');
+    ui.fuBody = el('div', { class: 'dp-fu' });
+    x.el.appendChild(ui.fuBody);
+    x.el.appendChild(x.src);
+    ui.fuX = x;
+    renderFollowups();
+    return x.el;
+  }
+  function renderFollowups() {
+    if (!ui || !ui.fuBody) return;
+    var fu = followups(), body = ui.fuBody, keep = focusKey();
+    clear(body);
+    body.appendChild(el('p', { class: 'dp-fu__state' }, [chip(fu.tone, fu.word), el('span', { class: 'dp-fu__lead', text: fu.state === 'encrypted' ? 'Terenkripsi dengan kata sandi dashboard.' : (fu.state === 'old' ? FU_OLD : fu.reason) })]));
+    body.appendChild(el('ul', { class: 'dp-fu__lists', 'aria-label': 'Entri tindak lanjut per daftar' }, fu.lists.map(function (l) {
+      return el('li', { class: 'dp-fu__row' }, [el('span', { class: 'dp-fu__name', text: l.label }), el('span', { class: 'dp-fu__n', text: nInt(l.n) + ' entri' })]);
+    })));
+    if (fu.damaged) body.appendChild(el('div', { class: 'dp-callout dp-callout--bad' }, [icon('warn', 'icon--12'), el('p', { text: FU_DAMAGED })]));
+    if (fu.old) {
+      var openB = el('button', { type: 'button', class: 'btn btn--primary', 'data-fk': 'fu-open' }, [svgIcon('key', 'icon--12'), el('span', { text: 'Buka dengan kata sandi lama' })]);
+      openB.addEventListener('click', function () { oldPwDialog(); });
+      var dropB = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'fu-drop' }, [svgIcon('trash', 'icon--12'), el('span', { text: 'Hapus daftar lama' })]);
+      dropB.addEventListener('click', dropOld);
+      body.appendChild(el('div', { class: 'dp-fu__old' }, [
+        el('p', { class: 'dp-p', text: 'Isi kata sandi sebelumnya untuk membuka daftar lama dan menggabungkannya dengan daftar sekarang.' }),
+        el('div', { class: 'dp-actions' }, [openB, dropB])
+      ]));
+    }
+    if (fu.sealed && isFn(MCD.seal.purge)) {
+      var purgeB = el('button', { type: 'button', class: 'btn btn--danger', 'data-fk': 'fu-purge' }, [svgIcon('trash', 'icon--12'), el('span', { text: 'Hapus tindak lanjut dari komputer ini' })]);
+      purgeB.addEventListener('click', purgeFollowups);
+      body.appendChild(el('div', { class: 'dp-actions dp-fu__act' }, [purgeB]));
+      body.appendChild(el('p', { class: 'dp-fine', text: 'Ekspor daftar dari tab Tindak lanjut di Sekolah atau Kampus jika perlu salinan terbuka.' }));
+    }
+    restoreFocus(keep);
+  }
+  /** Every list that waits for its old password: [{d, st}] (the store must offer openOld / dropOld). */
+  function oldStores(fnName) {
+    return FU_STORES.filter(function (d) { return fuStatus(d) === 'old-password'; })
+      .map(function (d) { return { d: d, st: fuStore(d.name) }; })
+      .filter(function (x) { return x.st && isFn(x.st[fnName]); });
+  }
+  /**
+   * Opens the old lists with one password: MCD.seal derives the old key from each blob's own salt and iterations,
+   * merges and writes with the current key. Lists are tried one after another; the password is passed on and dropped.
+   * → Promise<{ok, merged, none?}> (ok when at least one list opened).
+   */
+  function openOldAll(pw) {
+    var Sl = sealApi();
+    if (Sl && isFn(Sl.openOld)) {         // MCD.seal opens every waiting list at once and derives each old key only once
+      var r0;
+      try { r0 = Sl.openOld(pw); } catch (e) { r0 = null; }
+      pw = null;
+      return Promise.resolve(r0).then(function (v) { return { ok: !!(v && v.ok), merged: v && isNum(v.merged) ? v.merged : 0 }; }, function () { return { ok: false, merged: 0 }; });
+    }
+    var list = oldStores('openOld');
+    if (!list.length) return Promise.resolve({ ok: false, merged: 0, none: true });
+    var out = { ok: false, merged: 0 };
+    return list.reduce(function (p, x) {
+      return p.then(function () {
+        var r;
+        try { r = x.st.openOld(pw); } catch (e) { r = null; }
+        return Promise.resolve(r).then(function (v) { if (v && v.ok) { out.ok = true; if (isNum(v.merged)) out.merged += v.merged; } }, noop);
+      });
+    }, Promise.resolve()).then(function () { pw = null; return out; });
+  }
+  function afterFollowups() { renderFollowups(); renderSaveBits(); if (!deep()) renderOverviewState(); }
+  function dropOld() {
+    if (!ctx) return;
+    ctx.confirm({ title: 'Hapus daftar lama', danger: true, ok: 'Hapus daftar lama', cancel: 'Batal',
+      body: 'Daftar tindak lanjut yang terenkripsi dengan kata sandi sebelumnya akan dihapus dari browser ini.\nDaftar sekarang tidak berubah.' })
+      .then(function (yes) {
+        if (!yes) return;
+        var Sl = sealApi(), jobs;
+        if (Sl && isFn(Sl.dropOld)) { try { jobs = [Promise.resolve(Sl.dropOld())]; } catch (e) { jobs = [Promise.reject(e)]; } }
+        else jobs = oldStores('dropOld').map(function (x) { try { return Promise.resolve(x.st.dropOld()); } catch (e) { return Promise.reject(e); } });
+        return Promise.all(jobs).then(function () { if (ctx) ctx.toast('Daftar lama dihapus dari browser ini.'); },
+          function () { if (ctx) ctx.toast('Daftar lama tidak dapat dihapus. Muat ulang halaman, lalu coba lagi.', 'warn'); })
+          .then(afterFollowups);
+      });
+  }
+  function purgeFollowups() {
+    var Sl = sealApi();
+    if (!ctx || !Sl || !isFn(Sl.purge)) return;
+    ctx.confirm({ title: 'Hapus tindak lanjut dari komputer ini', danger: true, ok: 'Hapus tindak lanjut', cancel: 'Batal',
+      body: 'Semua daftar tindak lanjut SMA dan kampus akan dihapus dari browser ini. Jika salinan terenkripsi di folder dashboard berisi daftar ini, daftar akan terbuka lagi saat masuk berikutnya.' })
+      .then(function (yes) {
+        if (!yes) return;
+        var p;
+        try { p = Promise.resolve(Sl.purge()); } catch (e) { p = Promise.reject(e); }
+        return p.then(function () { if (ctx) ctx.toast('Daftar tindak lanjut dihapus dari komputer ini.'); },
+          function () { if (ctx) ctx.toast('Daftar tindak lanjut tidak dapat dihapus. Muat ulang halaman, lalu coba lagi.', 'warn'); })
+          .then(afterFollowups);
+      });
+  }
+
+  /**
+   * "Buka dengan kata sandi lama": one password field in a small dialog (the shell's confirm has no field). The value is
+   * read once on submit, the field is emptied at once and the value goes only to MCD.seal (openOld); it is never stored,
+   * logged or kept in this page's state. Esc, Batal, a click outside, a lock or leaving the section close the dialog.
+   */
+  var DLG = null;
+  function closeOldDialog() {
+    var d = DLG;
+    if (!d) return;
+    DLG = null;
+    d.input.value = '';
+    [d.scrim, d.box].forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    if (d.back && d.back.isConnected && isFn(d.back.focus)) { d.back.focus(); return; }
+    // the button that opened it is gone (the old list was opened): the card's heading takes the focus
+    var t = DOC.getElementById('dp-followups-t');
+    if (t && isFn(t.focus)) { t.setAttribute('tabindex', '-1'); t.focus(); }
+  }
+  function oldPwDialog() {
+    closeOldDialog();
+    var host = DOC.getElementById('overlay-root') || DOC.body;
+    var input = el('input', { type: 'password', id: 'dp-oldpw', class: 'input dp-in dp-oldpw__in', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-describedby': 'dp-oldpw-msg' });
+    var msg = el('p', { class: 'dp-field__err dp-oldpw__msg', id: 'dp-oldpw-msg', role: 'status', 'aria-live': 'polite' });
+    var okB = el('button', { type: 'submit', class: 'btn btn--lg btn--primary' }, [el('span', { text: 'Buka daftar lama' })]);
+    var noB = el('button', { type: 'button', class: 'btn btn--lg btn--secondary', text: 'Batal' });
+    var scrim = el('div', { class: 'scrim dp-oldpw__scrim' });
+    var box = el('form', { class: 'modal dp-oldpw', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dp-oldpw-t', 'aria-describedby': 'dp-oldpw-b', novalidate: true }, [
+      el('h2', { class: 'modal__title', id: 'dp-oldpw-t', text: 'Buka dengan kata sandi lama' }),
+      el('p', { class: 'modal__body', id: 'dp-oldpw-b', text: FU_OLD + '\nIsi kata sandi itu untuk membuka dan menggabungkannya dengan daftar sekarang.' }),
+      el('div', { class: 'dp-field dp-oldpw__field' }, [el('label', { class: 'dp-field__label', for: 'dp-oldpw', text: 'Kata sandi lama' }), input, msg]),
+      el('div', { class: 'modal__actions' }, [noB, okB])
+    ]);
+    var busy = false;
+    function setMsg(t) { msg.textContent = t || ''; msg.hidden = !t; input.setAttribute('aria-invalid', t ? 'true' : 'false'); }
+    setMsg('');
+    box.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (busy) return;
+      var pw = input.value;
+      input.value = '';                                     // cleared at once (V6_SPEC §7.6)
+      if (!pw) { setMsg('Isi kata sandi lama.'); input.focus(); return; }
+      busy = true; okB.disabled = true; noB.disabled = true; setMsg('');
+      okB.firstChild.textContent = 'Membuka daftar lama…';
+      openOldAll(pw).then(function (r) {
+        if (DLG && DLG.box !== box) return;                 // closed meanwhile (lock, section change)
+        busy = false; okB.disabled = false; noB.disabled = false; okB.firstChild.textContent = 'Buka daftar lama';
+        if (r && r.ok) {
+          afterFollowups();                                 // first the card (the recovery buttons go), then the focus
+          closeOldDialog();
+          if (ctx) ctx.toast('Daftar lama dibuka dan digabung dengan daftar sekarang.');
+          return;
+        }
+        setMsg('Kata sandi lama tidak cocok. Coba lagi.');
+        if (DLG) input.focus();
+      });
+      pw = null;
+    });
+    noB.addEventListener('click', closeOldDialog);
+    scrim.addEventListener('click', function () { if (!busy) closeOldDialog(); });
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!busy) closeOldDialog(); return; }
+      if (e.key !== 'Tab') return;
+      var f = [input, noB, okB].filter(function (n) { return !n.disabled; });
+      var i = f.indexOf(DOC.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+    });
+    DLG = { scrim: scrim, box: box, input: input, back: DOC.activeElement };
+    host.appendChild(scrim);
+    host.appendChild(box);
+    input.focus();
+    return DLG;
+  }
+  /** Lock (gate.js dispatches mcd:gate-locking before the reload): the dialog and its field go at once. */
+  function onLocking() { closeOldDialog(); }
+  /** MCD.seal events (state, a list opened, merged, purged): the card and the save bits follow. */
+  function onSeal() { if (ctx && ui) afterFollowups(); }
 
   function passwordBlock() {
     var x = exhibit('dp-password', 'Ganti kata sandi dengan satu perintah. Isi data tetap sama.', 'Dilakukan pengelola di komputer yang menyimpan folder dashboard · tools/make-vault.mjs · Node 24 atau lebih baru', null,
@@ -2305,18 +2580,24 @@
     var x = exhibit('dp-privacy', 'Data pribadi di laporan LVM dihapus saat impor. Sisanya tetap terenkripsi di komputer ini.', 'Cara data merchant dan nasabah dijaga · UU PDP No. 27/2022', null,
       'Sumber: BUILD_SPEC §K (privasi dan keamanan) · Content Security Policy di index.html · daftar kolom yang ditolak saat impor');
     var idle = (MCD.config && MCD.config.gate && MCD.config.gate.idleMinutes) || 15;
+    var sealed = !!sealApi();
     var notes = [
       ['warn', 'Laporan LVM memuat data pribadi: nama pemilik, telepon, e-mail, nomor rekening, CIF dan alamat toko.\nSaat file dibaca, kolom pemilik dihapus dan tidak pernah disimpan.\nAlamat toko hanya dibaca untuk menemukan titik jalan atau kelurahan, lalu tidak disimpan.'],
       ['shield', 'Semua data diproses di browser ini. Data dari file bank tidak pernah dikirim ke server mana pun.\nHalaman ini memblokir semua koneksi, kecuali gambar peta, font, library dengan versi tetap dan Google Places.'],
       ['globe', 'Cek rating Google bersifat opsional dan mati tanpa kunci cabang.\nCek ini mengirim nama usaha dari peta publik dan titiknya ke Google.\nRating dan ulasan tidak disimpan. Hanya ID tempat Google yang disimpan, di salinan terenkripsi.'],
       ['lock', 'Data impor tetap di perangkat ini.\nSelama bekerja, data ada di dashboard. Setelah disimpan, data ada di salinan terenkripsi (data/vault.js).\nData hilang dari dashboard saat Anda menekan Kunci atau menutup tab.\nData juga hilang setelah ' + idle + ' menit tanpa aktivitas.'],
+      /* v6 (V6_SPEC §8.2): the follow-up lists are sealed with the dashboard password (MCD.seal) */
+      sealed ? ['lock', 'Daftar tindak lanjut SMA dan kampus terenkripsi di browser ini dengan kata sandi dashboard.\nDaftar hanya terbuka setelah masuk dan ikut tersimpan saat salinan terenkripsi disimpan.'] : null,
       ['nocommit', 'Jangan simpan atau kirim file Rev LVM ke repositori kode, e-mail atau folder bersama.\nLarangan ini juga berlaku untuk CSV dan isi file tersebut.\nHanya vault.js terenkripsi yang boleh ada di folder dashboard.'],
       ['pin', 'Toko ditempatkan menurut kecamatan dan kelurahan dengan daftar wilayah bawaan dashboard. Tidak ada alamat yang dikirim ke layanan peta.'],
+      /* v6 (V6_SPEC §5.3, §8.2, D7, D17): institutional contacts only */
+      ['shield', 'Kontak yang tampil hanya kontak lembaga dari daftar resmi atau situs resmi lembaga.\nNama kepala sekolah, dosen, staf dan siswa tidak disimpan.\nNomor seluler tampil hanya jika daftar resmi mencatatnya sebagai kontak lembaga.\nE-mail yang tampak milik pribadi tidak ditampilkan, walaupun tercatat di daftar resmi.\nSitus resmi menjadi tautan hanya jika terbuka saat diperiksa.\nKontak disembunyikan saat nama disamarkan.'],
       ['veil', 'Gunakan Samarkan nama saat berbagi layar (tombol V).\nNama menjadi inisial, nominal dikelompokkan dan titik digeser ke kotak 250 m.'],
       ['id', 'Tampilkan nama lengkap membuka nama dan nomor lengkap selama 5 menit.\nNama disamarkan lagi saat tab tidak aktif atau mode berbagi layar menyala.'],
       ['info', 'Penggunaan data pribadi merchant atau nasabah perlu dasar hukum sesuai UU PDP No. 27/2022 dan persetujuan internal (Compliance atau DPO).\nDashboard ini tidak menggantikan persetujuan tersebut.'],
       ['info', 'Data contoh dibuat otomatis dan tidak mewakili merchant atau nasabah nyata.']
     ];
+    notes = notes.filter(Boolean);
     x.el.appendChild(el('ul', { class: 'dp-priv' }, notes.map(function (n, i) {
       var ic = PATHS[n[0]] ? svgIcon(n[0], 'icon--12') : icon(n[0], 'icon--12');
       return el('li', { class: 'dp-priv__row' + (i === 0 || n[0] === 'nocommit' ? ' is-key' : '') }, [el('span', { class: 'dp-priv__ic', 'aria-hidden': 'true' }, [ic]), el('span', { text: n[1] })]);
@@ -2324,7 +2605,7 @@
     var col = function (title, ic, items, cls) {
       return el('div', { class: 'dp-kind ' + (cls || '') }, [
         el('h3', { class: 'dp-h3' }, [ic, el('span', { text: title })]),
-        el('ul', { class: 'dp-bullets' }, items.map(function (t) { return el('li', { text: t }); }))
+        el('ul', { class: 'dp-bullets' }, items.filter(Boolean).map(function (t) { return el('li', { text: t }); }))
       ]);
     };
     x.el.appendChild(el('div', { class: 'dp-kinds' }, [
@@ -2332,13 +2613,15 @@
         'Toko Livin’ Merchant dan KPI cabang (UREG dan USAK), tanpa data pribadi pemilik',
         'Terminal EDC Mandiri dan nasabah SMA',
         'Kunci Google dan ID tempat Google, jika diisi',
+        sealed ? 'Daftar tindak lanjut SMA dan kampus, terenkripsi dengan kata sandi dashboard' : null,
         'Hanya terbuka dengan kata sandi (AES-256-GCM, PBKDF2)'
       ], 'is-enc'),
       col('Publik (terbaca tanpa kata sandi)', svgIcon('globe', 'icon--12'), [
         'Toko kelontong, restoran dan UMKM dalam 15 km (Overture Maps)',
         'Batas kecamatan dan kelurahan (Kemendagri, BPS, OpenStreetMap)',
         'Batas dan lokasi Mabes TNI, kantor bank lain (OpenStreetMap)',
-        'Sekolah, proyek perumahan dan tabel suku bunga KPR Mandiri'
+        'Sekolah, proyek perumahan dan tabel suku bunga KPR Mandiri',
+        'Sekolah dan kampus dalam 30 km dengan kontak lembaga dan kelas biaya'
       ], 'is-pub'),
       col('Tidak pernah disimpan', svgIcon('trash', 'icon--12'), [
         'Kata sandi dan kuncinya',
@@ -2352,7 +2635,10 @@
         'Pilihan waktu tempuh Jam sibuk dan Motor (tanpa tol)',
         'Asumsi, termasuk faktor jam sibuk',
         'Tampilan Sekolah (tab, urutan daftar, titik MA/SMK), isian kalkulator dan porsi siswa 17+',
-        'Catatan Tindak lanjut SMA (nama petugas dan catatan kerja), tidak terenkripsi. Jangan mengisi data pribadi.',
+        'Tampilan Kampus: urutan daftar dan jenis yang tampil, tanpa nama',
+        'Cakupan 15 atau 30 km per bagian, hanya selama tab terbuka (angka saja)',
+        sealed ? 'Daftar tindak lanjut SMA dan kampus, terenkripsi dengan kata sandi dashboard. Jangan mengisi data pribadi.'
+          : 'Catatan Tindak lanjut SMA (nama petugas dan catatan kerja), tidak terenkripsi. Jangan mengisi data pribadi.',
         'Jumlah cek rating Google bulan ini (angka saja) dan waktu unduhan salinan terakhir',
         'Jumlah salah kata sandi dan alasan dashboard terakhir dikunci',
         'Tata letak kartu dan panel: ukuran, posisi, bagian yang dilipat dan catatan yang telah tampil. Tanpa nama, angka atau lokasi.',
@@ -2395,6 +2681,52 @@
     var d = m && (m.generated || m.asOf || (m.release && String(m.release).slice(0, 10)));
     return d && /^\d{4}-\d{2}/.test(d) ? F().date(String(d).slice(0, 10)) : null;
   }
+  /* v6 data (V6_SPEC §8.1). Lazy files are read only when a section already loaded them: this page never loads one
+     (V10), so a file that is not in shows "Dimuat saat diperlukan". Source badges (D22, COPY_STYLE_EN items 46-47):
+     attribution only, on a white tile in both themes, never recoloured or stretched. */
+  var LOGO = {
+    dapodik: { src: 'assets/brand/dapodik-logo.png', alt: 'Dapodik (Data Pokok Pendidikan)', w: 480, h: 227 },
+    pddikti: { src: 'assets/brand/pddikti-logo.webp', alt: 'PDDikti (Pangkalan Data Pendidikan Tinggi)', w: 480, h: 206 }
+  };
+  var LAZY_WAIT = 'Dimuat saat diperlukan';
+  function logoTile(L) {
+    return el('span', { class: 'dp-logo' }, [el('img', { class: 'dp-logo__img', src: L.src, alt: L.alt, width: String(L.w), height: String(L.h), decoding: 'async', loading: 'lazy', draggable: 'false' })]);
+  }
+  function lazyFile(name) { var g = W[name]; return g && g.meta && (Array.isArray(g.rows) || name === 'MCD_TRAVEL_GRID_OUTER') ? g : null; }
+  function isoDate(v) { var d = v && /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 10) : null; return d ? F().date(d) : null; }
+  /** The eight v6 rows: [data, sumber, per, lisensi, logo?] */
+  function sourceRows() {
+    var ss = lazyFile('MCD_SCHOOL_STUDENTS'), sc = lazyFile('MCD_SCHOOL_CONTACTS'), cp = lazyFile('MCD_CAMPUSES'), tr = lazyFile('MCD_INSTITUTION_TIERS');
+    var og = lazyFile('MCD_TRAVEL_GRID_OUTER'), sma = W.MCD_SMA_STUDENTS && W.MCD_SMA_STUDENTS.meta;
+    var smaDate = sma ? isoDate(sma.generated || sma.fetched) : null, ssDate = ss ? isoDate(ss.meta.generated) : null;
+    /* two download dates: one per line, a date never split across lines */
+    var keep = function (d) { return String(d).replace(/ /g, '\u00a0'); };
+    var siswaPer = ssDate ? (smaDate ? 'SMA dalam 15 km diunduh ' + keep(smaDate) + ',\nsekolah lain ' + keep(ssDate) : ssDate) : LAZY_WAIT;
+    var cpDate = cp ? (isoDate(cp.meta.generated) || '—') : LAZY_WAIT;
+    var web = sc && sc.meta.webCheck ? isoDate(sc.meta.webCheck.checked) : null;
+    var rel = null;    // the Overture release the campus file read, from its own source line ("rilis 2026-09-23.1")
+    (cp && Array.isArray(cp.meta.sources) ? cp.meta.sources : []).some(function (t) { var m = /Overture Maps[^.]*?rilis (\d{4}-\d{2}-\d{2}(?:\.\d+)?)/.exec(String(t)); if (m) rel = m[1]; return !!m; });
+    return [
+      ['Siswa SMA, SMK dan MA dalam 30 km', 'Kemendikdasmen: Dapodik, Sekolah Kita (termasuk madrasah) dan Data Referensi', siswaPer, 'Data publik lembaga', LOGO.dapodik],
+      ['Kontak sekolah', 'Sekolah Kita (Dapodik), Data Referensi Kemendikdasmen', sc ? (isoDate(sc.meta.generated) || '—') : LAZY_WAIT, 'Data publik lembaga'],
+      ['Pemeriksaan situs resmi', 'DNS publik dan satu kunjungan ke halaman depan setiap situs', sc ? (web || '—') : LAZY_WAIT, '—'],
+      ['Perguruan tinggi dalam 30 km', 'PDDikti (Kemdiktisaintek) · titik dari OpenStreetMap, Overture Maps dan alamat resmi', cpDate, 'Data publik lembaga, ODbL, CDLA-Permissive-2.0', LOGO.pddikti],
+      ['Sekolah desain dan kursus', 'OpenStreetMap, Overture Maps Foundation, situs resmi lembaga', cpDate, 'ODbL, CDLA-Permissive-2.0'],
+      ['Kelas biaya sekolah dan kampus', 'Situs resmi lembaga (biaya resmi), jenis lembaga, daya beli area (perkiraan)', tr ? 'biaya dibaca ' + (isoDate(tr.meta.generated) || '—') : LAZY_WAIT, 'Data publik lembaga · perkiraan ditandai'],
+      ['Kantin dan merchant di sekitar kampus', 'Overture Maps Foundation' + (rel ? ' (rilis ' + rel + ')' : '') + ', garis kampus OpenStreetMap', cpDate, 'CDLA-Permissive-2.0, ODbL'],
+      ['Jaringan jalan 16 sampai 32 km dari KCP', 'OpenStreetMap (rute di komputer ini)', og ? (isoDate(og.meta.generated) || '—') : LAZY_WAIT, 'ODbL · perkiraan, lalu lintas normal']
+    ];
+  }
+  /** The lines under the table: what "perkiraan" means, then the gap lines of files that are in (D16, D20). */
+  function sourceNotes() {
+    var out = ['Perkiraan berarti angka dihitung dari data lain, tidak dari sumber resmi untuk lembaga itu.',
+      'Contoh: kelas biaya dari jenis sekolah dan daya beli area jika biaya resmi tidak dipublikasikan.'];
+    var ss = lazyFile('MCD_SCHOOL_STUDENTS'), cp = lazyFile('MCD_CAMPUSES');
+    if (ss && Array.isArray(ss.extra) && ss.extra.length) out.push(nInt(ss.extra.length) + ' sekolah yang tercatat di Dapodik dalam 30 km belum ada di peta dashboard.');
+    var un = cp && cp.meta.universe && cp.meta.universe.unplaced;
+    if (Array.isArray(un) && un.length) out.push(nInt(un.length) + ' perguruan tinggi aktif di wilayah ini belum dapat ditempatkan di peta.');
+    return out;
+  }
   function sourcesBlock() {
     var x = exhibit('dp-sources', 'Setiap lapisan publik berasal dari sumber terbuka, dengan tanggal di bawah', 'Data publik di peta dan di setiap bagian · tanggal setiap sumber', null,
       'Sumber: info setiap file data di data/ · versi library ditetapkan dengan SRI di index.html');
@@ -2428,13 +2760,17 @@
     var trv = W.MCD_TRAVEL || (MCD.travel && typeof MCD.travel.ready === 'function' && MCD.travel.ready() ? MCD.travel : null);
     if (trv) rows.push(['Jarak dan waktu tempuh dari KCP', 'OSRM (rute OpenStreetMap), per kelurahan', (W.MCD_TRAVEL && metaDate(W.MCD_TRAVEL)) || '—', 'ODbL · perkiraan, lalu lintas normal']);
     rows.push(['Sekolah dalam 30 km', 'Kemendikdasmen (Data Pokok Pendidikan), dimuat di Sekolah', W.MCD_SCHOOLS ? (metaDate(W.MCD_SCHOOLS) || '—') : 'Dimuat saat diperlukan', 'Data publik lembaga']);
+    rows = rows.concat(sourceRows());
     var tbody = el('tbody');
     rows.forEach(function (r) {
-      tbody.appendChild(el('tr', { title: r[0] + ' — ' + r[1] + ' · ' + r[2] }, [el('td', { text: r[0] }), el('td', { class: 'dp-src__by', text: r[1] }), el('td', { class: 'num', text: r[2] }), el('td', { class: 'dp-src__lic', text: r[3] })]));
+      var by = el('td', { class: 'dp-src__by' }, [r[4] ? logoTile(r[4]) : null, el('span', { text: r[1] })]);
+      tbody.appendChild(el('tr', { title: r[0] + ' — ' + r[1] + ' · ' + r[2] }, [el('td', { text: r[0] }), by, el('td', { class: 'num' + (String(r[2]).length > 30 ? ' is-long' : ''), text: r[2] }), el('td', { class: 'dp-src__lic', text: r[3] })]));
     });
     x.el.appendChild(el('div', { class: 'tbl-wrap' }, [el('table', { class: 'tbl dp-tbl dp-src' }, [
       el('thead', null, [el('tr', null, [el('th', { scope: 'col', text: 'Data' }), el('th', { scope: 'col', text: 'Sumber' }), el('th', { scope: 'col', class: 'num', text: 'Per' }), el('th', { scope: 'col', text: 'Lisensi' })])]),
       tbody])]));
+    /* v6 (V6_SPEC §8.1): what "perkiraan" means, then the two gaps staff should know about, once their files are in */
+    x.el.appendChild(el('div', { class: 'dp-src-notes' }, sourceNotes().map(function (t) { return el('p', { class: 'dp-fine', text: t }); })));
     x.el.appendChild(el('p', { class: 'dp-fine', text: 'Perangkat lunak: MapLibre GL JS 4.7.1 (BSD-3-Clause), deck.gl 9.0.41 (MIT), D3 7.9.0 (ISC), Papa Parse 5.4.1 (MIT), SheetJS CE 0.18.5 (Apache-2.0, dimuat pada impor XLSX pertama). Font: Source Serif 4, Inter Tight, IBM Plex Mono (SIL Open Font Licence).' }));
     x.el.appendChild(x.src);
     return x.el;
@@ -2586,8 +2922,9 @@
     cx.el.appendChild(cx.src);
     ui.panels.loaded.appendChild(cx.el);
 
-    // Simpan & kata sandi
+    // Simpan & kata sandi (v6: the follow-up lists of this computer between the copy and the password)
     ui.panels.save.appendChild(saveBlock());
+    ui.panels.save.appendChild(followupsBlock());
     ui.panels.save.appendChild(passwordBlock());
     // Pengaturan & sumber
     ui.panels.settings.appendChild(assumeBlock());
@@ -2620,7 +2957,8 @@
       { label: 'Tanggal data terbaru', value: rs.asOf ? F().date(rs.asOf) : null, tone: newest ? newest.tone : 'none',
         explain: rs.asOf ? (w && w.fresh.tone !== 'ok' ? (w.c.short || w.c.label) + ': ' + w.fresh.word.toLowerCase() : newest.word + ' · ' + ageText(newest)) : '', emptyNote: 'Belum ada file yang diimpor', demo: false },
       { label: 'Salinan terenkripsi', value: st.value, tone: st.tone,
-        explain: { demo: 'Matikan Data contoh untuk menyimpan', empty: 'Impor data lebih dulu', downloaded: 'Pasang vault.js di folder data, lalu masuk kembali', invault: 'Dibuka dari data/vault.js', todo: 'Simpan agar data terbuka saat masuk berikutnya' }[ss],
+        explain: { demo: 'Matikan Data contoh untuk menyimpan', empty: 'Impor data lebih dulu', downloaded: 'Pasang vault.js di folder data, lalu masuk kembali', invault: 'Dibuka dari data/vault.js', todo: 'Simpan agar data terbuka saat masuk berikutnya',
+          fu: 'Simpan agar tindak lanjut terbawa ke komputer lain' }[ss],
         emptyNote: false, demo: false }
     ];
   }
@@ -2641,7 +2979,7 @@
         keys = keys || [];
         var all = keys.indexOf('*') >= 0;
         if (all || keys.indexOf('data') >= 0 || keys.indexOf('demo') >= 0) {
-          renderLoaded(); renderSaveBits(); refreshGoogle();
+          renderLoaded(); renderSaveBits(); refreshGoogle(); renderFollowups();
           if (deep()) { renderReview(); renderCheck(); ensureMatch(); if (ui && ui.demoX) ui.demoX.title.textContent = demoOn() ? 'Data contoh aktif: angka bank hanya ilustrasi' : 'Data contoh mati: angka berasal dari file Anda dan sumber publik'; }
           else { renderOverviewState(); if (page && !all) page.refill(); }
         }
@@ -2657,31 +2995,56 @@
   /* ------------------------------------------------------- registrations */
 
   MCD.sections = MCD.sections || {};
+  var offSeal = null;
   MCD.sections[ID] = {
     mount: function (root, c) {
       ctx = c;
       ui = null;
       HINTS = {};
       page = c.page(makeSpec(c));
+      /* v6: the follow-up card follows MCD.seal (its own on(), else the document event), and a lock closes the dialog */
+      var Sl = sealApi();
+      offSeal = null;
+      if (Sl && isFn(Sl.on)) { var off = call(Sl.on, Sl, [onSeal]); offSeal = isFn(off) ? off : null; }
+      if (!offSeal && isFn(DOC.addEventListener)) { DOC.addEventListener('mcd:seal', onSeal); offSeal = function () { DOC.removeEventListener('mcd:seal', onSeal); }; }
+      if (isFn(DOC.addEventListener)) DOC.addEventListener('mcd:gate-locking', onLocking);
       c.registerCommands(function () {
         return [
           { label: 'Impor file data', kw: 'upload csv xlsx import rev lvm', run: function () { pickFiles(); } },
           { label: 'Unduh template permintaan data', kw: 'template xlsx permintaan', run: takeTemplate },
           { label: 'Simpan salinan terenkripsi', kw: 'vault save encrypt', run: saveCopy },
           { label: 'Hapus semua data dari dashboard', kw: 'clear wipe delete hapus memori', run: removeAll },
-          { label: 'Isi kunci Google untuk Cek rating Google', kw: 'google places api key kunci rating ulasan', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:google' }); } }
+          { label: 'Isi kunci Google untuk Cek rating Google', kw: 'google places api key kunci rating ulasan', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:google' }); } },
+          { label: 'Tindak lanjut di komputer ini', kw: 'tindak lanjut pipeline terenkripsi kata sandi lama hapus daftar', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:followups' }); } }
         ].concat(winApi('resetLayout') ? [{ label: 'Atur ulang tata letak kartu', kw: 'tata letak kartu panel reset posisi ukuran rapikan', run: resetLayout }] : []);
       });
     },
     update: function (d, keys) { if (page) page.update(d, keys); },
     unmount: function () {
       dropCharts();
+      closeOldDialog();
+      if (offSeal) { call(offSeal, null); offSeal = null; }
+      if (isFn(DOC.removeEventListener)) DOC.removeEventListener('mcd:gate-locking', onLocking);
       page = null; ui = null; ctx = null;
     },
     onFiles: function (files) { if (ctx) stageFiles(Array.prototype.slice.call(files || [])); },
     onAction: function (action) {
-      var m = /^data:(import|loaded|save|settings|google)$/.exec(String(action || ''));
+      var m = /^data:(import|loaded|save|settings|google|followups)$/.exec(String(action || ''));
       if (!m) return false;
+      if (m[1] === 'followups') {       // "Buka di Data & Privasi" from a Tindak lanjut tab (V6_SPEC §7.6): the card in Simpan & kata sandi
+        goTab('save');
+        [80, 450].forEach(function (ms) {
+          setTimeout(function () {
+            var c = DOC.getElementById('dp-followups');
+            if (!c || !ctx) return;
+            var top = c.getBoundingClientRect().top;
+            if ((top < 0 || top > (W.innerHeight || 800) * 0.6) && c.scrollIntoView) c.scrollIntoView({ block: 'start' });
+            var b = c.querySelector('[data-fk="fu-open"]'), act = DOC.activeElement;
+            if (b && act !== b && !(act && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName))) { try { b.focus({ preventScroll: true }); } catch (e) { b.focus(); } }
+          }, ms);
+        });
+        return true;
+      }
       if (m[1] === 'google') {          // "Isi kunci Google" from other sections: the card in Pengaturan & sumber
         goTab('settings');
         // The shell may restore the page's scroll position right after a mount, so look again a few times.
@@ -2709,6 +3072,10 @@
         hints: function () { return HINTS; },
         /* builds one card of the Detail tabs without the page (tests): 'google' | 'password' | 'assume' | 'privacy' */
         block: function (name) { ui = ui || { root: null }; return { google: googleBlock, password: passwordBlock, assume: assumeBlock, privacy: privacyBlock }[name](); } },
+      /* v6 (V6_SPEC §7.5-7.6, §8) for tests/overview-data-v6.test.mjs */
+      v6: { followups: followups, openOldAll: openOldAll, oldPwDialog: oldPwDialog, closeOldDialog: closeOldDialog, dialog: function () { return DLG; },
+        saveState: function () { return saveState(realStatus()); }, realStatus: realStatus, sourceRows: sourceRows, sourceNotes: sourceNotes,
+        block: function (name) { ui = ui || { root: null }; return { followups: followupsBlock, sources: sourcesBlock, privacy: privacyBlock, save: saveBlock }[name](); } },
       peak: { set: setPeak, reset: resetPeak, saved: savedPeak, apply: applySavedPeak, KEY: PEAK_KEY } }
   };
 })(window.MCD = window.MCD || {});

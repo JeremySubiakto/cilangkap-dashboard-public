@@ -62,6 +62,19 @@
  *                                 zones:false; a ring kecamatan is clickable and its popup says
  *                                 "Sebagian besar wilayahnya di luar 15 km" (or "Di luar 15 km" when nothing of it is inside),
  *                                 with "n merchant dalam 15 km" from merchant stats (stats.unit 'merchant').
+ *   v6 (V6_SPEC §3.3), the 30 km scope: zones(30) (or zones({km: 30})) → the same shape for 30 km: focus = the 103
+ *                                 kecamatan with inCircle >= 0.5, ring = the other 15 of the file (all border that focus),
+ *                                 beyond = the veil; zones() / zones(15) stay the item 30 set. zoneOf(id, km?). zoneKm() → 15 | 30,
+ *                                 the set in effect: 30 while MCD.map.zones() is {mode: 'kecamatan', km: 30}. layers() follows it
+ *                                 (opts.km wins): every kecamatan of the 30 km focus gets its outline and, when the section counts
+ *                                 something there, its chip; the chips of the 15 km focus show at every zoom, the others and the
+ *                                 ring's muted chips from zoom 10,5 (opts.outerChipZoom) and give way to the inner ones. hit(),
+ *                                 tooltip(), popup(), bind() and openBound() accept every kecamatan of the set in effect; at 30 km
+ *                                 the ring reads "Sebagian besar wilayahnya di luar 30 km dari Mabes TNI." (no "Tidak dinilai",
+ *                                 the 15 km words). kecamatan({km: 30}) → the 118 records of the 30 km set. Stats may name their
+ *                                 unit (stats.unit 'sekolah', 'kampus', …): the default tooltip and the ring popup then count it
+ *                                 ("17 sekolah dalam 30 km"). layers({tooltip(kecId, stats) → model | null}) gives the section's
+ *                                 own hover card to the shapes and the chips.
  *   The popup's "Jarak dari KCP" row uses MCD.distance (normal traffic, the shared Jam sibuk / Motor switches; it
  *                                 updates while the popup is open).
  *   Internal (kept for the statistics, never shown): tiles(), tileAt(), tileOfPoi(), stats().tiles
@@ -355,7 +368,21 @@
     var i = p.tile[row];
     return i >= 0 ? index().tiles[i] : null;
   }
-  function kecamatan() { var ix = index(); return ix ? ix.kec.slice() : []; }
+  /** kecamatan() → the 50 kecamatan of the index (those that reach 15 km), as before.
+      kecamatan({km: 30}) (v6, V6_SPEC §3.3) → every kecamatan of the 30 km zones (the 103 of the focus, then the 15 of
+      the ring) in the same record shape plus {inCircle, zone: 'focus' | 'ring', inner (in the 15 km focus)}. */
+  function kecamatan(opts) {
+    var ix = index();
+    if (!ix) return [];
+    if (zoneKmArg(opts) !== 30) return ix.kec.slice();
+    var Z = zones(30);
+    if (!Z) return ix.kec.slice();
+    return Z.focus.concat(Z.ring).map(function (id) {
+      var r = kecRecord(id), A = admin(), rec = A && A.byId(id);
+      if (!r) return null;
+      return Object.assign({}, r, { inCircle: rec ? rec.inCircle || 0 : 0, zone: Z.isFocus(id) ? 'focus' : 'ring', inner: (r.in15 || 0) >= 0.5 });
+    }).filter(Boolean);
+  }
 
   /* LVM text → Kemendagri kecamatan id. Handles "Kramatjati (Kramat Jati)", "Kec. Pasar Rebo", OSM / BPS
      spellings kept in 'alt', and repeated names (two Cipayung): the kota text decides, else the nearer one. */
@@ -463,13 +490,25 @@
     }
     return { outer: outer, holes: holes, arcs: segs.length, open: open };
   }
-  /** zones() → {focus: [id], ring: [id], zoneOf(id), isFocus(id), isRing(id), focusOutline, unionOutline, labels} | null. */
-  function zones() {
-    if (ZONES) return ZONES;
+  /* v6 (V6_SPEC §3.3): a second set for the 30 km scope, computed the same way from the same file:
+       focus  = the kecamatan with at least half of their area inside 30 km (inCircle >= 0.5: 103 of the 118);
+       ring   = the other kecamatan of the file that share a border arc with that focus (all 15 of them: the file holds
+                only the kecamatan that touch 30 km);
+       beyond = everything else (the veil).
+     zones() and zones(15) are the 15 km set of item 30, unchanged; zones(30) or zones({km: 30}) the 30 km set. */
+  var ZONES30 = null;
+  /** 15 | 30 from a number, {km} or {mode: 'kecamatan', km}; anything above 15 km is the 30 km set. */
+  function zoneKmArg(x) {
+    if (x && typeof x === 'object') x = x.km;
+    x = +x;
+    return isNum(x) && x > 15 ? 30 : 15;
+  }
+  function buildZones(km) {
     var A = admin();
     if (!A || !Array.isArray(A.kecamatan) || !A.borders || !isFn(A.arc)) return null;
+    var share = km === 30 ? function (k) { return k.inCircle || 0; } : function (k) { return k.in15 || 0; };
     var focus = {}, ring = {};
-    A.kecamatan.forEach(function (k) { if ((k.in15 || 0) >= 0.5) focus[k.id] = 1; });
+    A.kecamatan.forEach(function (k) { if (share(k) >= 0.5) focus[k.id] = 1; });
     (A.borders.kecamatan || []).forEach(function (b) {
       var L = b[1], R = b[2];
       if (!L || !R) return;
@@ -477,7 +516,8 @@
       else if (focus[R] && !focus[L]) ring[L] = 1;
     });
     var fo = null, uo = null;
-    ZONES = {
+    return {
+      km: km,
       focus: Object.keys(focus).sort(), ring: Object.keys(ring).sort(),
       isFocus: function (id) { return !!focus[id]; },
       isRing: function (id) { return !!ring[id]; },
@@ -485,29 +525,65 @@
       /* chained once, on first use */
       focusOutline: function () { return fo || (fo = outline(A, function (id) { return !!focus[id]; })); },
       unionOutline: function () { return uo || (uo = outline(A, function (id) { return !!(focus[id] || ring[id]); })); },
-      /** the label point of every focus and ring kecamatan: [{id, name, zone, position, distKm, in15}] */
+      /** the label point of every focus and ring kecamatan: [{id, name, zone, position, distKm, in15}] (the 30 km set adds
+          inCircle and inner: in the 15 km focus) */
       labels: function () {
         return Object.keys(focus).concat(Object.keys(ring)).map(function (id) {
           var r = A.byId(id);
-          return r && Array.isArray(r.label) ? { id: id, name: r.name, zone: focus[id] ? 'focus' : 'ring', position: r.label, distKm: r.distKm, in15: r.in15 || 0 } : null;
+          if (!r || !Array.isArray(r.label)) return null;
+          var o = { id: id, name: r.name, zone: focus[id] ? 'focus' : 'ring', position: r.label, distKm: r.distKm, in15: r.in15 || 0 };
+          if (km === 30) { o.inCircle = r.inCircle || 0; o.inner = (r.in15 || 0) >= 0.5; }
+          return o;
         }).filter(Boolean);
       }
     };
-    return ZONES;
   }
-  /** A kecamatan of the index (the 50 that reach 15 km) or of the ring, in the index record shape
-      {id, name, kota, kotaName, label, potential, in15, distKm}; null for the zone beyond. */
+  /** zones(km?) → {km, focus: [id], ring: [id], zoneOf(id), isFocus(id), isRing(id), focusOutline, unionOutline, labels} | null.
+      No argument (or 15): the 15 km set of item 30; 30 (or {km: 30}): the 30 km set (v6). */
+  function zones(km) {
+    if (zoneKmArg(km) === 30) return ZONES30 || (ZONES30 = buildZones(30));
+    return ZONES || (ZONES = buildZones(15));
+  }
+  /** The zone set in effect on the map: 30 while MCD.map.zones() is {mode: 'kecamatan', km: 30} (Sekolah at 30 km, Kampus),
+      else 15 (every other mode keeps the item 30 chips, as before v6). ms.zones (the map state) wins when given. */
+  function zoneKm(ms) {
+    var z = ms && ms.zones;
+    if (!z) {
+      var M = MCD.map;
+      try { z = M && isFn(M.zones) ? M.zones() : null; } catch (e) { z = null; }
+    }
+    return z && z.mode === 'kecamatan' && +z.km > 15 ? 30 : 15;
+  }
+  function activeZones(ms) { return zones(zoneKm(ms)); }
+  /** Any kecamatan of data/admin-areas.js in the index record shape {id, name, kota, kotaName, label, potential, in15, distKm}
+      (the index's own record when it has one; potential 0 for the others). */
   var ZK = {};
-  function zoneKec(kecId) {
+  function kecRecord(kecId) {
     var ix = index(), k = ix && kecId ? ix.kecById[kecId] : null;
     if (k || !kecId) return k || null;
     if (ZK[kecId]) return ZK[kecId];
-    var z = zones(), A = admin(), r = A && A.byId(kecId);
-    if (!z || !r || !z.isRing(kecId)) return null;
+    var A = admin(), r = A && A.byId(kecId);
+    if (!r || !/^\d\d\.\d\d\.\d\d$/.test(String(kecId))) return null;
     ZK[kecId] = { id: r.id, name: r.name, kota: r.kota, kotaName: kotaLabel(A.byId(r.kota)), label: r.label, potential: 0, in15: r.in15 || 0, distKm: r.distKm };
     return ZK[kecId];
   }
-  function isRingKec(kecId) { var z = zones(); return !!(z && z.isRing(kecId)); }
+  /** A kecamatan of the index (the 50 that reach 15 km) or of the zones in effect (Z, else the map's), in the index
+      record shape; null for the zone beyond. At 15 km: the index and the outer ring, as before v6; at 30 km: the 103 of
+      the focus and the 15 of the ring as well. */
+  function zoneKec(kecId, Z) {
+    var ix = index(), k = ix && kecId ? ix.kecById[kecId] : null;
+    if (k || !kecId) return k || null;
+    Z = Z || activeZones();
+    if (!Z || !(Z.isRing(kecId) || (Z.km === 30 && Z.isFocus(kecId)))) return null;
+    return kecRecord(kecId);
+  }
+  function isRingKec(kecId, Z) { Z = Z || activeZones(); return !!(Z && Z.isRing(kecId)); }
+  /** Is the kecamatan in the focus of the zones Z? 15 km: in15 >= minIn (item 30, as before); 30 km: the 30 km focus. */
+  function inZoneFocus(k, Z, minIn) {
+    if (!k) return false;
+    if (Z && Z.km === 30) return Z.isFocus(k.id);
+    return inFocus(k, minIn);
+  }
 
   /* ------------------------------------------------------------- statistics */
 
@@ -779,12 +855,20 @@
 
   /* ------------------------------------------------------------- geometry */
 
-  var GEO = null;
-  function geometry() {
+  var GEO = null, GEO30 = null;
+  /** geometry(Z?) → the outlines, pick shapes and label points of a zone set (15 km by default; the 30 km set, v6). */
+  function geometry(Z) {
+    if (Z && Z.km === 30) return GEO30 || (GEO30 = geometryOf(Z));
     if (GEO) return GEO;
+    var g = geometryOf(zones());
+    if (g) GEO = g;
+    return g;
+  }
+  function geometryOf(Z) {
     var ix = index();
     if (!ix) return null;
-    var A = ix.A, Z = zones();
+    var A = ix.A;
+    if (Z && Z.km === 30) return geometry30(ix, A, Z);
     /* item 30: the focus (in15 >= 0.5) draws as before; the outer ring gets its own quieter outlines and chips.
        Without the zone data (an old admin file) every kecamatan of the index counts as focus, as before. */
     var isF = Z ? Z.isFocus : function (id) { return !!ix.kecById[id]; };
@@ -817,9 +901,49 @@
       var r = A.byId(id);
       return r && Array.isArray(r.label) ? { position: r.label, kec: id, name: r.name, potential: 0, distKm: r.distKm, ring: true } : null;
     }).filter(Boolean) : [];
-    GEO = { kel: kel, sides: sides, seps: seps, ringSeps: ringSeps, sepsBoth: seps.filter(function (o) { return o.both; }), fills: fills, labels: labels, ringLabels: ringLabels, outlines: {} };
-    return GEO;
+    return { kel: kel, sides: sides, seps: seps, ringSeps: ringSeps, sepsBoth: seps.filter(function (o) { return o.both; }), fills: fills, labels: labels, ringLabels: ringLabels, outlines: {} };
   }
+  /* v6 (V6_SPEC §3.3): the 30 km set. Every kecamatan of the 30 km focus gets its thin outline and a chip; the chips of
+     the 15 km focus ('inner') show at every zoom, the others ('outer') and the ring's muted chips from OUTER_CHIP_ZOOM. */
+  function geometry30(ix, A, Z) {
+    var isF = Z.isFocus, isR = Z.isRing;
+    var kel = [], sides = [], seps = [], ringSeps = [], fills = [];
+    A.borderLines('kelurahan').forEach(function (b) {
+      var l = b.left || b.right;
+      if (l && isF(l.slice(0, 8))) kel.push({ path: b.path });
+    });
+    A.borderLines('kecamatan').forEach(function (b) {
+      var L = b.left && isF(b.left) ? b.left : null, R = b.right && isF(b.right) ? b.right : null;
+      if (!L && !R) {
+        if ((b.left && isR(b.left)) || (b.right && isR(b.right))) ringSeps.push({ path: b.path });
+        return;
+      }
+      seps.push({ path: b.path, both: !!(L && R), side: L ? -1 : 1 });
+      if (L) sides.push({ path: b.path, kec: L, side: -1 });
+      if (R) sides.push({ path: b.path, kec: R, side: 1 });
+    });
+    Z.focus.concat(Z.ring).forEach(function (id) {
+      var rec = A.byId(id);
+      if (!rec) return;
+      var c = A.coordinates(rec), polys = rec.geometry.type === 'Polygon' ? [c] : c;
+      polys.forEach(function (rings) { fills.push({ kec: id, polygon: rings, ring: isR(id) }); });
+    });
+    var lab = function (id, ring) {
+      var r = A.byId(id), k = ix.kecById[id];
+      if (!r || !Array.isArray(r.label)) return null;
+      var inner = !ring && (r.in15 || 0) >= 0.5;
+      var o = { position: r.label, kec: id, name: r.name, potential: k ? k.potential : 0, distKm: r.distKm, outer: !inner };
+      if (ring) o.ring = true;
+      return o;
+    };
+    var labels = Z.focus.map(function (id) { return lab(id, false); }).filter(Boolean);
+    var ringLabels = Z.ring.map(function (id) { return lab(id, true); }).filter(Boolean);
+    return { km: 30, kel: kel, sides: sides, seps: seps, ringSeps: ringSeps, sepsBoth: seps.filter(function (o) { return o.both; }), fills: fills,
+      labels: labels, ringLabels: ringLabels, outlines: {} };
+  }
+  /* the chips of the kecamatan outside the 15 km focus show from this zoom at 30 km (V6_SPEC §3.3: "the 33 chips of the
+     15 km focus show at every zoom, the others from zoom 10,5"); a section may pass layers({outerChipZoom}) */
+  var OUTER_CHIP_ZOOM = 10.5;
   function outlineOf(kecId) {
     var g = geometry(), A = admin();
     if (!g || !A) return [];
@@ -889,8 +1013,9 @@
       /* the kecamatan around the branch (≤ 7 km from Mabes TNI) come before the numbered top 3, so the names
          staff know best stay on screen at the 15 km view (open issue 1) */
       function near(l) { return isNum(l.distKm) && l.distKm <= NEAR_KM; }
-      /* the muted chips of the outer ring (item 30) come after every chip of the focus */
-      function tier(l) { return l.kec === selected ? 0 : (l.ring ? 20 : (l.kec === BRANCH_KEC ? 1 : (near(l) ? 2 : (pr[l.kec] ? 2 + pr[l.kec] : 9)))); }
+      /* the muted chips of the outer ring (item 30) come after every chip of the focus; at 30 km (v6) the chips outside
+         the 15 km focus come after every chip inside it */
+      function tier(l) { return l.kec === selected ? 0 : (l.ring ? 20 : (l.outer ? 12 : (l.kec === BRANCH_KEC ? 1 : (near(l) ? 2 : (pr[l.kec] ? 2 + pr[l.kec] : 9))))); }
       var ta = tier(a), tb = tier(b);
       if (ta !== tb) return ta - tb;
       var da = isNum(a.distKm) ? a.distKm : 99, db = isNum(b.distKm) ? b.distKm : 99;
@@ -926,7 +1051,9 @@
         }
         if (!free) continue;
         boxes.push(b);
-        out.push({ position: l.position, kec: l.kec, name: l.name, potential: l.potential, distKm: l.distKm, off: [dx, dy], w: w, pl: pl, cw: cw, ring: !!l.ring });
+        var chip = { position: l.position, kec: l.kec, name: l.name, potential: l.potential, distKm: l.distKm, off: [dx, dy], w: w, pl: pl, cw: cw, ring: !!l.ring };
+        if (l.outer) chip.outer = true;
+        out.push(chip);
         return;
       }
     });
@@ -957,17 +1084,22 @@
   /** layers(opts) → {base, top}. See the header for the options. */
   function layers(opts) {
     opts = opts || {};
-    var d = deckNS(), ix = index(), g = geometry();
+    var ms = opts.ms || {};
+    /* v6: the zone set follows the map (MCD.map.zones(): {mode: 'kecamatan', km: 30} → the 30 km set); opts.km wins */
+    var Z = opts.km != null ? zones(opts.km) : activeZones(ms);
+    var d = deckNS(), ix = index(), g = geometry(Z && Z.km === 30 ? Z : null);
     var out = { base: [], top: [] };
     if (!d || !ix || !g) return out;
     trackHover();
-    var ms = opts.ms || {}, K = ink(ms);
+    var K = ink(ms);
     var s = statsOf(opts), id = opts.id || 'territory', beforeId = ms.beforeId;
     var zoom = isNum(ms.zoom) ? ms.zoom : 12;
     var selected = opts.selected != null ? opts.selected : (POP ? POP.kecId : null);
     var minIn = s.relative && s.relative.kecamatan && isNum(s.relative.kecamatan.minInFocus) ? s.relative.kecamatan.minInFocus : 0.5;
     var prio = Array.isArray(opts.priority) ? opts.priority.slice(0, 3) : [];
     var lw = lineWidth(zoom);
+    /* a section may give its own hover card for the shapes and the chips (opts.tooltip(kecId, stats) → model | null) */
+    var tipFn = isFn(opts.tooltip) ? opts.tooltip : null;
     var meta = {
       kind: KIND,
       id: function (o) { return o.kec; },
@@ -975,10 +1107,14 @@
         if (!o || !o.kec) return null;
         return { kind: KIND, id: o.kec, kecamatanId: o.kec, coordinate: info && info.coordinate, x: info && info.x, y: info && info.y, raw: o };
       },
-      tooltip: function (o) { return o && o.kec ? tooltip(o.kec, s) : null; }
+      tooltip: function (o) {
+        if (!o || !o.kec) return null;
+        if (tipFn) { try { var t = tipFn(o.kec, s); if (t) return t; } catch (e) { /* the default card */ } }
+        return tooltip(o.kec, s, Z);
+      }
     };
     /* the click and hover target: one invisible shape per kecamatan (never painted, never highlighted) */
-    var fillData = opts.outside === 'hide' ? g.fills.filter(function (f) { var k = ix.kecById[f.kec]; return inFocus(k, minIn); })
+    var fillData = opts.outside === 'hide' ? g.fills.filter(function (f) { return inZoneFocus(Z && Z.km === 30 ? zoneKec(f.kec, Z) : ix.kecById[f.kec], Z, minIn); })
       : (opts.zones === false ? g.fills.filter(function (f) { return !f.ring; }) : g.fills);
     if (opts.pickable !== false) {
       out.base.push(new d.PolygonLayer({
@@ -1012,7 +1148,7 @@
         updateTriggers: { getColor: K.key, getWidth: lw }, pickable: false, beforeId: beforeId
       }));
     }
-    var known = function (kid) { return !!(kid && (ix.kecById[kid] || (ringOn && zoneKec(kid)))); };
+    var known = function (kid) { return !!(kid && (ix.kecById[kid] || ((ringOn || (Z && Z.km === 30 && Z.isFocus(kid))) && zoneKec(kid, Z)))); };
     var hov = HOV.id && HOV.id !== selected && known(HOV.id) ? HOV.id : null;
     if (hov && opts.hover !== false) {
       out.base.push(new d.PathLayer({
@@ -1033,7 +1169,7 @@
       }));
     }
     if (opts.labels !== false && ms.fontsReady !== false) labelLayers(out, opts, { d: d, ix: ix, g: g, s: s, K: K, id: id, zoom: zoom, selected: selected, minIn: minIn, prio: prio, beforeId: beforeId, ring: ringOn,
-      meta: meta, pickable: opts.pickable !== false });
+      meta: meta, pickable: opts.pickable !== false, Z: Z });
     return out;
   }
 
@@ -1067,26 +1203,67 @@
     ctx.lineTo(x, y + r); ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
     ctx.closePath();
   }
+  /* The atlas is packed in rows (shelves) and kept within CHIP_ATLAS_SIDE px on each side and CHIP_ATLAS_PX pixels in
+     all (fix round 19 Oct 2026). At 30 km up to 118 chips go in; the old single column at 3× was 543 × 10.620 px,
+     beyond the 8192 px texture limit of many phone GPUs, and every chip drew as a black box. The GPU's own limit
+     (MCD.map.maxTextureSize()) lowers the side further when it is smaller. When the chips do not fit at the screen's
+     density the atlas steps down (3 → 2,5 → 2 → 1,5 → 1); with nothing that fits, the leader's own background is the chip. */
+  var CHIP_ATLAS_SIDE = 4096;                        // px per side: inside every GPU we target, phones included
+  var CHIP_ATLAS_PX = 4194304;                       // 4 M px ≈ 16 MB of RGBA per atlas (the §9.3 heap budget)
+  var CHIP_GAP = 2;                                  // device px between two sprites (no bleed when the GPU filters)
+  function chipSide() {
+    var M = MCD.map, gpu = 0;
+    try { gpu = M && isFn(M.maxTextureSize) ? +M.maxTextureSize() || 0 : 0; } catch (e) { gpu = 0; }
+    return gpu > 0 ? Math.min(CHIP_ATLAS_SIDE, gpu) : CHIP_ATLAS_SIDE;
+  }
+  /** chipPack(widths, hS, dpr, rowW, side) → {w, h, at: [[x, y]]} | null: shelves of one chip height, left to right,
+      each shelf at most rowW px wide; null when a side would pass `side`. */
+  function chipPack(widths, hS, dpr, rowW, side) {
+    var rowH = Math.ceil(hS * dpr), x = 0, y = 0, w = 0, at = [];
+    rowW = Math.min(rowW, side);
+    for (var i = 0; i < widths.length; i++) {
+      var cw = Math.ceil(widths[i] * dpr);
+      if (!(cw > 0) || cw > rowW) return null;
+      if (x > 0 && x + cw > rowW) { x = 0; y += rowH + CHIP_GAP; }
+      at.push([x, y]);
+      x += cw + CHIP_GAP;
+      w = Math.max(w, x - CHIP_GAP);
+    }
+    var h = y + rowH;
+    return h > side ? null : { w: Math.max(1, w), h: Math.max(1, h), at: at };
+  }
   /** chipAtlas(id, items, theme) → {sig, canvas, mapping, dpr} | null. items [{key, text, cw, pl, dot: rgb|null, badge, sel}]. */
   function chipAtlas(id, items, theme) {
     var d = doc();
     if (!d || !d.createElement || !items.length) return null;
-    var dpr = Math.min(3, Math.max(2, Math.ceil(W.devicePixelRatio || 1)));
-    var sig = theme + '|' + dpr + '|' + items.map(function (it) { return [it.key, it.text, Math.round(it.cw * 10), it.pl, it.dot ? it.dot.join(',') : '', it.badge || '', it.sel ? 1 : 0, it.muted ? 1 : 0].join('~'); }).join('^');
+    var want = Math.min(3, Math.max(2, Math.ceil(W.devicePixelRatio || 1))), side = chipSide();
+    var hS = Math.ceil(CHIP_H + 2 * CHIP_M), widths = items.map(function (it) { return Math.ceil(it.cw + 2 * CHIP_M); });
+    /* the row width: about square (both sides short), never wider than the limit */
+    var area = 0;
+    widths.forEach(function (w) { area += w * hS; });
+    var dpr = want, pack = null;
+    for (; dpr >= 1; dpr -= 0.5) {
+      var rowW = Math.max(Math.ceil(Math.max.apply(null, widths) * dpr), Math.ceil(Math.sqrt(area) * dpr * 1.15));
+      pack = chipPack(widths, hS, dpr, rowW, side);
+      if (pack && pack.w * pack.h <= CHIP_ATLAS_PX) break;
+      pack = null;
+    }
+    if (!pack) return null;
+    var sig = theme + '|' + dpr + '|' + side + '|' + items.map(function (it) { return [it.key, it.text, Math.round(it.cw * 10), it.pl, it.dot ? it.dot.join(',') : '', it.badge || '', it.sel ? 1 : 0, it.muted ? 1 : 0].join('~'); }).join('^');
     var hit = CHIP_ATLAS[id];
     if (hit && hit.sig === sig && hit.canvas) return hit;
-    var C = CHIP_INK[theme] || CHIP_INK.day, mapping = {}, wMax = 0, y = 0;
-    items.forEach(function (it) { wMax = Math.max(wMax, Math.ceil(it.cw + 2 * CHIP_M)); });
-    var hS = Math.ceil(CHIP_H + 2 * CHIP_M), cv;
+    var C = CHIP_INK[theme] || CHIP_INK.day, mapping = {}, cv;
     try {
       cv = d.createElement('canvas');
-      cv.width = Math.max(1, wMax * dpr); cv.height = Math.max(1, hS * items.length * dpr);
+      cv.width = pack.w; cv.height = pack.h;
     } catch (e) { return null; }
     var ctx = cv.getContext && cv.getContext('2d');
     if (!ctx) return null;
-    ctx.scale(dpr, dpr);
-    items.forEach(function (it) {
-      var x0 = CHIP_M, y0 = y + CHIP_M, w = it.cw, h = CHIP_H, r = h / 2, cy = y0 + h / 2;
+    items.forEach(function (it, i) {
+      var ox = pack.at[i][0], oy = pack.at[i][1];
+      /* each sprite is drawn in its own CSS-px frame from its device-px corner, so no chip lands between pixels */
+      if (isFn(ctx.setTransform)) ctx.setTransform(dpr, 0, 0, dpr, ox, oy);
+      var x0 = CHIP_M, y0 = CHIP_M, w = it.cw, h = CHIP_H, r = h / 2, cy = y0 + h / 2;
       /* body with a soft shadow, then a hairline (navy and firmer when selected) */
       var muted = it.muted && !it.sel;
       ctx.save();
@@ -1110,11 +1287,11 @@
         var nw = ctx.measureText(parts[0]).width;
         ctx.font = '500 ' + LABEL_SIZE + 'px ' + FONT_SANS; ctx.fillStyle = C.rest; ctx.fillText(parts[1], tx + nw, cy + 0.5);
       }
-      mapping[it.key] = { x: 0, y: Math.round(y * dpr), width: Math.ceil((w + 2 * CHIP_M) * dpr), height: hS * dpr,
+      mapping[it.key] = { x: ox, y: oy, width: Math.min(Math.ceil(widths[i] * dpr), pack.w - ox), height: Math.ceil(hS * dpr),
         anchorX: (CHIP_M + w / 2) * dpr, anchorY: (CHIP_M + h / 2) * dpr, mask: false };
-      y += hS;
     });
-    CHIP_ATLAS[id] = { sig: sig, canvas: cv, mapping: mapping, dpr: dpr };
+    if (isFn(ctx.setTransform)) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    CHIP_ATLAS[id] = { sig: sig, canvas: cv, mapping: mapping, dpr: dpr, w: pack.w, h: pack.h };
     return CHIP_ATLAS[id];
   }
 
@@ -1128,17 +1305,25 @@
     var dots = opts.dots != null ? !!opts.dots : !!s.hasBank;
     var rankOfId = {};
     prio.forEach(function (kid, i) { rankOfId[kid] = i + 1; });
+    var Z = c.Z, wide = !!(Z && Z.km === 30);
+    /* v6 (V6_SPEC §3.3): at 30 km every kecamatan of the 30 km focus with something to count gets its chip; the chips
+       outside the 15 km focus ('outer') and the ring's muted chips wait for zoom 10,5, so the 30 km view stays calm */
+    var outerZoom = isNum(opts.outerChipZoom) ? opts.outerChipZoom : OUTER_CHIP_ZOOM;
+    var outerOn = !wide || c.zoom >= outerZoom;
+    var recOf = function (id) { return ix.kecById[id] || (wide ? kecRecord(id) : null); };
     var labelData = c.g.labels.filter(function (l) {
-      var k = ix.kecById[l.kec], ks = s.kecamatan[l.kec];
+      var ks = s.kecamatan[l.kec];
       if (l.kec === selected) return true;
-      return inFocus(k, c.minIn) && ks && ks.potential > 0;
+      if (wide) return Z.isFocus(l.kec) && (outerOn || !l.outer) && !!ks && ks.potential > 0;
+      return inFocus(ix.kecById[l.kec], c.minIn) && ks && ks.potential > 0;
     });
     /* item 30: the outer ring's muted chips (name only), placed after every chip of the focus */
     var ringOn = c.ring && opts.ringLabels !== false;
-    if (ringOn) labelData = labelData.concat(c.g.ringLabels);
-    var textOf = function (l) { return l.ring ? l.name : labelText(ix.kecById[l.kec], s.kecamatan[l.kec], s, c.zoom, opts); };
+    if (ringOn) labelData = labelData.concat(wide ? c.g.ringLabels.filter(function (l) { return outerOn || l.kec === selected; }) : c.g.ringLabels);
+    var textOf = function (l) { return l.ring ? l.name : labelText(recOf(l.kec), s.kecamatan[l.kec], s, c.zoom, opts); };
     var padOf = function (l) { return l.ring ? PAD_L : padLeft(dots, !!rankOfId[l.kec]); };
-    var labelKey = [s.key || '', K.key, selected || '', prio.join(','), dots ? 1 : 0, c.zoom >= 11 ? 2 : 1, isFn(opts.labelText) ? (opts.labelKey || '') : '', ringOn ? 'r' : ''].join('#');
+    var labelKey = [s.key || '', K.key, selected || '', prio.join(','), dots ? 1 : 0, c.zoom >= 11 ? 2 : 1, isFn(opts.labelText) ? (opts.labelKey || '') : '', ringOn ? 'r' : '',
+      wide ? 'k30' + (outerOn ? 'o' : '') : ''].join('#');
     if (opts.collide !== false) labelData = declutter(labelData, c.zoom, textOf, selected, labelKey + '#' + labelData.length, prio, padOf);
     var geomOf = {};
     labelData.forEach(function (l) {
@@ -1214,32 +1399,42 @@
      that count (fix 16 Oct 2026); only a ring kecamatan with nothing inside 15 km is simply "di luar 15 km". */
   var RING_WORDS = 'Di luar 15 km dari Mabes TNI. Tidak dinilai.';
   var RING_WORDS_PART = 'Sebagian besar wilayahnya di luar 15 km dari Mabes TNI. Tidak dinilai.';
-  function ringWords(k) { return k && (k.in15 || 0) > 0 ? RING_WORDS_PART : RING_WORDS; }
-  /** "1.054 merchant dalam 15 km" for an outer-ring kecamatan, from merchant stats only (stats.unit 'merchant'); else null. */
+  /* v6 (V6_SPEC §3.3): "Tidak dinilai" and "di luar 15 km" are the 15 km words only. Every kecamatan of the 30 km ring
+     reaches into the 30 km circle (1–48 % of its area), and the schools or campuses of that part are on the map and in
+     the lists, so it is "at the edge", never "not counted". */
+  var RING_WORDS_30 = 'Sebagian besar wilayahnya di luar 30 km dari Mabes TNI.';
+  function ringWords(k, km) { return km === 30 ? RING_WORDS_30 : (k && (k.in15 || 0) > 0 ? RING_WORDS_PART : RING_WORDS); }
+  /** The counted thing of a stats object: 'merchant' (Merchant, and stats without a unit, as before v6), or the section's
+      own word (stats.unit, e.g. 'sekolah', 'SMA', 'kampus'). */
+  function unitOf(s) { return s && typeof s.unit === 'string' && s.unit ? s.unit : 'merchant'; }
+  /** "1.054 merchant dalam 15 km" for an outer-ring kecamatan, from stats that name their unit (stats.unit: 'merchant', or
+      a section's own word such as 'sekolah'); else null. */
   function ringCount(s, kecId) {
-    var ks = s && s.unit === 'merchant' && s.kecamatan ? s.kecamatan[kecId] : null;
+    var ks = s && typeof s.unit === 'string' && s.unit && s.kecamatan ? s.kecamatan[kecId] : null;
     return ks && ks.potential > 0 ? ks.potential : null;
   }
-  function tooltip(kecId, s) {
-    var ix = index(), k = ix && zoneKec(kecId);
+  function tooltip(kecId, s, Z) {
+    Z = Z || activeZones();
+    var ix = index(), k = ix && zoneKec(kecId, Z);
     if (!k) return null;
+    var km = Z && Z.km === 30 ? 30 : 15, unit = unitOf(s);
     var ks = s && s.kecamatan ? s.kecamatan[kecId] : null, lines = [];
     var eyebrow = 'Kecamatan · ' + (k.kotaName || '');
-    /* item 30: a kecamatan of the outer ring says it is (mostly) outside the 15 km area */
-    if (isRingKec(kecId)) {
+    /* item 30: a kecamatan of the outer ring says it is (mostly) outside the 15 km area (v6: or the 30 km area) */
+    if (isRingKec(kecId, Z)) {
       var n = ringCount(s, kecId);
-      return { eyebrow: eyebrow, title: k.name, lines: [{ kind: 'body', text: ringWords(k) }]
-        .concat(n ? [{ kind: 'body', text: fmtInt(n) + ' merchant dalam 15 km' }] : [])
+      return { eyebrow: eyebrow, title: k.name, lines: [{ kind: 'body', text: ringWords(k, km) }]
+        .concat(n ? [{ kind: 'body', text: fmtInt(n) + ' ' + unit + ' dalam ' + km + ' km' }] : [])
         .concat([{ kind: 'meta', text: 'Klik untuk melihat jaraknya' }]) };
     }
-    if (!inFocus(k)) return { eyebrow: eyebrow, title: k.name, lines: [{ kind: 'body', text: 'Sebagian besar wilayahnya di luar 15 km dari Mabes TNI. Tidak dinilai.' }] };
+    if (!inZoneFocus(k, Z)) return { eyebrow: eyebrow, title: k.name, lines: [{ kind: 'body', text: 'Sebagian besar wilayahnya di luar 15 km dari Mabes TNI. Tidak dinilai.' }] };
     if (hasCoverage(s, ks)) {
       var r = rankOf(s, kecId);
       lines.push({ kind: 'body', text: fmtPct(ks.coverage) + ' coverage' + (r ? ' · ' + THIRD_WORDS[r.band] : '') });
       lines.push({ kind: 'body', text: fmtInt((ks.acquired || 0) + (ks.unlisted || 0)) + ' telah diakuisisi · ' + fmtInt(ks.notYet) + ' belum ada di LVM' });
     } else if (ks && ks.potential > 0) {
-      lines.push({ kind: 'body', text: fmtInt(ks.potential) + ' merchant dalam 15 km' });
-      if (!(s && s.hasBank)) lines.push({ kind: 'body', text: 'File LVM belum diimpor.' });
+      lines.push({ kind: 'body', text: fmtInt(ks.potential) + ' ' + unit + ' dalam ' + km + ' km' });
+      if (!(s && s.hasBank) && unit === 'merchant') lines.push({ kind: 'body', text: 'File LVM belum diimpor.' });
     }
     lines.push({ kind: 'meta', text: 'Klik untuk melihat angkanya' });
     return { eyebrow: eyebrow, title: k.name, lines: lines };
@@ -1361,11 +1556,17 @@
     spec = spec || {};
     var L = legendSpec(spec), groups = [], rel = L.s.relative || {}, t = themeOf(spec.ms || spec), c = CALM[t];
     var unit = spec.unit || 'merchant';
+    /* v6: the words follow the zone set in effect (spec.km, else the map's zones) */
+    var km = spec.km != null ? zoneKmArg(spec.km) : zoneKm(spec.ms);
     /* COPY_DECK_ID §5.1: group "Kecamatan" (what the white chip says), then the dot meaning after the import */
     var kecRows = [{ glyph: 'chip', label: 'Label: nama kecamatan · jumlah ' + unit }];
     /* item 30: the outer ring's muted chip */
-    if (spec.zones !== false && zones()) kecRows.push({ glyph: 'chip', muted: true, label: 'Label pucat: kecamatan tetangga, sebagian besar di luar 15 km' });
-    groups.push({ id: 'territory-kec', title: 'Kecamatan', rows: kecRows, note: L.potential ? 'Titik kecil pada label muncul setelah file LVM diimpor.' : null });
+    if (spec.zones !== false && zones(km)) kecRows.push({ glyph: 'chip', muted: true, label: 'Label pucat: kecamatan tetangga, sebagian besar di luar ' + km + ' km' });
+    var notes = [];
+    if (L.potential) notes.push('Titik kecil pada label muncul setelah file LVM diimpor.');
+    /* V6_SPEC §3.3: outside the 15 km focus the chips wait for a closer zoom */
+    if (km === 30) notes.push('Label kecamatan di luar 15 km tampil saat peta diperbesar.');
+    groups.push({ id: 'territory-kec', title: 'Kecamatan', rows: kecRows, note: notes.length ? notes.join('\n') : null });
     if (!L.potential) {
       var ranked = !!(rel.kecamatan && rel.kecamatan.applied);
       groups.push({ id: 'territory-dots', title: ranked ? 'Titik pada label: coverage, dibandingkan antarkecamatan' : 'Titik pada label: coverage (batas tetap)',
@@ -1534,13 +1735,14 @@
   }
   /** The default rows, big value and rank chip for a kecamatan. */
   function popupModel(kecId, s) {
-    var ix = index(), k = ix && zoneKec(kecId);
-    if (isRingKec(kecId)) return ringModel(k, s);
+    var Z = activeZones(), km = Z && Z.km === 30 ? 30 : 15;
+    var ix = index(), k = ix && zoneKec(kecId, Z);
+    if (isRingKec(kecId, Z)) return ringModel(k, s, km);
     var ks = s && s.kecamatan ? s.kecamatan[kecId] : null, hasBank = !!(s && s.hasBank);
     var unknown = 'Belum diketahui', TONE = { acquired: 'ok', partly: 'mid', notYet: 'bad', potential: 'potential', noData: 'none' };
-    var focus = inFocus(k);
+    var focus = inZoneFocus(k, Z);
     var rows = [
-      { label: 'Merchant dalam 15 km', value: ks && focus ? fmtInt(ks.potential) : '—' },
+      { label: cap(unitOf(s)) + ' dalam ' + km + ' km', value: ks && focus ? fmtInt(ks.potential) : '—' },
       { label: 'Sudah diakuisisi', value: hasBank && ks ? fmtInt((ks.acquired || 0) + (ks.unlisted || 0)) : unknown, tone: 'ok' },
       { label: 'Belum ada di LVM', value: hasBank && ks ? fmtInt(ks.notYet) : unknown, tone: 'bad' }
     ];
@@ -1554,7 +1756,7 @@
     if (!focus) big = { value: 'Tidak dinilai', caption: 'Sebagian besar wilayahnya di luar 15 km dari Mabes TNI' };
     else if (hasCoverage(s, ks)) big = { value: fmtPct(ks.coverage), caption: 'Coverage' };      /* a glossary term, as on the cards */
     else if (hasBank) big = { value: '—', caption: 'Tidak ada merchant di peta publik di kecamatan ini' };
-    else big = { value: fmtInt(ks ? ks.potential : 0), caption: 'merchant dalam 15 km · file LVM belum diimpor' };
+    else big = { value: fmtInt(ks ? ks.potential : 0), caption: unitOf(s) + ' dalam ' + km + ' km' + (unitOf(s) === 'merchant' ? ' · file LVM belum diimpor' : '') };
     if (hasBank && ks && focus) {
       var t = thirdText(s, kecId);
       var b = s.bands || bands();
@@ -1566,9 +1768,22 @@
   /** The popup of an outer-ring kecamatan (item 30): not rated, so no coverage and no third. It says how much of it
       lies inside 15 km and, with merchant stats, how many merchants that part has (Merchant lists them), then where it
       is and how far it is. */
-  function ringModel(k, s) {
-    var rows = [], n = k ? ringCount(s, k.id) : null, part = !!(k && k.in15 > 0);
-    if (n) rows.push({ label: 'Merchant dalam 15 km', value: fmtInt(n) });
+  function ringModel(k, s, km) {
+    var rows = [], n = k ? ringCount(s, k.id) : null;
+    if (km === 30) {
+      /* v6 (V6_SPEC §3.3): a kecamatan at the edge of the 30 km area. Its schools and campuses inside 30 km are on the map
+         and in the lists, so the words say how much of it lies inside, never "Tidak dinilai" (the 15 km wording) */
+      var A = admin(), rec = A && k ? A.byId(k.id) : null, share = rec && isNum(rec.inCircle) ? rec.inCircle : null;
+      if (n) rows.push({ label: cap(unitOf(s)) + ' dalam 30 km', value: fmtInt(n) });
+      if (k && isNum(k.distKm)) rows.push({ label: 'Jarak dari Mabes TNI', value: fmtKm(Math.round(k.distKm * 10) / 10) });
+      var tv30 = travelRow(k);
+      if (tv30) rows.push(tv30);
+      return { rows: rows,
+        big: share != null ? { value: fmtPct(share), caption: 'wilayahnya dalam 30 km dari Mabes TNI' } : { value: 'Di tepi area 30 km', caption: 'dari Mabes TNI' },
+        chip: { tone: 'none', text: 'Kecamatan di tepi area 30 km.' }, ring: true };
+    }
+    var part = !!(k && k.in15 > 0);
+    if (n) rows.push({ label: cap(unitOf(s)) + ' dalam 15 km', value: fmtInt(n) });
     if (part) rows.push({ label: 'Wilayah dalam 15 km', value: fmtPct(k.in15) });
     if (k && isNum(k.distKm)) rows.push({ label: 'Jarak dari Mabes TNI', value: fmtKm(Math.round(k.distKm * 10) / 10) });
     var tv = travelRow(k);
@@ -2005,7 +2220,9 @@
   function bindSpec(opts, kecId, p) {
     var s = isFn(opts.stats) ? opts.stats() : opts.stats;
     var spec = { stats: s, x: p ? p.x : undefined, y: p ? p.y : undefined, onClose: opts.onClose };
-    var ringKec = isRingKec(kecId);         /* item 30: the outer ring keeps the calm "di luar 15 km" popup */
+    /* item 30: the outer ring keeps the calm "di luar 15 km" popup (v6: at 30 km the ring of the 30 km area, "di tepi area
+       30 km"; the 26 kecamatan of the old ring are then in the focus and get the section's popup and actions) */
+    var ringKec = isRingKec(kecId);
     if (!ringKec && isFn(opts.popup)) { try { Object.assign(spec, opts.popup(kecId, s && s.kecamatan ? s.kecamatan[kecId] : null) || {}); } catch (e) { /* defaults */ } }
     if (!ringKec && isFn(opts.actions)) { try { spec.actions = (opts.actions(kecId) || []).concat(spec.actions || []); } catch (e) { /* none */ } }
     return spec;
@@ -2054,7 +2271,7 @@
           if (!existing) { s.src = f[1]; s.async = false; s.setAttribute('data-mcd-territory', f[1]); (d.head || d.body).appendChild(s); }
         });
       });
-    }, Promise.resolve(true)).then(function () { IX = null; GEO = null; NAME_IX = null; ZONES = null; ZK = {}; return ready(); });
+    }, Promise.resolve(true)).then(function () { IX = null; GEO = null; GEO30 = null; NAME_IX = null; ZONES = null; ZONES30 = null; ZK = {}; return ready(); });
   }
 
 
@@ -2122,7 +2339,9 @@
     ready: ready, ensureData: ensureData,
     kecamatan: kecamatan, kecamatanIdOf: kecamatanIdOf, boundsOf: boundsOf, gmapsQuery: gmapsQuery,
     /* item 30: focus / outer ring / beyond, computed from data/admin-areas.js */
-    zones: zones, zoneOf: function (id) { var z = zones(); return z ? z.zoneOf(id) : null; },
+    zones: zones, zoneOf: function (id, km) { var z = zones(km); return z ? z.zoneOf(id) : null; },
+    /* v6 (V6_SPEC §3.3): the zone set in effect on the map, 15 | 30 (30 while MCD.map.zones() is {mode: 'kecamatan', km: 30}) */
+    zoneKm: function () { return zoneKm(); },
     stats: stats, statsFromRecords: statsFromRecords,
     layers: layers, legendGroups: legendGroups, legend: legend, priority: priority,
     hit: hit, tooltip: tooltip, popup: popup, closePopup: closePopup, bind: bind, openBound: openBound,

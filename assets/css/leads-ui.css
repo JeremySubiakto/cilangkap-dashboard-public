@@ -1,0 +1,169 @@
+/* ==========================================================================
+ * The masked lead list (MCD.leadsUi, assets/js/leads-ui.js; docs/V7_SPEC.md §8.3, §9, D17, D28, D32).
+ * .lu-panel   the Leads panel: a modal glass sheet, 880 px wide (or the window − 32 px), offered at 1024 px and wider
+ * .lu-dialog  the confirm dialogs of the switch (initials, the approval check)
+ * .lu-card    the switch card and the import card that Data & Privasi mounts
+ * .lu-rail / .lu-chip   the count lines in rails and the Posisi cabang lead chip
+ * Calm and quiet: one accent per state, counts as text only (never a bar or a proportional width, §9.3), numbers
+ * tabular, text 12 px or larger. Tokens only (tokens.css, brand.css); Day and Night through the tokens.
+ * Print (D28): while the panel is open the page prints one line, "Halaman ini memuat data bank …".
+ * ========================================================================== */
+
+/* ── modal layer ────────────────────────────────────────────────────────── */
+.lu-scrim { position: fixed; inset: 0; z-index: var(--z-modal); background: var(--scrim); }
+.lu-panel, .lu-dialog {
+  position: fixed; left: 50%; z-index: var(--z-modal); transform: translateX(-50%);
+  background: var(--glass-bg-pop); border: 1px solid var(--glass-border); border-radius: var(--r-glass);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
+  color: var(--text-1);
+}
+.lu-panel {
+  top: 24px; width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.lu-panel:focus { outline: none; }
+.lu-panel:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.lu-panel__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none;
+  padding: 16px 20px 12px; border-bottom: 1px solid var(--rule);
+}
+.lu-panel__title { margin: 0; font: 400 var(--fs-section)/var(--lh-section) var(--font-serif); color: var(--text-1); }
+.lu-panel__body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 20px 18px; display: grid; gap: 10px; align-content: start; }
+
+.lu-dialog { top: 16vh; width: min(480px, calc(100vw - 32px)); padding: var(--s-6); display: grid; gap: 10px; }
+.lu-dialog__t { margin: 0 0 4px; font: 400 var(--fs-section)/var(--lh-section) var(--font-serif); color: var(--text-1); }
+
+/* the panel and the dialogs rise and settle like the app's dialogs; instant with reduced motion */
+.lu-scrim { animation: lu-fade var(--dur-base) var(--ease-out) backwards; }
+.lu-panel, .lu-dialog { animation: lu-rise var(--dur-base) var(--ease-out) backwards; }
+@keyframes lu-fade { from { opacity: 0; } }
+@keyframes lu-rise { from { opacity: 0; scale: .98; } }
+@media (prefers-reduced-motion: reduce) {
+  .lu-scrim, .lu-panel, .lu-dialog { animation: none; }
+}
+
+/* ── shared text ────────────────────────────────────────────────────────── */
+.lu-note { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.lu-note.is-strong { color: var(--text-1); font-weight: 600; }
+.lu-file { margin: 0; font: 500 13px/19px var(--font-sans); color: var(--text-1); overflow-wrap: anywhere; }
+.lu-warn { padding: 6px 10px; border-left: 2px solid var(--warn); background: var(--warn-a10); color: var(--text-1); border-radius: var(--r-ctl); }
+.lu-err { margin: 0; font: 500 13px/19px var(--font-sans); color: var(--neg); }
+.lu-err[hidden] { display: none; }
+.lu-mono { font: 500 12.5px/18px var(--font-mono); letter-spacing: .02em; color: var(--text-2); }
+.lu-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.lu-link {
+  display: inline; padding: 0; border: 0; background: none; cursor: pointer;
+  font: 600 13px/18px var(--font-sans); color: var(--text-1);
+  text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
+}
+.lu-link:hover { text-decoration-color: var(--text-1); }
+
+/* ── rule chips, the off line, the headline ─────────────────────────────── */
+.lu-rules { display: flex; flex-wrap: wrap; gap: 8px; }
+.lu-rule { gap: 8px; }
+.lu-rule__n { font: 600 12.5px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
+.lu-rule[aria-pressed="true"] .lu-rule__n { color: var(--btn-primary-ink); }
+.lu-rule.is-off { opacity: .55; cursor: help; }
+.lu-off { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.lu-headline { margin: 4px 0 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+
+/* grouping: one at a time (no second filter, no cross table) */
+.lu-by { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lu-by__l { font: 500 12px/16px var(--font-sans); color: var(--text-3); margin-right: 2px; }
+.lu-by__opt {
+  height: 30px; padding: 0 10px; border: 1px solid var(--rule-strong); border-radius: var(--r-ctl); background: transparent;
+  font: 500 12.5px/1 var(--font-sans); color: var(--text-2); cursor: pointer;
+}
+.lu-by__opt:hover { background: var(--surface-hover); color: var(--text-1); }
+.lu-by__opt[aria-pressed="true"] { background: var(--btn-primary-bg); border-color: var(--btn-primary-rule); color: var(--btn-primary-ink); }
+
+/* the table: counts as text only, never a bar or a width */
+.lu-tbl-wrap { max-height: 46vh; }
+.lu-tbl th[scope="row"] { font-weight: 500; text-align: left; padding: 0 8px; border-bottom: 1px solid var(--rule); white-space: normal; overflow-wrap: anywhere; }
+.lu-tbl tr.is-pooled th[scope="row"] { color: var(--text-2); font-style: italic; }
+.lu-cnt { font-variant-numeric: tabular-nums; }
+.lu-tbl__act { text-align: right; }
+.lu-tnote, .lu-withheld { font-size: 12.5px; color: var(--text-3); }
+
+/* the row list */
+.lu-back {
+  justify-self: start; padding: 0; border: 0; background: none; cursor: pointer;
+  font: 600 13px/18px var(--font-sans); color: var(--text-2);
+}
+.lu-back:hover { color: var(--text-1); }
+.lu-rows__h { margin: 2px 0 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+.lu-rows { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
+.lu-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 28px; border-bottom: 1px solid var(--rule); }
+.lu-row__n { font: 600 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); }
+.lu-more { justify-self: start; }
+
+.lu-foot { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--rule); }
+.lu-foot .lu-note { font-size: 12.5px; color: var(--text-3); }
+
+/* the cover while the page is hidden (D17): nothing else of the list stays in the DOM */
+.lu-cover { display: grid; justify-items: start; gap: 12px; padding: 24px 0; }
+.lu-cover__t { font: 500 14px/20px var(--font-sans); color: var(--text-1); }
+
+/* ── count lines in rails and the Posisi cabang chip ────────────────────── */
+.lu-rail { display: grid; gap: 4px; margin-top: 6px; }
+.lu-rail__line {
+  justify-self: start; padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+  font: 500 12.5px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums;
+  text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px;
+}
+.lu-rail__line:hover { color: var(--text-1); text-decoration-color: var(--text-1); }
+.lu-chip { font-variant-numeric: tabular-nums; }
+.lu-rail__line:focus-visible, .lu-link:focus-visible, .lu-back:focus-visible, .lu-by__opt:focus-visible, .lu-switch:focus-visible {
+  outline: 2px solid var(--signal); outline-offset: 2px;
+}
+
+/* ── cards mounted by Data & Privasi ────────────────────────────────────── */
+.lu-card { display: grid; gap: 10px; }
+.lu-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.lu-card__t { margin: 0; font: 600 15px/20px var(--font-sans); color: var(--text-1); }
+.lu-lines { margin: 0; padding-left: 18px; display: grid; gap: 4px; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.lu-approval { font-size: 12.5px; color: var(--text-3); }
+.lu-banner { display: grid; gap: 6px; justify-items: start; padding: 10px 12px; border-left: 2px solid var(--warn); background: var(--warn-a10); border-radius: var(--r-ctl); }
+.lu-banner .lu-note { color: var(--text-1); }
+
+/* the switch "Impor daftar leads · Mati | Nyala" */
+.lu-switch {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 12px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r-ctl); background: transparent; cursor: pointer;
+  font: 500 13px/18px var(--font-sans); color: var(--text-1);
+}
+.lu-switch__v { min-width: 44px; padding: 3px 8px; border-radius: var(--r-ctl); background: var(--surface-well); color: var(--text-2); font-weight: 600; text-align: center; }
+.lu-switch[aria-checked="true"] { border-color: var(--rule-gold); }
+.lu-switch[aria-checked="true"] .lu-switch__v { background: var(--gold-a16); color: var(--text-1); }
+
+.lu-field { max-width: 320px; }
+.lu-initials { text-transform: uppercase; max-width: 120px; }
+.lu-check { display: flex; align-items: flex-start; gap: 8px; font: 500 13px/19px var(--font-sans); color: var(--text-1); cursor: pointer; }
+.lu-check input { margin-top: 3px; flex: none; width: 16px; height: 16px; }
+
+/* import steps "1 Baca file · 2 Periksa kolom · 3 Impor · 4 Laporan" */
+.lu-steps { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; }
+.lu-step { font: 500 12px/16px var(--font-sans); color: var(--text-3); }
+.lu-step.is-done { color: var(--text-2); }
+.lu-step.is-on { color: var(--text-1); font-weight: 600; }
+.lu-filein { font: 400 13px/19px var(--font-sans); color: var(--text-2); max-width: 100%; }
+.lu-map { max-height: 52vh; }
+.lu-map .tbl td { white-space: normal; }
+.lu-select { min-width: 190px; }
+.lu-st { font-weight: 600; }
+.lu-map tr.is-ditolak .lu-st { color: var(--neg); }
+.lu-map tr.is-diabaikan .lu-st { color: var(--text-3); }
+.lu-why { color: var(--text-2); font-size: 12.5px; }
+.lu-date { max-width: 200px; }
+.lu-progress { margin: 0; font: 500 13px/19px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.lu-fold summary { cursor: pointer; font: 600 13px/19px var(--font-sans); color: var(--text-1); }
+.lu-cols, .lu-issues { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
+.lu-cols b { color: var(--text-1); font-weight: 600; }
+
+/* ── print (D28): one line instead of the bank data ─────────────────────── */
+.lu-print-note { display: none; }
+@media print {
+  body.lu-noprint > *:not(.lu-print-note) { display: none !important; }
+  body.lu-noprint .lu-print-note { display: block !important; margin: 24mm 16mm; color: black; font: 400 12pt/1.4 var(--font-sans); }
+}

@@ -19,7 +19,15 @@
  *     passing rows, entities, board) · board(d, {mode, sort, q})
  *   score(e) · fit(e) · calc(inputs) · sppRef(e) · normYayasan(s) · entKey(s)
  *   matchCustomers(idx, records) → rel   (NPSN / NPYP / exact foundation name)
- *   pipeline.{get, set, quickAdd, remove, all, clear, exportJson, importJson, persisted}
+ *   pipeline.{get, set, quickAdd, remove, all, clear, count, exportJson, importJson, persisted, ready, status,
+ *     orphans, _reset}: v6 (docs/V6_SPEC.md §7) MCD.seal.pipeline('schools.pipeline', …) when the shell has
+ *     MCD.seal (sealed with the gate's session key), else a list kept in memory only (never written as plain text)
+ *   pipelineLine() → {tone, text, action?} | null: the storage line of the Tindak lanjut tab (§7.6)
+ *   lazy(name) → Promise · dataStatus(name): v6 data files (school-students, institution-tiers, school-contacts)
+ *     through MCD.app.lazy, else one classic script injection (never fetch); emits 'data' {name, state}
+ *   students.idOf · byId · byNpsn · row30 · view(idx, i, opts): v6 students of every SMA, SMK and MA within 30 km
+ *     (data/school-students.js) under the display rule of V6_SPEC §1.1; data/sma-students.js stays the source for
+ *     the SMA within 15 km (the pilot numbers 366 / 160.411 / 79.985)
  *   leadsCsv(idx, d, rel, {grain}) → string (BOM, confidentiality line, CSV guard)
  *   config: levels, statuses, bands, stages, programmes, networks, competitor notes,
  *     calculator defaults, compliance notes, sources. on(evt, fn) / emit(evt, x).
@@ -456,6 +464,60 @@
     return S._p;
   };
 
+  /* ================================================ v6 lazy data (docs/V6_SPEC.md §9.1) */
+
+  /*
+   * The three school files of v6, each one classic script loaded after sign-in, never linked in index.html and never
+   * fetched: MCD.app.lazy(name) when the shell knows the name (SHELL lane), else one script injection here.
+   *   school-students   data/school-students.js   MCD_SCHOOL_STUDENTS    (first 30 km scope, first SMK / MA switch, idle)
+   *   institution-tiers data/institution-tiers.js MCD_INSTITUTION_TIERS  (idle after mount, a kelas biaya chip or fold)
+   *   school-contacts   data/school-contacts.js   MCD_SCHOOL_CONTACTS    (first school card, a CSV export, idle)
+   * dataStatus(name) → 'idle' | 'loading' | 'ready' | 'error'; every change emits 'data' {name, state}.
+   */
+  var LAZY_FILES = {
+    'school-students': { src: 'data/school-students.js', global: 'MCD_SCHOOL_STUDENTS' },
+    'institution-tiers': { src: 'data/institution-tiers.js', global: 'MCD_INSTITUTION_TIERS' },
+    'school-contacts': { src: 'data/school-contacts.js', global: 'MCD_SCHOOL_CONTACTS' }
+  };
+  var LAZY_STATE = {}, LAZY_P = {};
+  function usable(g) { return !!g && Array.isArray(g.rows) && !!(g.meta && g.meta.generated); }
+  function setLazy(name, state) { if (LAZY_STATE[name] === state) return; LAZY_STATE[name] = state; S.emit('data', { name: name, state: state }); }
+  S.lazyFiles = LAZY_FILES;
+  S.dataStatus = function (name) {
+    var f = LAZY_FILES[name];
+    if (!f) return 'error';
+    if (usable(root[f.global])) return 'ready';
+    return LAZY_STATE[name] || 'idle';
+  };
+  function injectScript(src) {
+    var doc = root.document;
+    return new Promise(function (res, rej) {
+      if (!doc || typeof doc.createElement !== 'function' || !doc.head) { rej(new Error('no document')); return; }
+      var s = doc.createElement('script');
+      s.src = src; s.async = true;
+      s.addEventListener('load', function () { res(); });
+      s.addEventListener('error', function () { if (s.parentNode) s.parentNode.removeChild(s); rej(new Error('Tidak dapat memuat ' + src)); });
+      doc.head.appendChild(s);
+    });
+  }
+  /** lazy(name) → Promise<global>: one load per name at a time; a failed load can be tried again ("Coba lagi"). */
+  S.lazy = function (name) {
+    var f = LAZY_FILES[name];
+    if (!f) return Promise.reject(new Error('unknown data: ' + name));
+    if (usable(root[f.global])) { setLazy(name, 'ready'); return Promise.resolve(root[f.global]); }
+    if (LAZY_P[name]) return LAZY_P[name];
+    setLazy(name, 'loading');
+    var A = MCD.app;
+    function own() { return injectScript(f.src).then(function () { if (!usable(root[f.global])) throw new Error(f.global + ' missing'); return root[f.global]; }); }
+    var p = (A && typeof A.lazy === 'function'
+      ? Promise.resolve().then(function () { return A.lazy(name); }).then(function (g) { return usable(g) ? g : (usable(root[f.global]) ? root[f.global] : own()); },
+        function (e) { if (/unknown lazy data/i.test(String(e && e.message))) return own(); throw e; })
+      : own());
+    LAZY_P[name] = p.then(function (g) { LAZY_P[name] = null; setLazy(name, 'ready'); return g; },
+      function (e) { LAZY_P[name] = null; setLazy(name, 'error'); throw e; });
+    return LAZY_P[name];
+  };
+
   /* ============================================================ filters (§7) */
 
   S.defaultFilters = function () {
@@ -819,34 +881,50 @@
 
   /* ============================================================ pipeline (§9.8) */
 
+  /*
+   * v6 (docs/V6_SPEC.md §7, D8): the list is sealed. With MCD.seal (assets/js/seal.js, the SEAL lane) S.pipeline
+   * delegates to MCD.seal.pipeline('schools.pipeline', …), which keeps this exact synchronous API, encrypts every write
+   * with the gate's session key, migrates the old plain key once and merges the copy in the encrypted file. Without
+   * MCD.seal (Node tests, an old shell) the list lives in memory only: it is never written as plain text. The old plain
+   * list (mcd.schools.pipeline.v1) is read once so staff still see it, but it is never written back or removed here.
+   */
   var PIPE_KEY = 'mcd.schools.pipeline.v1';
-  var pipeMem = null, pipePersisted = true;
+  var PIPE_NAME = 'schools.pipeline';
+  var PIPE_KEY_RE = /^(npyp|tni|y|npsn|f|p|e):/;
+  var GEMPITA_RB = 'Sekolah tidak dapat mengikuti Bill Reminder dan GEMPITA bersamaan (ketentuan GEMPITA 2026).';
+  var pipeMem = null;
   function pipeLoad() {
     if (pipeMem) return pipeMem;
     var raw = null;
-    try {
-      var st = MCD.util && MCD.util.storage;
-      raw = st ? st.get(PIPE_KEY, null) : null;
-      pipePersisted = !!(st && st.available());
-    } catch (e) { raw = null; pipePersisted = false; }
-    pipeMem = raw && raw.v === 1 && raw.data && typeof raw.data === 'object' ? raw.data : {};
+    try { var st = MCD.util && MCD.util.storage; raw = st ? st.get(PIPE_KEY, null) : null; } catch (e) { raw = null; }
+    pipeMem = {};
+    if (raw && raw.v === 1 && raw.data && typeof raw.data === 'object') {
+      Object.keys(raw.data).forEach(function (k) { if (PIPE_KEY_RE.test(k) && raw.data[k] && typeof raw.data[k] === 'object') pipeMem[k] = raw.data[k]; });
+    }
     return pipeMem;
   }
-  function pipeSave() {
-    try {
-      var st = MCD.util && MCD.util.storage;
-      pipePersisted = !!(st && st.set(PIPE_KEY, { v: 1, data: pipeMem }));
-    } catch (e) { pipePersisted = false; }
-    S.emit('pipeline', pipeMem);
-  }
+  function pipeSave() { S.emit('pipeline', pipeMem); }
   function cleanText(s, max) { return String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, ' ').slice(0, max); }
   function validStage(s) { return STAGES.some(function (x) { return x.id === s; }) ? s : 'baru'; }
   function nowIso() { try { return new Date().toISOString(); } catch (e) { return ''; } }
-  S.pipeline = {
+  /** GEMPITA and Referral Biller never run together on related keys (§9.8): the check the sealed pipeline runs too. */
+  function gempitaRule(k, patch, all, meta) {
+    if (!patch || !('program' in patch)) return null;
+    var p = patch.program === 'RB' || patch.program === 'GEMPITA' ? patch.program : '';
+    var other = p === 'RB' ? 'GEMPITA' : p === 'GEMPITA' ? 'RB' : null;
+    var related = (meta && meta.relatedKeys) || [];
+    all = all || {};
+    if (other && related.some(function (rk) { return rk !== k && all[rk] && all[rk].program === other; })) return GEMPITA_RB;
+    return null;
+  }
+  S.gempitaRule = gempitaRule;
+  var memPipe = {
     key: PIPE_KEY,
     all: function () { return pipeLoad(); },
     get: function (k) { return pipeLoad()[k] || null; },
-    persisted: function () { pipeLoad(); return pipePersisted; },
+    persisted: function () { return false; },
+    ready: function () { return Promise.resolve(true); },
+    status: function () { return 'memory'; },
     /** set(key, patch) → {ok, entry, error}. Refuses GEMPITA + Referral Biller on the same foundation (§9.8). */
     set: function (k, patch, meta) {
       if (!k) return { ok: false, error: 'Belum ada yayasan yang dipilih.' };
@@ -855,11 +933,8 @@
       patch = patch || {};
       if ('program' in patch) {
         var p = patch.program === 'RB' || patch.program === 'GEMPITA' ? patch.program : '';
-        var other = p === 'RB' ? 'GEMPITA' : p === 'GEMPITA' ? 'RB' : null;
-        var related = (meta && meta.relatedKeys) || [];
-        if (other && related.some(function (rk) { return rk !== k && all[rk] && all[rk].program === other; })) {
-          return { ok: false, error: 'Sekolah tidak dapat mengikuti Bill Reminder dan GEMPITA bersamaan (ketentuan GEMPITA 2026).' };
-        }
+        var bad = gempitaRule(k, patch, all, meta);
+        if (bad) return { ok: false, error: bad };
         next.program = p;
       }
       if ('stage' in patch) {
@@ -886,13 +961,18 @@
       if (!k) return { ok: false, error: 'SMA ini tidak memiliki NPSN. Tambahkan yayasannya ke tindak lanjut.' };
       var cur = pipeLoad()[k];
       if (cur) return { ok: true, entry: cur, existed: true };
-      var res = S.pipeline.set(k, { stage: 'baru' }, { label: label || '' });
+      var res = memPipe.set(k, { stage: 'baru' }, { label: label || '' });
       if (res && res.ok) res.existed = false;
       return res;
     },
     remove: function (k) { var all = pipeLoad(); if (all[k]) { delete all[k]; pipeSave(); } },
     clear: function () { pipeMem = {}; pipeSave(); },
     count: function () { return Object.keys(pipeLoad()).length; },
+    /** Keys of the list that are no longer in the data (knownKeys: a Set, an array or a function key → bool). */
+    orphans: function (known) {
+      var has = typeof known === 'function' ? known : known instanceof Set ? function (k) { return known.has(k); } : Array.isArray(known) ? function (k) { return known.indexOf(k) >= 0; } : function () { return true; };
+      return Object.keys(pipeLoad()).filter(function (k) { return !has(k); });
+    },
     exportJson: function () { return JSON.stringify({ v: 1, kind: 'mcd.schools.pipeline', exported: nowIso(), data: pipeLoad() }, null, 1); },
     /** Merges by key; the newer `t` wins. → {added, updated, kept} */
     importJson: function (text) {
@@ -902,7 +982,7 @@
       var all = pipeLoad(), added = 0, updated = 0, kept = 0;
       Object.keys(obj.data).forEach(function (k) {
         var inc = obj.data[k];
-        if (!inc || typeof inc !== 'object' || !/^(npyp|tni|y|npsn|f|p|e):/.test(k)) return;
+        if (!inc || typeof inc !== 'object' || !PIPE_KEY_RE.test(k)) return;
         var clean = { stage: validStage(inc.stage), owner: cleanText(inc.owner, 60), products: Array.isArray(inc.products) ? inc.products.filter(function (x) { return PRODUCTS.some(function (q) { return q.id === x; }); }) : [],
           program: inc.program === 'RB' || inc.program === 'GEMPITA' ? inc.program : '', nextStep: cleanText(inc.nextStep, 120),
           nextDate: /^\d{4}-\d{2}-\d{2}$/.test(String(inc.nextDate || '')) ? inc.nextDate : '', lastContact: /^\d{4}-\d{2}-\d{2}$/.test(String(inc.lastContact || '')) ? inc.lastContact : '',
@@ -916,6 +996,101 @@
       return { ok: true, added: added, updated: updated, kept: kept };
     },
     _reset: function () { pipeMem = null; }
+  };
+
+  /* The sealed pipeline when MCD.seal is there (bound on first use, so a seal.js loaded after this file still counts). */
+  var sealedPipe = null, sealOff = null;
+  function sealApi() { var Z = MCD.seal; return Z && typeof Z === 'object' && typeof Z.pipeline === 'function' ? Z : null; }
+  function pipeImpl() {
+    if (sealedPipe) return sealedPipe;
+    var Z = sealApi();
+    if (!Z) return memPipe;
+    var P = null;
+    try { P = Z.pipeline(PIPE_NAME, { keyRe: PIPE_KEY_RE, stages: STAGES, products: PRODUCTS, programs: PIPE_PROGRAMS, check: gempitaRule }); } catch (e) { P = null; }
+    if (!P || typeof P.get !== 'function' || typeof P.set !== 'function') return memPipe;
+    sealedPipe = P;
+    /* entries made in memory before the seal was bound (should not happen in the app's load order) are kept */
+    if (pipeMem && Object.keys(pipeMem).length && typeof P.importJson === 'function') {
+      try { P.importJson({ v: 1, data: pipeMem }); } catch (e) { /* the memory copy is dropped with the page */ }
+    }
+    pipeMem = null;
+    /* the sealed store finished loading, merged another tab or the encrypted copy: the lists redraw */
+    if (typeof Z.on === 'function') {
+      try { sealOff = Z.on(function (e) { if (!e || !e.name || e.name === PIPE_NAME) S.emit('pipeline', null); }); } catch (e) { sealOff = null; }
+    }
+    if (typeof P.ready === 'function') { try { P.ready().then(function () { S.emit('pipeline', null); }, function () { S.emit('pipeline', null); }); } catch (e) { /* ignore */ } }
+    return P;
+  }
+  function pcall(fn, args, fallback) {
+    var P = pipeImpl(), f = P[fn];
+    if (typeof f !== 'function') return fallback;
+    return f.apply(P, args);
+  }
+  function emitAfter(res) { if (sealedPipe) S.emit('pipeline', null); return res; }
+  S.pipeline = {
+    key: PIPE_KEY,
+    name: PIPE_NAME,
+    keyRe: PIPE_KEY_RE,
+    all: function () { return pcall('all', [], {}) || {}; },
+    get: function (k) { return pcall('get', [k], null) || null; },
+    persisted: function () { return !!pcall('persisted', [], false); },
+    ready: function () { var r = pcall('ready', [], null); return r && typeof r.then === 'function' ? r : Promise.resolve(true); },
+    /** 'loading' | 'ready' | 'memory' | 'old-password' | 'damaged' (memory without MCD.seal) */
+    status: function () { return pcall('status', [], 'memory') || 'memory'; },
+    sealed: function () { pipeImpl(); return !!sealedPipe; },
+    /** True once MCD.seal moved the old plain list into the sealed store (the section shows its line once). */
+    migrated: function () { return !!pcall('migrated', [], false); },
+    set: function (k, patch, meta) { return emitAfter(pcall('set', [k, patch, meta], { ok: false, error: 'Daftar tindak lanjut tidak dapat disimpan di komputer ini.' })); },
+    quickAdd: function (k, label) {
+      if (!k) return { ok: false, error: 'SMA ini tidak memiliki NPSN. Tambahkan yayasannya ke tindak lanjut.' };
+      var P = pipeImpl();
+      if (typeof P.quickAdd === 'function') return emitAfter(P.quickAdd(k, label));
+      var cur = P.get(k);
+      if (cur) return { ok: true, entry: cur, existed: true };
+      var res = P.set(k, { stage: 'baru' }, { label: label || '' });
+      if (res && res.ok) res.existed = false;
+      return emitAfter(res);
+    },
+    remove: function (k) { return emitAfter(pcall('remove', [k])); },
+    clear: function () { return emitAfter(pcall('clear', [])); },
+    count: function () { var n = pcall('count', [], null); return typeof n === 'number' ? n : Object.keys(S.pipeline.all()).length; },
+    orphans: function (known) {
+      var P = pipeImpl();
+      if (typeof P.orphans === 'function') return P.orphans(known) || [];
+      return memPipe.orphans.call(null, known);
+    },
+    exportJson: function () { return pcall('exportJson', [], ''); },
+    importJson: function (text) { return emitAfter(pcall('importJson', [text], { ok: false, error: 'File tidak dapat dibaca. Pilih file ekspor tindak lanjut (JSON).' })); },
+    /** Test hook (tests/schools.test.mjs, schools-v3.test.mjs): drop the memory copy; a sealed store resets its own. */
+    _reset: function () {
+      if (sealedPipe && typeof sealedPipe._reset === 'function') { try { sealedPipe._reset(); } catch (e) { /* ignore */ } }
+      pipeMem = null;
+    },
+    /** Test hook: forget the bound sealed store (a new MCD.seal is bound on the next use). */
+    _unbind: function () { if (typeof sealOff === 'function') { try { sealOff(); } catch (e) { /* ignore */ } } sealOff = null; sealedPipe = null; }
+  };
+  var PIPE_LINES = {
+    memory: 'Tindak lanjut hanya tersimpan selama halaman terbuka. Penyimpanan terenkripsi belum aktif.',
+    blocked: 'Daftar tindak lanjut tidak tersimpan di perangkat ini karena penyimpanan browser diblokir. Ekspor sebelum menutup halaman.',
+    quota: 'Penyimpanan browser penuh. Ekspor daftar, lalu hapus entri lama.',
+    old: 'Daftar tindak lanjut lama terenkripsi dengan kata sandi sebelumnya.',
+    damaged: 'Daftar tindak lanjut di komputer ini rusak dan tidak dapat dibuka. Daftar baru dimulai.',
+    sealed: 'Terenkripsi dengan kata sandi dashboard.'
+  };
+  S.pipelineLines = PIPE_LINES;
+  /**
+   * pipelineLine() → {tone: 'warn' | 'none', text, action?: 'followups'} | null (sealed and ready: nothing to say).
+   * memory: the reason from MCD.seal.reason() (no-storage, quota, else no key); old-password links to Data & Privasi.
+   */
+  S.pipelineLine = function () {
+    var st = 'memory';
+    try { st = S.pipeline.status(); } catch (e) { st = 'memory'; }
+    if (st === 'ready' || st === 'loading') return null;
+    if (st === 'old-password') return { tone: 'warn', text: PIPE_LINES.old, action: 'followups' };
+    if (st === 'damaged') return { tone: 'warn', text: PIPE_LINES.damaged };
+    var Z = MCD.seal, why = null;
+    if (Z && typeof Z.reason === 'function') { try { why = Z.reason(); } catch (e) { why = null; } }
+    return { tone: 'warn', text: why === 'no-storage' ? PIPE_LINES.blocked : why === 'quota' ? PIPE_LINES.quota : PIPE_LINES.memory };
   };
   /** Days since the last stage change (null without history). */
   S.daysInStage = function (entry, from) {
@@ -956,21 +1131,30 @@
     if (opts.grain === 'school') {
       /* pupils and pupils aged 17+ follow the shared display rule (students.*); road distance and minutes from
          the branch come from opts.distance(i) → {km, min} when the section passes it */
-      lines.push(['npsn', 'school', 'level', 'status', 'foundation', 'foundation_key', 'tni_foundation', 'matra', 'npyp', 'pupils', 'pupils_17plus', 'pupils_17plus_source', 'pupils_under17_simpel', 'lat', 'lon', 'km_from_mabes', 'road_km_from_kcp', 'minutes_from_kcp', 'band', 'data_source', 'inferred', 'mandiri_customer', 'pipeline_stage', 'owner', 'target_products', 'attribution'].join(','));
+      /* v6 (V6_SPEC §4.2, §5.2): kelas biaya and the institutional contacts come from opts.tier(i) and opts.contact(i)
+         (the section's adapters); a contact column is empty when the section leaves it out (Samarkan nama, a site
+         that may not be a link). opts.info(i): students under the v6 display rule (every level); opts.level(i). */
+      lines.push(['npsn', 'school', 'level', 'status', 'foundation', 'foundation_key', 'tni_foundation', 'matra', 'npyp', 'pupils', 'pupils_17plus', 'pupils_17plus_source', 'pupils_under17_simpel', 'lat', 'lon', 'km_from_mabes', 'road_km_from_kcp', 'minutes_from_kcp', 'band', 'data_source', 'inferred', 'mandiri_customer', 'pipeline_stage', 'owner', 'target_products',
+        'kelas_biaya', 'dasar_kelas_biaya', 'biaya_resmi', 'tahun_biaya', 'sumber_biaya', 'telepon', 'telepon_seluler_resmi', 'email', 'situs_resmi', 'sumber_kontak', 'attribution'].join(','));
       for (var k = 0; k < d.rows.length; k++) {
         var i = d.rows[k], e = idx.ent[i] >= 0 ? idx.ents[idx.ent[i]] : null, t = idx.tni[i] >= 0 ? idx.tniRows[idx.tni[i]] : null;
-        var pe = e ? pipe[e.key] : null, ps = idx.npsn[i] ? pipe['npsn:' + idx.npsn[i]] : null;
+        var si = isFn0(opts.info) ? opts.info(i) : S.students.info(idx, i), dv = isFn0(opts.distance) ? opts.distance(i) : null;
+        var npsn = idx.npsn[i] || (si && si.npsn) || '';
+        var pe = e ? pipe[e.key] : null, ps = npsn ? pipe['npsn:' + npsn] : null;
         var relv = rel ? (isActive(rel, idx, i) ? 'Y' : 'N') : '';
-        var si = S.students.info(idx, i), dv = isFn0(opts.distance) ? opts.distance(i) : null;
         var pupils = si && si.students != null ? si.students : (idx.stu[i] >= 0 ? idx.stu[i] : '');
         var k17ok = !!(si && si.k17 != null && !si.inactive);
-        lines.push([idx.npsn[i], idx.name[i], LEVELS[idx.jen[i]].label, STATUSES[idx.st[i]].label, idx.yay[i] || (e ? e.label : ''), e ? e.key : '',
+        var tr = isFn0(opts.tier) ? (opts.tier(i) || {}) : {}, ct = isFn0(opts.contact) ? (opts.contact(i) || {}) : {};
+        var lvl = isFn0(opts.level) ? opts.level(i) : null;
+        lines.push([npsn, idx.name[i], lvl || LEVELS[idx.jen[i]].label, STATUSES[idx.st[i]].label, idx.yay[i] || (e ? e.label : ''), e ? e.key : '',
           idx.tni[i] >= 0 ? 'Y' : 'N', MATRA[idx.matra[i]], t && t.npyp ? t.npyp : '', pupils,
           k17ok ? si.k17 : '', k17ok ? (si.k17Official ? 'data resmi' : 'perkiraan') : (si && si.inactive ? 'kemungkinan tidak aktif' : ''),
           k17ok && si.students != null ? Math.max(0, si.students - si.k17) : '',
           fixed(idx.lat[i], 3), fixed(idx.lon[i], 3), fixed(idx.dist[i], 2), dv && isNum(dv.km) ? fixed(dv.km, 1) : '', dv && isNum(dv.min) ? Math.round(dv.min) : '', BANDS[idx.band[i]].label,
           idx.src[i] === 1 ? 'OpenStreetMap/Overture' : idx.src[i] === 2 ? 'daftar yayasan TNI (Dapodik)' : 'Dapodik',
           idx.inf[i] ? 'Y' : 'N', relv, pe ? stageLabel(pe.stage) : '', pe ? pe.owner : '', productText((ps || pe || {}).products),
+          tr.kelas || '', tr.dasar || '', tr.biaya || '', tr.tahun || '', tr.sumber || '',
+          ct.telepon || '', ct.seluler || '', ct.email || '', ct.situs || '', ct.sumber || '',
           attribution + (idx.src[i] === 1 ? ' · OSM: ODbL, wajib berbagi serupa jika basis data turunan disebarkan.' : '')].map(csvCell).join(','));
       }
     } else {
@@ -1200,6 +1384,116 @@
       list.sort(function (x, y) { return (by === 'students' ? y.students - x.students : k17Of(y).n - k17Of(x).n) || x.distKm - y.distKm; });
       return isNum(o.limit) ? list.slice(0, o.limit) : list;
     }
+  };
+
+  /* ============== v6: students of every SMA, SMK and MA within 30 km (docs/V6_SPEC.md §1.1, D16) */
+
+  /*
+   * window.MCD_SCHOOL_STUDENTS (data/school-students.js, docs/SCHOOL_STUDENTS.md): the app's own SMA, SMK and MA
+   * within 30 km, one row per app school, keyed by the app's id (idOf). DISPLAY RULE (every level):
+   *   1. duplicateOf: the same school as another row: hidden (map, lists, counts);
+   *   2. closedLikely or 0 students: "kemungkinan tidak aktif": drawn faded, listed, never counted;
+   *   3. students null: listed and counted in "{n} sekolah", not in student sums (the cause in words);
+   *   4. studentsSource 'perkiraan': marked, with the row note.
+   * The SMA within 15 km keep data/sma-students.js and its own rule (the pilot numbers, D1 and D16). With another
+   * level shown, a pilot SMA whose 30 km twin is a duplicateOf a row of that level (the Labiomed point, counted on its
+   * SMK row) is hidden, so its students count once (§1.1 sum rule). `extra` (Dapodik schools the app's map lacks) is
+   * never read here (D16).
+   *
+   *   students.idOf(idx, i) → 'npsn:<NPSN>' | 'app:<lon>,<lat>'      students.file30() → the global | null
+   *   students.byId(id) · byNpsn(npsn) → row | null                   students.row30(idx, i) → row | null
+   *   students.levelOf(idx, i) → 'SMA' | 'SMK' | 'MA' | null
+   *   students.view(idx, i, {shown: {SMA, SMK, MA}}) → {src: 'pilot' | 'file' | 'none', students, perGrade,
+   *     studentsOfficial, k17, k17Official, duplicate, duplicateOf, inactive, closedLikely, missing: null | 'osm' |
+   *     'closed' | 'dapodik' | 'loading' | 'failed', semester, olderTable, note, npsn, npsnMatched, spk, level, id} | null
+   *   students.sum(idx, rows, opts) → {schools, students, studentsN, k17, inactive, noData}
+   */
+  var F30 = { D: null, byId: null, byNpsn: null };
+  function file30() { var D = root.MCD_SCHOOL_STUDENTS; return D && Array.isArray(D.rows) && D.meta ? D : null; }
+  function f30() {
+    var D = file30();
+    if (!D) return null;
+    if (F30.D === D) return F30;
+    var byId = new Map(), byNp = new Map();
+    D.rows.forEach(function (r) {
+      if (!r || !r.id) return;
+      byId.set(String(r.id), r);
+      if (r.npsn && !byNp.has(String(r.npsn)) && !Object.prototype.hasOwnProperty.call(r, 'duplicateOf')) byNp.set(String(r.npsn), r);
+    });
+    F30 = { D: D, byId: byId, byNpsn: byNp };
+    return F30;
+  }
+  function idOf(idx, i) {
+    if (!idx || i == null || i < 0 || i >= idx.n) return null;
+    return idx.npsn[i] ? 'npsn:' + idx.npsn[i] : 'app:' + idx.lon[i].toFixed(5) + ',' + idx.lat[i].toFixed(5);
+  }
+  function levelOf(idx, i) {
+    if (!idx || i == null || i < 0 || i >= idx.n) return null;
+    if (idx.jen[i] === 4) return 'SMK';
+    if (idx.jen[i] !== 3) return null;
+    var c = smaClass(idx.name[i], !!idx.npsn[i]);
+    return c === 1 ? 'SMA' : c === 2 ? 'MA' : null;
+  }
+  function hasOwn(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
+  S.students.idOf = idOf;
+  S.students.levelOf = levelOf;
+  S.students.file30 = file30;
+  S.students.ready30 = function () { return !!file30(); };
+  S.students.byId = function (id) { var F = f30(); return F && id != null ? F.byId.get(String(id)) || null : null; };
+  S.students.byNpsn = function (npsn) { var F = f30(); return F && npsn ? F.byNpsn.get(String(npsn)) || null : null; };
+  S.students.row30 = function (idx, i) { var id = idOf(idx, i); return id ? S.students.byId(id) : null; };
+  S.students.view = function (idx, i, opts) {
+    var level = levelOf(idx, i);
+    if (!level) return null;
+    opts = opts || {};
+    var shown = opts.shown || { SMA: true };
+    var D = file30(), r = D ? S.students.row30(idx, i) : null;
+    var pilot = level === 'SMA' ? S.students.info(idx, i) : null;
+    if (pilot) {
+      var out = Object.assign({}, pilot, { src: 'pilot', level: level, id: idOf(idx, i), missing: null, closedLikely: false, olderTable: false,
+        npsn: idx.npsn[i] || (r && r.npsn) || null, npsnMatched: !!(r && r.npsnMatched) });
+      /* the sum rule: the 30 km twin of a pilot SMA is a duplicate point of a row of another level that is shown */
+      if (!out.duplicate && r && hasOwn(r, 'duplicateOf') && r.duplicateOf) {
+        var tw = S.students.byNpsn(r.duplicateOf);
+        if (tw && tw.level !== 'SMA' && shown[tw.level]) { out.duplicate = true; out.duplicateOf = String(r.duplicateOf); out.twin = true; }
+      }
+      if (!out.duplicate && out.students == null && !out.inactive) out.missing = 'dapodik';
+      return out;
+    }
+    if (!r) {
+      var st = S.dataStatus('school-students');
+      return { src: 'none', level: level, id: idOf(idx, i), students: null, perGrade: null, studentsOfficial: false, k17: null, k17Official: false,
+        duplicate: false, duplicateOf: null, inactive: false, closedLikely: false, missing: D ? 'dapodik' : (st === 'error' ? 'failed' : 'loading'),
+        semester: null, olderTable: false, note: null, npsn: idx.npsn[i] || null, npsnMatched: false, spk: false, kecamatanId: null, kelurahanId: null };
+    }
+    var dup = hasOwn(r, 'duplicateOf');
+    var inact = !dup && (r.closedLikely === true || r.students === 0);
+    var students = dup || !isNum(r.students) ? null : r.students;
+    var k17 = dup || inact || !isNum(r.age17) ? null : r.age17;
+    var missing = null;
+    if (!dup && students == null) missing = !r.npsn ? 'osm' : r.closedLikely ? 'closed' : 'dapodik';
+    var main = D.meta && D.meta.semesterMain;
+    return {
+      src: 'file', level: level, id: r.id, students: students, perGrade: dup ? null : (r.perGrade || null), studentsOfficial: r.studentsSource === 'resmi',
+      k17: k17, k17Official: r.age17Source === 'resmi', duplicate: dup, duplicateOf: dup ? (r.duplicateOf || null) : null, inactive: inact,
+      closedLikely: r.closedLikely === true, missing: missing, semester: r.semester || null, olderTable: !!(r.semester && main && r.semester !== main),
+      note: r.note || null, npsn: r.npsn || null, npsnMatched: r.npsnMatched === true, spk: r.spk === true, status: r.status || null,
+      kecamatanId: r.kecamatanId || null, kelurahanId: r.kelurahanId || null
+    };
+  };
+  /** Sums under the display rule over rows (index rows): what every total of the section shows. */
+  S.students.sum = function (idx, rows, opts) {
+    var t = { schools: 0, students: 0, studentsN: 0, k17: 0, k17N: 0, inactive: 0, noData: 0, hidden: 0 };
+    (rows || []).forEach(function (i) {
+      var v = S.students.view(idx, i, opts);
+      if (!v) return;
+      if (v.duplicate) { t.hidden++; return; }
+      if (v.inactive) { t.inactive++; return; }
+      t.schools++;
+      if (v.students != null) { t.students += v.students; t.studentsN++; } else t.noData++;
+      if (v.k17 != null) { t.k17 += v.k17; t.k17N++; }
+    });
+    return t;
   };
 
   /* ================================ area aggregates (COPY_STYLE_EN item 9, PHASE3 §1) */
