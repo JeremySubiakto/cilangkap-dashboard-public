@@ -1,10 +1,11 @@
 /* ==========================================================================
  * MCD.inst: the pieces Sekolah and Kampus share (docs/V6_SPEC.md §3.1, §4, §5; INTEGRATION_NOTES §18).
  *
- *   scope            the 15 / 30 km view setting per section, per browser tab (sessionStorage 'mcd.scope.v1',
+ *   scope            the 5 / 15 / 30 km view setting per section, per browser tab (sessionStorage 'mcd.scope.v1',
  *                    numbers only, memory fallback): get(section, fallback), set(section, v), on(fn) → off,
- *                    options(), KEY, DEFAULTS. A scope is not a filter (D4).
- *   scopeSwitch(o)   the one "Cakupan 15 km | 30 km" control: div.scope[role=radiogroup] on the shared .seg look,
+ *                    options(section), values(section), KEY, DEFAULTS. A scope is not a filter (D4).
+ *                    Every section opens at 5 km (21 Oct 2026); Merchant offers 5 / 15 only (its data ends at 15 km).
+ *   scopeSwitch(o)   the one "Cakupan 5 km | 15 km | 30 km" control: div.scope[role=radiogroup] on the shared .seg look,
  *                    roving tabindex, arrows / Home / End, live announcement, status line, once-per-browser hint.
  *                    o.value is painted, never stored; every switch follows scope.on; el.set(v) / el.mcdScope.
  *   scopeSummary(s)  {label, value, options, set(v)} for a section's summary().scope (§3.6).
@@ -414,8 +415,10 @@
   /* ================================================================ scope */
 
   var SCOPE_KEY = 'mcd.scope.v1';
-  var SCOPE_VALUES = [15, 30];
-  var SCOPE_DEFAULTS = { schools: 15, campus: 30 };
+  var SCOPE_VALUES = [5, 15, 30];
+  var SCOPE_DEFAULTS = { schools: 5, campus: 5, merchants: 5, property: 5 };
+  /* the merchant file (data/sme-pois.js) ends at 15 km, so Merchant has no 30 km */
+  var SCOPE_LIMITS = { merchants: [5, 15] };
   var SCOPE_SECTION = /^[a-z][a-z0-9-]{0,23}$/;
   var scopeMem = null;
   var scopeFns = [];
@@ -430,7 +433,7 @@
       try {
         var raw = st.getItem(SCOPE_KEY), o = raw ? JSON.parse(raw) : null;
         if (o && typeof o === 'object' && o.v === 1) {
-          Object.keys(o).forEach(function (k) { if (k !== 'v' && SCOPE_SECTION.test(k) && SCOPE_VALUES.indexOf(o[k]) >= 0) out[k] = o[k]; });
+          Object.keys(o).forEach(function (k) { if (k !== 'v' && SCOPE_SECTION.test(k) && scopeValues(k).indexOf(o[k]) >= 0) out[k] = o[k]; });
         }
       } catch (e) { /* a damaged value starts over */ }
     }
@@ -441,20 +444,22 @@
     var st = ss();
     if (!st) return false;
     var o = { v: 1 };
-    Object.keys(scopeMem || {}).forEach(function (k) { if (SCOPE_VALUES.indexOf(scopeMem[k]) >= 0) o[k] = scopeMem[k]; });
+    Object.keys(scopeMem || {}).forEach(function (k) { if (scopeValues(k).indexOf(scopeMem[k]) >= 0) o[k] = scopeMem[k]; });
     try { st.setItem(SCOPE_KEY, JSON.stringify(o)); return true; } catch (e) { return false; }
   }
+  /** The values a section offers: 5 / 15 / 30 km, or fewer where its data ends sooner (SCOPE_LIMITS). */
+  function scopeValues(section) { return own(SCOPE_LIMITS, section) ? SCOPE_LIMITS[section] : SCOPE_VALUES; }
   function scopeGet(section, fallback) {
-    var m = scopeRead();
-    if (SCOPE_SECTION.test(String(section)) && own(m, section)) return m[section];
-    if (SCOPE_VALUES.indexOf(fallback) >= 0) return fallback;
-    return own(SCOPE_DEFAULTS, section) ? SCOPE_DEFAULTS[section] : 15;
+    var m = scopeRead(), vals = scopeValues(section);
+    if (SCOPE_SECTION.test(String(section)) && own(m, section) && vals.indexOf(m[section]) >= 0) return m[section];
+    if (vals.indexOf(fallback) >= 0) return fallback;
+    return own(SCOPE_DEFAULTS, section) ? SCOPE_DEFAULTS[section] : 5;
   }
-  /** set(section, 15 | 30) → the value, or null when refused. Listeners hear only a real change. */
+  /** set(section, 5 | 15 | 30) → the value, or null when refused. Listeners hear only a real change. */
   function scopeNum(v) { return typeof v === 'string' && /^\s*\d{1,3}\s*$/.test(v) ? parseInt(v, 10) : v; }
   function scopeSet(section, v) {
     v = scopeNum(v);
-    if (!SCOPE_SECTION.test(String(section)) || SCOPE_VALUES.indexOf(v) < 0) return null;
+    if (!SCOPE_SECTION.test(String(section)) || scopeValues(section).indexOf(v) < 0) return null;
     var m = scopeRead(), prev = scopeGet(section);
     m[section] = v;
     scopeWrite();
@@ -473,16 +478,18 @@
     scopeFns.push(fn);
     return function () { scopeFns = scopeFns.filter(function (f) { return f !== fn; }); };
   }
-  function scopeOptions() { return SCOPE_VALUES.map(function (v) { return { v: v, label: v + ' km' }; }); }
+  function scopeOptions(section) { return scopeValues(section).map(function (v) { return { v: v, label: v + ' km' }; }); }
 
   var SCOPE_TIP = {
-    schools: 'Sekolah dalam radius 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
-    campus: 'Kampus dalam radius 15 km atau 30 km dari Mabes TNI.'
+    schools: 'Sekolah dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
+    campus: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.',
+    merchants: 'Merchant dalam radius 5 km atau 15 km dari Mabes TNI. Data merchant hanya sampai 15 km.',
+    property: 'Proyek perumahan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.'
   };
 
   /**
    * scopeSwitch({section, value?, onChange?(v), vertical?, wide?, label?, tip?, announce?(v) → string, hint?: {id, text, at}})
-   * → div.scope-field holding div.scope[role=radiogroup] with two button[role=radio] (15 km, 30 km). Every switch on
+   * → div.scope-field holding div.scope[role=radiogroup] with a button[role=radio] per value (5 km, 15 km, 30 km). Every switch on
    * the page follows MCD.inst.scope. el.mcdScope = {get(), set(v), status(text | null, {retry, busy}), say(text), destroy()}.
    */
   function scopeSwitch(o) {
@@ -495,7 +502,8 @@
       class: ['scope', 'seg', vertical ? 'scope--v' : null], role: 'radiogroup', 'aria-label': 'Cakupan jarak dari Mabes TNI',
       'aria-orientation': vertical ? 'vertical' : 'horizontal', title: vertical ? 'Cakupan. ' + tip : tip
     });
-    var btns = SCOPE_VALUES.map(function (v) {
+    var VALS = scopeValues(section);
+    var btns = VALS.map(function (v) {
       var b = h('button', { type: 'button', role: 'radio', class: 'seg__opt scope__opt', 'data-v': v, 'aria-checked': 'false', tabindex: '-1', text: v + ' km' });
       b.addEventListener('click', function () { choose(v, true); });
       group.appendChild(b);
@@ -511,7 +519,7 @@
     function paint(v) {
       cur = v;
       btns.forEach(function (b, i) {
-        var on = SCOPE_VALUES[i] === v;
+        var on = VALS[i] === v;
         b.setAttribute('aria-checked', on ? 'true' : 'false');
         b.setAttribute('tabindex', on ? '0' : '-1');
         b.classList.toggle('is-active', on);
@@ -549,14 +557,14 @@
       say(text);
     }
     group.addEventListener('keydown', function (e) {
-      var k = e.key, i = SCOPE_VALUES.indexOf(cur), n = SCOPE_VALUES.length, j = -1;
+      var k = e.key, i = VALS.indexOf(cur), n = VALS.length, j = -1;
       if (k === 'ArrowRight' || k === 'ArrowDown') j = (i + 1) % n;
       else if (k === 'ArrowLeft' || k === 'ArrowUp') j = (i - 1 + n) % n;
       else if (k === 'Home') j = 0;
       else if (k === 'End') j = n - 1;
       if (j < 0) return;
       if (e.preventDefault) e.preventDefault();
-      choose(SCOPE_VALUES[j], true);
+      choose(VALS[j], true);
       if (btns[j] && typeof btns[j].focus === 'function') btns[j].focus();
     });
     wrap.__mcdBorn = now();
@@ -566,7 +574,7 @@
       paint(ev.value);
     });
     /* o.value: what the section shows now (painted, not stored: the section stores what it applies) */
-    paint(SCOPE_VALUES.indexOf(scopeNum(o.value)) >= 0 ? scopeNum(o.value) : scopeGet(section));
+    paint(VALS.indexOf(scopeNum(o.value)) >= 0 ? scopeNum(o.value) : scopeGet(section));
 
     wrap.mcdScope = {
       get: function () { return cur; },
@@ -597,7 +605,7 @@
   /** summary().scope for a section (§3.6): {label, value, options, set(v)}. */
   function scopeSummary(section) {
     return {
-      label: 'Cakupan', value: scopeGet(section), options: scopeOptions(),
+      label: 'Cakupan', value: scopeGet(section), options: scopeOptions(section),
       title: SCOPE_TIP[section] || SCOPE_TIP.schools,
       set: function (v) { return scopeSet(section, v); }
     };
@@ -1396,7 +1404,7 @@
 
   return {
     version: VERSION,
-    scope: { KEY: SCOPE_KEY, VALUES: SCOPE_VALUES.slice(), DEFAULTS: { schools: 15, campus: 30 }, get: scopeGet, set: scopeSet, on: scopeOn, options: scopeOptions },
+    scope: { KEY: SCOPE_KEY, VALUES: SCOPE_VALUES.slice(), DEFAULTS: Object.assign({}, SCOPE_DEFAULTS), get: scopeGet, set: scopeSet, on: scopeOn, options: scopeOptions, values: scopeValues },
     scopeSwitch: scopeSwitch,
     scopeSummary: scopeSummary,
     tierOf: tierOf,

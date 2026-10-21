@@ -436,7 +436,7 @@
   function allOn(o, ids) { return !o || ids.every(function (k) { return o[k] !== false; }); }
   /**
    * view(o) → the Kampus screens' numbers for one scope and its filters.
-   *   o: {km: 15 | 30, show: {univ, st, desain}, status: {negeri, swasta, kedinasan}, tiers: {premium, atas, menengah,
+   *   o: {km: 5 | 15 | 30, show: {univ, st, desain}, status: {negeri, swasta, kedinasan}, tiers: {premium, atas, menengah,
    *       reguler, unknown}, tierId: fn(id) → tier id or undefined (tiers not in: the kelas biaya filter waits)}
    *   → {km, rows, sites, n (PT), k (design and course schools), students, dosen, stuN, dosenN, noStudents, noDosen,
    *      excluded {nationwide, mainOutside}, byStatus, chips {group, status, tier} (each counted without its own
@@ -446,7 +446,7 @@
     o = o || {};
     var I = index();
     if (!I) return null;
-    var km = o.km === 15 ? 15 : 30;
+    var km = o.km === 5 || o.km === 15 ? o.km : 30;
     var show = o.show || {}, status = o.status || {}, tiers = o.tiers || null;
     var tierFn = isFn(o.tierId) ? o.tierId : C.tierId;
     var tierOn = !!tiers && !allOn(tiers, ['premium', 'atas', 'menengah', 'reguler', 'unknown']);
@@ -508,7 +508,7 @@
 
   /** summary(km) → {n, k, students, dosen, unplaced} for the Ringkasan door (no filters; D12 totals). */
   C.summary = function (km) {
-    var v = C.view({ km: km === 15 ? 15 : 30, tierId: function () { return undefined; } });
+    var v = C.view({ km: km === 5 || km === 15 ? km : 30, tierId: function () { return undefined; } });
     if (!v) return null;
     return { km: v.km, n: v.n, k: v.k, students: v.students, dosen: v.dosen, unplaced: C.unplaced().length, title: TOTAL_TITLE };
   };
@@ -745,7 +745,7 @@
     function img(key) { return SYM.spriteUrl(specOfKey(key), theme); }
     function ik(key) { return 'cp|' + themeOf(theme) + '|' + key + (mapSprites() ? ':map' : ':own'); }
     return {
-      id: 'campus-sym', title: 'Kampus dalam ' + (km === 15 ? 15 : 30) + ' km',
+      id: 'campus-sym', title: 'Kampus dalam ' + (km === 5 || km === 15 ? km : 30) + ' km',
       rows: [
         { glyph: 'shield', rgb: c.negeri.slice(), img: img('shield-negeri'), imgKey: ik('shield-negeri'), label: 'Universitas dan institut: perisai', count: isNum(n.univ) ? n.univ : null },
         { glyph: 'triangle', rgb: c.swasta.slice(), img: img('triangle-swasta'), imgKey: ik('triangle-swasta'), label: 'Sekolah tinggi, politeknik, akademi, desain dan kursus: segitiga', count: isNum(n.st) ? n.st : null },

@@ -400,9 +400,26 @@
 
   /* ============================================================ SEDERHANA (overview view) */
 
+  /** "Cakupan 5 km | 15 km" (MCD.inst.scopeSwitch, section 'merchants'): moves the map and the list (sme.js keeps
+      V.km in step); the cards and charts stay on the whole 15 km. null without MCD.inst. */
+  function scopeCtl() {
+    var I = MCD.inst;
+    if (!I || typeof I.scopeSwitch !== 'function' || !I.scope) return null;
+    var el = safe(function () {
+      return I.scopeSwitch({ section: 'merchants', value: I.scope.get('merchants', 5),
+        announce: function (v) { return 'Cakupan ' + v + ' km. Peta dan daftar menampilkan merchant dalam ' + v + ' km dari Mabes TNI.'; } });
+    });
+    if (el && el.mcdScope) cleanups.push(function () { el.mcdScope.destroy(); });
+    return el && el.nodeType === 1 ? el : null;
+  }
+
+  function scopeKmNow() { var I = MCD.inst, v = 5; if (I && I.scope) v = safe(function () { return +I.scope.get('merchants', 5); }) || 5; return v; }
+
   function renderOverview(body) {
     R.ov = h('div', { class: 'mx-ov' });
     R.ov.appendChild(productStrip(true));
+    var sc = scopeCtl();
+    if (sc) R.ov.appendChild(h('div', { class: 'mx-ov__scope' }, [sc]));
     R.ovCards = h('div', { class: 'mx-ov__grid', role: 'list', 'aria-label': 'Angka utama' });
     R.ovSub = h('p', { class: 'mx-ov__sub' });
     R.ovMore = h('div', { class: 'mx-ov__more' });
@@ -497,10 +514,10 @@
     R.fbtn = h('button', { type: 'button', class: 'btn btn--secondary mx-fbtn', 'aria-expanded': UI.filterOpen ? 'true' : 'false', 'aria-controls': 'mx-filters' },
       [icon('sliders'), h('span', { text: 'Filter' }), R.fcount, icon(UI.filterOpen ? 'chev-u' : 'chev-d', 'mx-fbtn__chev')]);
     R.fbtn.addEventListener('click', function () { UI.filterOpen = !UI.filterOpen; applyFilterOpen(); });
-    R.fnote = h('p', { class: 'mx-fbar__note', text: 'Filter mengubah peta dan daftar. Grafik tetap menampilkan seluruh area 15 km.' });
+    R.fnote = h('p', { class: 'mx-fbar__note', text: 'Cakupan dan filter mengubah peta dan daftar. Grafik tetap menampilkan seluruh area 15 km.' });
     R.fchips = h('div', { class: 'mx-fchips', role: 'group', 'aria-label': 'Filter aktif' });
     R.travel = travelToggles();
-    R.fbar = h('div', { class: 'mx-fbar' }, [R.fbtn, R.fchips, R.fnote, R.travel]);
+    R.fbar = h('div', { class: 'mx-fbar' }, [scopeCtl(), R.fbtn, R.fchips, R.fnote, R.travel].filter(Boolean));
     root.appendChild(R.fbar);
     R.filters = h('section', { class: 'mx-filters', id: 'mx-filters', 'aria-label': 'Filter peta dan daftar', tabindex: '-1', hidden: !UI.filterOpen });
     root.appendChild(R.filters);
@@ -632,7 +649,8 @@
     var v = S().view(), out = [];
     if (v.kec) out.push({ label: 'Kec. ' + S().kecName(v.kec), onClear: function () { S().setView({ kec: null }); } });
     v.cats.forEach(function (c) { out.push({ label: catShort(c), onClear: function () { S().setView({ cats: S().view().cats.filter(function (x) { return x !== c; }) }); } }); });
-    if (v.km) out.push({ label: 'Dalam ' + v.km + ' km', onClear: function () { S().setView({ km: null }); } });
+    /* 5 km is the "Cakupan" switch, not a filter chip */
+    if (v.km && v.km !== 5) out.push({ label: 'Dalam ' + v.km + ' km', onClear: function () { S().setView({ km: scopeKmNow() === 5 ? 5 : null }); } });
     if (v.status !== 'all') {
       var st = S().STATUS_FILTER.filter(function (s) { return s.id === v.status; })[0];
       out.push({ label: 'Status: ' + lcFirst(st ? st.label : v.status), onClear: function () { S().setView({ status: 'all' }); } });
@@ -2128,8 +2146,13 @@
     if (!R.ws) return;
     if (!deep() || !wsOn() || (W.innerWidth || 0) < 1024) unworkspace();
   }
-  /** summary() → {items: [{value, label, tone?, title}] (3), filters}: the slim rail's key numbers (item 43). */
+  /** summary() → {items: [{value, label, tone?, title}] (3), filters, scope}: the slim rail's key numbers (item 43). */
   function summary() {
+    var r = summaryItems(), I = MCD.inst;
+    if (I && typeof I.scopeSummary === 'function') r.scope = safe(function () { return I.scopeSummary('merchants'); });
+    return r;
+  }
+  function summaryItems() {
     var m = model(), n = S() ? S().filterCount() : 0;
     if (!m || !m.totals) return { items: [], filters: n };
     var t = m.totals, T0 = S().TIERS.nasional;

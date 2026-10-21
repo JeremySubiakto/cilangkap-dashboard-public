@@ -282,8 +282,20 @@
 
   /* Filters (cats, status, kec, km) live in memory only, so a new session starts clean (plan B-03, D14).
      Only the map mode is remembered per browser. Locking reloads the page, which clears the memory. */
-  var V = { mode: 'territory', cats: [], status: 'all', kec: null, km: null, tier: 'all', rev: 0 };
+  var V = { mode: 'territory', cats: [], status: 'all', kec: null, km: 5, tier: 'all', rev: 0 };
   var listeners = [];
+  /* The "Cakupan 5 km | 15 km" switch (MCD.inst.scope 'merchants', 21 Oct 2026): 5 km is V.km = 5, 15 km is V.km = null
+     (the whole file). It moves the map and the list only; the cards and charts keep the whole 15 km. The other
+     distances of the "Jarak" filter (1, 3, 10, 15 km) stay filters and leave the switch where it is. */
+  var SCOPE_ID = 'merchants';
+  function scopeApi() { var I = MCD.inst; return I && I.scope && typeof I.scope.get === 'function' && typeof I.scope.set === 'function' ? I.scope : null; }
+  function scopeKm() { var A = scopeApi(), v = 5; if (A) { try { v = +A.get(SCOPE_ID, 5); } catch (e) { v = 5; } } return v === 15 ? 15 : 5; }
+  function scopeView() { return scopeKm() === 5 ? 5 : null; }
+  function syncScope() {
+    var A = scopeApi();
+    if (!A || (V.km !== 5 && V.km !== null)) return;
+    try { A.set(SCOPE_ID, V.km === 5 ? 5 : 15); } catch (e) { /* the view still changes */ }
+  }
   function cleanView(o, base) {
     var v = Object.assign({}, base);
     if (!o || typeof o !== 'object') return v;
@@ -301,6 +313,17 @@
   function loadView() {
     if (viewLoaded) return;
     viewLoaded = true;
+    V.km = scopeView();
+    var A = scopeApi();
+    if (A && typeof A.on === 'function') {
+      try {
+        A.on(function (ev) {
+          if (!ev || ev.section !== SCOPE_ID) return;
+          setView({ km: ev.value === 5 ? 5 : null });
+          if (MCD.map && typeof MCD.map.preset === 'function') { try { MCD.map.preset(ev.value === 5 ? '5' : 'sme15'); } catch (e) { /* the map keeps its view */ } }
+        });
+      } catch (e) { /* the filter still works */ }
+    }
     var st = U() && U().storage, saved = st ? st.get(VIEW_KEY, null) : null;
     if (saved && typeof saved === 'object') {
       if (saved.mode === 'territory' || saved.mode === 'merchants') V.mode = saved.mode;
@@ -323,6 +346,7 @@
     next.rev = V.rev + 1;
     var modeChanged = next.mode !== V.mode, before = V.mode;
     V = next;
+    if (changed.indexOf('km') >= 0) syncScope();
     if (modeChanged) {
       if (temp) { if (MODE_BACK == null) MODE_BACK = before; if (MODE_BACK === V.mode) MODE_BACK = null; }
       else { MODE_BACK = null; storeMode(); }
@@ -348,9 +372,10 @@
     storeMode();
     return true;
   }
-  function resetFilters() { return setView({ cats: [], status: 'all', kec: null, km: null, tier: 'all' }); }
-  /** Number of active filters (type counts as one), for "Filter (n)". */
-  function filterCount() { loadView(); return (V.cats.length ? 1 : 0) + (V.kec ? 1 : 0) + (V.km ? 1 : 0) + (V.status !== 'all' ? 1 : 0) + (V.tier !== 'all' ? 1 : 0); }
+  /** Clears the filters; the distance goes back to the switch (5 km, or the whole 15 km). */
+  function resetFilters() { loadView(); return setView({ cats: [], status: 'all', kec: null, km: scopeView(), tier: 'all' }); }
+  /** Number of active filters (type counts as one), for "Filter (n)". 5 km is the switch, not a filter. */
+  function filterCount() { loadView(); return (V.cats.length ? 1 : 0) + (V.kec ? 1 : 0) + (V.km && V.km !== 5 ? 1 : 0) + (V.status !== 'all' ? 1 : 0) + (V.tier !== 'all' ? 1 : 0); }
   /** tierShows(i) → whether listing row i passes the "Sasaran" filter (one row; loops use tierTest()). */
   function tierShows(i) {
     if (V.tier === 'all') return true;
@@ -1706,7 +1731,9 @@
   }
 
   function postureFn() {
+    loadView();
     return {
+      camera: V.km === 5 ? '5' : 'sme15',                       /* the "Cakupan" switch: 5 km by default */
       onRingClick: function (km) { if (DIST.indexOf(km) >= 0) setView({ km: V.km === km ? null : km }); },
       ringHint: 'Klik untuk menampilkan merchant sampai jarak ini dari Mabes TNI',
       activeRingKm: V.km || 15,

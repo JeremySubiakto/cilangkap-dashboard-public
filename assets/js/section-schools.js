@@ -111,10 +111,12 @@
   var JENIS_NAME = { sma: 'SMA', smk: 'SMK (sekolah menengah kejuruan)', ma: 'MA (madrasah aliyah)' };
 
   /* v6 scope (V6_SPEC §3.1, D3, D4) */
-  var SCOPES = [15, 30];
+  var SCOPES = [5, 15, 30];
   var SCOPE_KEY = 'mcd.scope.v1';
   var SCOPE_ARIA = 'Cakupan jarak dari Mabes TNI';
-  var SCOPE_TIP = 'Sekolah dalam radius 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.';
+  var SCOPE_TIP = 'Sekolah dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.';
+  /** 5 | 15 | 30 for any km (a 10 km filter belongs to the 15 km scope); 5 km is the default since 21 Oct 2026. */
+  function scopeOf(v) { v = +v; return v > 15 ? 30 : v > 5 ? 15 : 5; }
   var SCOPE30_HINT = 'Angka di Ringkasan tetap untuk 15 km, cakupan pilot.';
   var LOAD30 = 'Memuat jumlah siswa dalam 30 km…';
   var FAIL30 = 'Jumlah siswa dalam 30 km tidak dapat dimuat. Coba lagi.';
@@ -603,7 +605,7 @@
     return shownJenis().map(function (j) { return fm().int((byJ[j] && byJ[j].n) || 0) + ' ' + JENIS_WORD[j]; }).join(' · ');
   }
 
-  /* ================================================== v6: scope 15 km | 30 km (V6_SPEC §3.1, D3, D4) */
+  /* ================================================== v6: scope 5 km | 15 km | 30 km (V6_SPEC §3.1, D3, D4) */
 
   /* Own copy of MCD.inst.scope (INSTITUSI lane) for a shell without it: the same sessionStorage record
      {"v":1,"schools":30,"campus":30} (numbers only), memory when storage is blocked. */
@@ -615,10 +617,10 @@
       var v = null;
       try { var ss = sstore(), raw = ss ? ss.getItem(SCOPE_KEY) : null, o = raw ? JSON.parse(raw) : null; if (o && o.v === 1) v = o[section]; } catch (e) { v = null; }
       if (v == null && Object.prototype.hasOwnProperty.call(LOCAL_SCOPE.mem, section)) v = LOCAL_SCOPE.mem[section];
-      return v === 15 || v === 30 ? v : def;
+      return v === 5 || v === 15 || v === 30 ? v : def;
     },
     set: function (section, val) {
-      val = +val === 30 ? 30 : 15;
+      val = scopeOf(val);
       LOCAL_SCOPE.mem[section] = val;
       try {
         var ss = sstore();
@@ -630,11 +632,11 @@
     on: function (fn) { if (isFn(fn)) LOCAL_SCOPE.fns.push(fn); return function () { LOCAL_SCOPE.fns = LOCAL_SCOPE.fns.filter(function (f) { return f !== fn; }); }; }
   };
   function scopeApi() { var I0 = MCD.inst, s = I0 && I0.scope; return s && isFn(s.get) && isFn(s.set) ? s : LOCAL_SCOPE_API; }
-  function scopeGet() { var v = 15; try { v = scopeApi().get(ID, 15); } catch (e) { v = 15; } return +v === 30 ? 30 : 15; }
-  function scopeNow() { return st && st.f.km > 15 ? 30 : 15; }
+  function scopeGet() { var v = 5; try { v = scopeApi().get(ID, 5); } catch (e) { v = 5; } return scopeOf(v); }
+  function scopeNow() { return st ? scopeOf(st.f.km) : 5; }
   /** Staff chose a scope (any switch, the slim rail, the ring, an action): stored, then applied. */
   function setScope(v, o) {
-    v = +v === 30 ? 30 : 15;
+    v = scopeOf(v);
     /* applied first, then stored: the store's listener (below) then finds the view already there and stays quiet */
     applyScope(v, o);
     try { scopeApi().set(ID, v); } catch (e) { /* the view still changes */ }
@@ -661,7 +663,7 @@
   }
   /**
    * One scope control (MCD.inst.scopeSwitch when INSTITUSI has it, else the same radiogroup here):
-   * div[role=radiogroup][aria-label="Cakupan jarak dari Mabes TNI"] with "15 km" and "30 km"; ← → (↑ ↓), Home, End.
+   * div[role=radiogroup][aria-label="Cakupan jarak dari Mabes TNI"] with "5 km", "15 km" and "30 km"; ← → (↑ ↓), Home, End.
    */
   function scopeCtl(o) {
     o = o || {};
@@ -1156,14 +1158,14 @@
   }
   function defaults() {
     return {
-      f: { km: 15, type: 'all', tni: false, inf: false, tiers: null },
+      f: { km: 5, type: 'all', tni: false, inf: false, tiers: null },
       show: { sma: true, ma: false, smk: false },
       tab: 'list', kecAll: false, kecSort: 'k17', sort: 'schools', listSort: 'near', topSort: 'k17', q: '', sq: '',
       mapShow: 'both', wide: false, workOpen: false, pipeStage: '', pipeProd: '',
       selKec: null, calc: defaultCalc(), calcTarget: ''
     };
   }
-  /** Filters live in memory only (UX_FIX_PLAN D14, C-07): the filters are never restored. The scope (15 or 30 km) is a
+  /** Filters live in memory only (UX_FIX_PLAN D14, C-07): the filters are never restored. The scope (5, 15 or 30 km) is a
       view setting kept per browser tab (V6_SPEC D4, mcd.scope.v1). The jenis switches (SMA · SMK · MA, v6 D5) and the
       list order are display choices, remembered per browser; SMA alone is the default, and a choice saved before
       16 Oct 2026 (no showV) was the old default, so it is not restored. At least one jenis stays on. */
@@ -1195,7 +1197,7 @@
 
   function setF(patch, opts) {
     var f = Object.assign({}, st.f, patch || {});
-    if (KMS.indexOf(f.km) < 0) f.km = 15;
+    if (KMS.indexOf(f.km) < 0) f.km = 5;
     if (f.tiers && (!Array.isArray(f.tiers) || f.tiers.length >= TIERS.length)) f.tiers = null;
     if (same(f, st.f)) return;
     var kmChanged = f.km !== st.f.km;
@@ -1934,9 +1936,9 @@
     MCD.map.registerPosture('schools', {
       imagery: 'full', camera: presetForKm(st.f.km), rings: 'schools', layerSet: 'schools', deck: true, buildings: 'off',
       attribution: ATTRIBUTION,
-      /* v6 (D3): a ring click sets the scope, 15 km for the inner rings, else 30 km */
-      onRingClick: function (km) { setScope(km <= 15.01 ? 15 : 30); },
-      ringHint: 'Klik untuk memilih cakupan 15 km atau 30 km dari Mabes TNI',
+      /* v6 (D3): a ring click sets the scope: 5 km up to the 5 km ring, 15 km up to the 15 km ring, else 30 km */
+      onRingClick: function (km) { setScope(km <= 5.01 ? 5 : km <= 15.01 ? 15 : 30); },
+      ringHint: 'Klik untuk memilih cakupan 5 km, 15 km atau 30 km dari Mabes TNI',
       telemetry: telemetry
     });
     MCD.map.registerLegend('schools', legend);
@@ -2367,7 +2369,7 @@
     var k = V.kpi;
     // 1 · count
     var nm = noun();
-    var other = [15, 30].filter(function (x) { return x !== f.km; }).map(function (x) { return fmt.int(V.n[x]) + ' dalam ' + x + ' km'; }).join(' · ');
+    var other = SCOPES.filter(function (x) { return x !== f.km; }).map(function (x) { return fmt.int(V.n[x]) + ' dalam ' + x + ' km'; }).join(' · ');
     o.c1.big.update({ label: Noun() + ' dalam ' + f.km + ' km', value: V.allKm, status: V.hasBank ? null : 'potential', statusLabel: V.hasBank ? null : 'Potensi',
       note: (V.allKm ? '' : withinWords(0, f.km, V.n[15], 15) + '. ') + other + ' dari Mabes TNI.' + (!onlySma() ? ' ' + splitWords(V.byJ) + '.' : '') +
         (V.kpi.inactive ? ' ' + count(V.kpi.inactive, nm) + ' kemungkinan tidak aktif tidak dihitung.' : '') + (k.noData && !k.loading ? ' ' + count(k.noData, 'sekolah') + ' tanpa data siswa.' : '') });
@@ -4070,8 +4072,8 @@
     if (j === 'ma' && !st.show.ma) setShow({ ma: true });
     if (j === 'smk' && !st.show.smk) setShow({ smk: true });
     if (j === 'sma' && st.show.sma === false) setShow({ sma: true });
-    /* v6: the scope widens to 30 km for a school beyond 15 km (stored, as a staff choice would be) */
-    if (I.dist[i] > st.f.km) { if (I.dist[i] > 15) setScope(30, { camera: false }); else patch.km = 15; }
+    /* v6: the scope widens to 15 or 30 km for a school beyond it (stored, as a staff choice would be) */
+    if (I.dist[i] > st.f.km) setScope(I.dist[i] > 15 ? 30 : 15, { camera: false });
     if ((st.f.type === 'private' && I.st[i] !== 1) || (st.f.type === 'public' && I.st[i] !== 0)) patch.type = 'all';
     if (st.f.tni && I.tni[i] < 0) patch.tni = false;
     if (st.f.inf && I.inf[i]) patch.inf = false;
@@ -4315,11 +4317,11 @@
    * title, "Siswa 17+" ("—" while the 30 km file loads), then "Nasabah %" (school file) or "Yayasan TNI".
    */
   function scopeSummary() {
-    return { label: 'Cakupan', value: scopeNow(), options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], title: SCOPE_TIP, aria: SCOPE_ARIA,
+    return { label: 'Cakupan', value: scopeNow(), options: SCOPES.map(function (v) { return { v: v, label: v + ' km' }; }), title: SCOPE_TIP, aria: SCOPE_ARIA,
       set: function (v) { setScope(v); } };
   }
   function summary() {
-    if (!st) return { items: [], filters: 0, scope: { label: 'Cakupan', value: scopeGet(), options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], set: function (v) { setScope(v); } } };
+    if (!st) return { items: [], filters: 0, scope: { label: 'Cakupan', value: scopeGet(), options: SCOPES.map(function (v) { return { v: v, label: v + ' km' }; }), set: function (v) { setScope(v); } } };
     var f = st.f, nf = activeFilterCount(), sc = scopeSummary();
     if (!V) return { items: [], filters: nf, scope: sc };
     var k = V.kpi, fmt = fm(), items = [], nn = nounOf(), km = scopeNow();
@@ -4410,7 +4412,7 @@
   /* =============================================================== contract */
 
   var SPEC = {
-    lede: 'SMA, SMK dan MA dalam 15 km atau 30 km dari Mabes TNI, dengan jumlah siswa dan siswa 17+.\nLihat kelas biaya dan kontak lembaga setiap sekolah.\nSiswa 17+ untuk Tabungan, siswa di bawah 17 untuk Tabungan SimPel.',
+    lede: 'SMA, SMK dan MA dalam 5 km, 15 km atau 30 km dari Mabes TNI, dengan jumlah siswa dan siswa 17+.\nLihat kelas biaya dan kontak lembaga setiap sekolah.\nSiswa 17+ untuk Tabungan, siswa di bawah 17 untuk Tabungan SimPel.',
     shows: [
       'Setiap sekolah di peta: lingkaran = SMA, kotak = SMK, belah ketupat = MA',
       'Biru = negeri, kuning = swasta, bintang biru tua = SMA yayasan TNI. Titik lebih besar = siswa lebih banyak',
@@ -4495,6 +4497,7 @@
       offs.push(function () { window.removeEventListener('mcd:distance', onDistEvt); });
       c.registerCommands(function () {
         var out = [
+          { label: 'Sekolah · Cakupan 5 km', run: function () { setScope(5, { camera: true }); }, kw: 'sma smk ma sekolah 5 cakupan' },
           { label: 'Sekolah · Cakupan 15 km', run: function () { setScope(15, { camera: true }); }, kw: 'sma smk ma sekolah 15 cakupan pilot' },
           { label: 'Sekolah · Cakupan 30 km', run: function () { setScope(30, { camera: true }); }, kw: 'sma smk ma sekolah 30 cakupan' },
           { label: 'Sekolah · Hanya sekolah yayasan TNI', run: function () { setF({ tni: !st.f.tni }); goTab('list'); }, kw: 'hang tuah kartika angkasa yasarini tni yayasan' },
@@ -4599,8 +4602,8 @@
       /* MCD.app.focus({section: 'schools', kind: 'sma', id}) → 'focus:sma:<npsn | school row>': fly there, open it */
       var fm0 = /^focus:sma:(.+)$/.exec(String(action || ''));
       if (fm0) { requestFocus(fm0[1]); return true; }
-      /* v6 (§3.6): 'schools:scope:<15|30>' (before the mount it is stored and the mount picks it up) */
-      var sm = /^schools:scope:(15|30)$/.exec(String(action || ''));
+      /* v6 (§3.6): 'schools:scope:<5|15|30>' (before the mount it is stored and the mount picks it up) */
+      var sm = /^schools:scope:(5|15|30)$/.exec(String(action || ''));
       if (sm) { if (ctx && st) setScope(+sm[1]); else { try { scopeApi().set(ID, +sm[1]); } catch (e) { /* ignore */ } } return true; }
       if (!ctx) return false;
       /* Ringkasan "Lihat di peta Sekolah" (SMA drill-down): open that kecamatan here (drawer, Kecamatan tab, map focus) */

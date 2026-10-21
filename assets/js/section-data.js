@@ -2636,7 +2636,7 @@
         'Asumsi, termasuk faktor jam sibuk',
         'Tampilan Sekolah (tab, urutan daftar, titik MA/SMK), isian kalkulator dan porsi siswa 17+',
         'Tampilan Kampus: urutan daftar dan jenis yang tampil, tanpa nama',
-        'Cakupan 15 atau 30 km per bagian, hanya selama tab terbuka (angka saja)',
+        'Cakupan 5, 15 atau 30 km per bagian, hanya selama tab terbuka (angka saja)',
         sealed ? 'Daftar tindak lanjut SMA dan kampus, terenkripsi dengan kata sandi dashboard. Jangan mengisi data pribadi.'
           : 'Catatan Tindak lanjut SMA (nama petugas dan catatan kerja), tidak terenkripsi. Jangan mengisi data pribadi.',
         'Jumlah cek rating Google bulan ini (angka saja) dan waktu unduhan salinan terakhir',

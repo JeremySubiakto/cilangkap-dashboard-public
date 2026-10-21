@@ -2040,25 +2040,25 @@
 
   /**
    * v6 (V6_SPEC §1.5, §9.1): the outer road grid and its route trees (16 to 31 km from KCP, about 2,2 MB, loaded by
-   * MCD.travel) come early once a 30 km scope is on screen: Kampus by default, Sekolah after "30 km". One second after
+   * MCD.travel) come early once a 30 km scope is on screen: Kampus or Sekolah after "30 km". One second after
    * that scope starts, after the frame is on screen and an idle moment: MCD.distance.preload({outer: true}). Once per
    * session (a failed load is tried again at the next 30 km start); dropped when staff leave for another section before
    * it runs; never on pages. The scope comes from MCD.inst.scope (the shared memory of the switch), else the section's
-   * summary().scope, else the section default (Kampus 30, Sekolah 15).
+   * summary().scope, else the section default (5 km since 21 Oct 2026).
    */
   var OUTER_IDS = /^(schools|campus)$/;
   var OUTER = { t: 0, cancel: null, done: false, queued: '', probedAt: 0 };
   function scopeKm(id, viaSummary) {
-    var I = MCD.inst, def = id === 'campus' ? 30 : 15, v;
+    var I = MCD.inst, def = 5, v;
     if (I && I.scope && typeof I.scope.get === 'function') {
       v = +safe(I.scope.get, I.scope, [id, def]);
-      if (v === 15 || v === 30) return v;
+      if (v === 5 || v === 15 || v === 30) return v;
     }
     var mod = viaSummary && S.cur && S.cur.id === id ? S.cur.mod : null;
     if (mod && typeof mod.summary === 'function') {
       var s = safe(mod.summary, mod);
       v = s && s.scope ? +s.scope.value : NaN;
-      if (v === 15 || v === 30) return v;
+      if (v === 5 || v === 15 || v === 30) return v;
     }
     return def;
   }
@@ -2780,7 +2780,7 @@
     if (cfg().onChange) cfg().onChange(function () { schedule(['settings']); });
     /* item 27: "Jam sibuk" / "Motor (tanpa tol)" (MCD.distance) changed: sections get update(derived, ['distance']) */
     root.addEventListener('mcd:distance', function () { if (S.booted) schedule(['distance']); });
-    /* v6: the 15 km / 30 km switch of Sekolah and Kampus (MCD.inst.scope, a view setting, not state; D4) */
+    /* v6: the 5 / 15 / 30 km switch of the sections (MCD.inst.scope, a view setting, not state; D4) */
     var I = MCD.inst;
     if (I && I.scope && typeof I.scope.on === 'function') safe(I.scope.on, I.scope, [onScopeChange]);
   }

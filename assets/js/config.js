@@ -45,13 +45,13 @@
       file: 'assets/js/section-overview.js', css: 'assets/css/section-overview.css',
       layout: 'page',
       posture: { imagery: 'full', camera: null, rings: null, layerSet: null, deck: false } },
-    { id: 'merchants', key: '2', label: 'Merchant', short: 'Merchant', title: 'Merchant (LVM & EDC)', titleFull: 'Akuisisi merchant dalam 15 km: Livin’ Merchant dan EDC Mandiri',
-      help: 'Semua toko kelontong, restoran dan UMKM dalam 15 km dari Mabes TNI.\nSetiap merchant berstatus “Sudah diakuisisi” atau “Belum ada di LVM”.\nLihat juga status EDC Mandiri dan sisa potensi per kecamatan.',
+    { id: 'merchants', key: '2', label: 'Merchant', short: 'Merchant', title: 'Merchant (LVM & EDC)', titleFull: 'Akuisisi merchant di sekitar Mabes TNI: Livin’ Merchant dan EDC Mandiri',
+      help: 'Semua toko kelontong, restoran dan UMKM dalam 5 km dari Mabes TNI, atau 15 km.\nSetiap merchant berstatus “Sudah diakuisisi” atau “Belum ada di LVM”.\nLihat juga status EDC Mandiri dan sisa potensi per kecamatan.',
       sheets: ['1_lvm', '2_edc'],
       file: 'assets/js/section-merchants.js', css: 'assets/css/section-merchants.css',
       layout: 'sheet',
       posture: { imagery: 'merchants', camera: 'sme15', rings: 'merchants', layerSet: 'merchants', deck: true } },
-    /* v6 (V6_SPEC §3.2): SMK and MA join SMA; the 15 km / 30 km scope lives in the section (MCD.inst.scope), not here */
+    /* v6 (V6_SPEC §3.2): SMK and MA join SMA; the 5 / 15 / 30 km scope lives in the section (MCD.inst.scope), not here */
     { id: 'schools', key: '3', label: 'Sekolah', short: 'Sekolah', title: 'Sekolah (SMA, SMK, MA)', titleFull: 'SMA, SMK dan MA di sekitar Mabes TNI',
       help: 'SMA di sekitar Mabes TNI dan KCP Cilangkap.\nLihat SMA yang telah menjadi nasabah Mandiri dan yang masih dapat didekati.\nLihat juga perkiraan siswa berusia 17 tahun ke atas, yang dapat memiliki KTP.',
       sheets: ['3_sekolah'],
@@ -60,14 +60,14 @@
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'schools', deck: true } },
     /* v6 (V6_SPEC §6.1, D10): universities, institutes, sekolah tinggi, politeknik, akademi, design and course schools
        within 30 km; engine assets/js/campus-core.js (MCD.campus), data/campuses.js through MCD.app.lazy('campuses') */
-    { id: 'campus', key: '4', label: 'Kampus', short: 'Kampus', title: 'Kampus (perguruan tinggi)', titleFull: 'Perguruan tinggi dalam 30 km: payroll, kantin dan mahasiswa',
-      help: 'Universitas, institut, sekolah tinggi, politeknik, akademi, serta sekolah desain dan kursus dalam 30 km dari Mabes TNI.\nLihat jumlah mahasiswa dan dosen tetap dari PDDikti.\nPayroll melalui kerja sama dengan kampus, Livin’ Merchant untuk kantin dan koperasi, Tabungan untuk mahasiswa.',
+    { id: 'campus', key: '4', label: 'Kampus', short: 'Kampus', title: 'Kampus (perguruan tinggi)', titleFull: 'Perguruan tinggi di sekitar Mabes TNI: payroll, kantin dan mahasiswa',
+      help: 'Universitas, institut, sekolah tinggi, politeknik, akademi, serta sekolah desain dan kursus dalam 5, 15 atau 30 km dari Mabes TNI.\nLihat jumlah mahasiswa dan dosen tetap dari PDDikti.\nPayroll melalui kerja sama dengan kampus, Livin’ Merchant untuk kantin dan koperasi, Tabungan untuk mahasiswa.',
       sheets: [],
       file: 'assets/js/section-campus.js', css: 'assets/css/section-campus.css',
       layout: 'rails',
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true } },
-    { id: 'property', key: '5', label: 'KPR', short: 'KPR', title: 'KPR dalam 30 km', titleFull: 'Proyek perumahan dan KPR dalam 30 km',
-      help: 'Proyek perumahan baru dalam 30 km dari Mabes TNI.\nIsi penghasilan bersih untuk melihat rumah yang terjangkau.\nHitung angsuran KPR di kalkulator.',
+    { id: 'property', key: '5', label: 'KPR', short: 'KPR', title: 'KPR', titleFull: 'Proyek perumahan dan KPR di sekitar Mabes TNI',
+      help: 'Proyek perumahan baru dalam 5, 15 atau 30 km dari Mabes TNI.\nIsi penghasilan bersih untuk melihat rumah yang terjangkau.\nHitung angsuran KPR di kalkulator.',
       sheets: [],
       file: 'assets/js/section-property.js', css: 'assets/css/section-property.css',
       layout: 'rails',
@@ -286,7 +286,7 @@
     // ASSUMPTION shown in legends as words: hijau ≥ 50% · kuning 20–50% · merah < 20%.
     coverageBands: { ok: 0.5, mid: 0.2 },
     // distance: the shared travel-time switches of MCD.distance ("Jam sibuk", "Motor (tanpa tol)"), JSON {peak, noToll}
-    // v6 (V6_SPEC §8.3): scope = sessionStorage {v: 1, schools: 15 | 30, campus: 15 | 30} (numbers only, MCD.inst.scope);
+    // v6 (V6_SPEC §8.3): scope = sessionStorage {v: 1, schools: 5 | 15 | 30, campus: 5 | 15 | 30, merchants: 5 | 15} (numbers only, MCD.inst.scope);
     // campusUi = the Kampus list sort and the jenis shown (no names); seal = prefix of the encrypted follow-up stores (MCD.seal)
     storageKeys: { settings: 'mcd.settings', lastView: 'mcd.lastView', theme: 'mcd.ui.theme', lastDownload: 'mcd.data.lastDownload', distance: 'mcd.distance.v1', windows: 'mcd.ui.windows.v1',
       scope: 'mcd.scope.v1', campusUi: 'mcd.campus.ui.v1', seal: 'mcd.seal.v1.' },

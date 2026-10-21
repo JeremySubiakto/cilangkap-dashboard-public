@@ -81,6 +81,7 @@
 /* ── Sederhana (guide column) ──────────────────────────────────────────── */
 .mx-ov { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; container: mxov / inline-size; }   /* v4: fits 1366 × 768 with Data contoh */
 .mx-ov > * { min-width: 0; }
+.mx-ov__scope { margin: 0 0 12px; }                      /* "Cakupan 5 km | 15 km" above the cards */
 .mx-ov__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .mx-ov__grid--n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mx-ov__card { min-width: 0; }

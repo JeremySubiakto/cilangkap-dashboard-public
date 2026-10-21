@@ -77,6 +77,11 @@
   /* the km bands and the "within" filter measure a straight line from Mabes TNI; rows show the road distance from KCP */
   var BAND_LABEL = 'Jarak garis lurus dari Mabes TNI';
   var WITHIN = [{ v: 0, label: 'Semua' }, { v: 5, label: '5 km' }, { v: 10, label: '10 km' }, { v: 15, label: '15 km' }, { v: 20, label: '20 km' }, { v: 30, label: '30 km' }];
+  /* KPR opens at 5 km (21 Oct 2026): the default "within" filter; "Hapus filter" comes back to it, and it is not counted
+     as a filter. The slim rail's "Cakupan" offers 5 / 15 / 30 km on the same filter. */
+  var WITHIN_DEFAULT = 5;
+  var SCOPES = [5, 15, 30];
+  function bandsWithin(km) { return km ? BANDS.filter(function (x) { return x.hi <= km; }).map(function (x) { return x.id; }) : []; }
   // https://www.bankmandiri.co.id/top-developer partner list ∩ developerGroup in the data (51 projects)
   var TOP_DEV = ['Sinar Mas Land', 'Summarecon', 'Ciputra', 'Lippo', 'Metland', 'Alam Sutera', 'Agung Podomoro'];
   // Planned government scheme: what-if only, its rules are simulation assumptions (§5.4)
@@ -625,7 +630,7 @@
         cashOn: false, cash: null, cashRegion: 'Kota Bekasi', ktpDki: false, showPlanned: false
       },
       map: { colorBy: 'class', areas: false, labels: true, tni: false, areaMetric: 'land', lbBand: 'lb_61_90' },
-      filters: { bands: [], segments: [], types: [], classes: [], mandiriOnly: false, topDevOnly: false, minConfidence: 'low', hideUncertain: false, q: '', area: '' },
+      filters: { bands: bandsWithin(WITHIN_DEFAULT), segments: [], types: [], classes: [], mandiriOnly: false, topDevOnly: false, minConfidence: 'low', hideUncertain: false, q: '', area: '' },
       railTab: 'projects', sort: 'distance', moreFilters: false,
       calc: {
         open: false, mode: 'forward', price: 1200000000, listPrice: 1200000000, dpPct: 10, loan: null, loanTouched: false, tenorYears: 20,
@@ -1282,6 +1287,7 @@
     return {
       core: { sites: !!st.map.tni, beacon: true, boundary: true, rings: true },
       attribution: 'Proyek: SiKumbang (Kementerian PKP / BP Tapera), situs developer · Harga area: Rumah123, Cushman & Wakefield',
+      camera: withinPreset(),
       onRingClick: function (km) { setWithin(withinNow() === km ? 0 : km); },
       telemetry: function () { return R ? R.filtered.length + ' PROYEK · WARNA ' + String(st.map.colorBy).toUpperCase() : ''; }
     };
@@ -1299,6 +1305,9 @@
     MCD.map.registerLayers(ID, layersFn);
     MCD.map.registerLegend(ID, legendFn);
     MCD.map.registerPosture(ID, postureFn);
+    if (typeof MCD.map.registerPreset === 'function') {
+      [5, 10, 15, 20].forEach(function (km) { MCD.map.registerPreset('kpr' + km, { label: km + ' km dari Mabes TNI', fit: 'ring', anchor: 'center', km: km }); });
+    }
     MCD.map.registerSelectable('project', selectablePos('project'));
     MCD.map.registerSelectable('area', selectablePos('area'));
   }
@@ -1354,8 +1363,11 @@
     return -1;
   }
   function setWithin(km) {
-    setFilter({ bands: km ? BANDS.filter(function (x) { return x.hi <= km; }).map(function (x) { return x.id; }) : [] });
+    setFilter({ bands: bandsWithin(km) });
+    if (MCD.map && typeof MCD.map.preset === 'function') safe(function () { MCD.map.preset(withinPreset()); });
   }
+  /** The camera of the "within" filter: its ring ('kpr5' … 'kpr20'), else the 30 km circle. */
+  function withinPreset() { var w = withinNow(); return w > 0 && w < 30 ? 'kpr' + w : 'ring30'; }
   function applyPersona(id) {
     var p = personaById(id);
     if (!p) return;
@@ -3621,7 +3633,12 @@
       : { value: fm.int(R.counts.A), label: 'Proyek terjangkau', tone: 'ok', title: fm.int(R.counts.A) + ' dari ' + fm.int(R.filtered.length) + ' proyek yang tampil terjangkau' });
     var cap = pan.cap && pan.cap.years ? pan.cap.years : null;
     items.push({ value: pan.T ? yrs(pan.T) : '—', label: 'Tenor', title: pan.T ? 'Tenor ' + years(pan.T) + (cap ? ' · paling lama ' + years(cap) : '') : stateText(pan.state) });
-    return { items: items, filters: activeFilterCount() + f.bands.length + (f.q ? 1 : 0) + (f.area ? 1 : 0) };
+    var w = withinNow();
+    var scope = { label: 'Cakupan', value: w > 0 ? w : 30, options: SCOPES.map(function (v) { return { v: v, label: v + ' km' }; }),
+      title: 'Proyek perumahan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.', set: function (v) { setWithin(+v); } };
+    /* the switch's own values (5, 15, 30 km) are not filters; other band choices count once each */
+    var bandsN = SCOPES.indexOf(w) >= 0 ? 0 : f.bands.length;
+    return { items: items, filters: activeFilterCount() + bandsN + (f.q ? 1 : 0) + (f.area ? 1 : 0), scope: scope };
   }
   /**
    * workspace() → {rail, drawer, hide} for MCD.windows.adopt (Detail ≥ 1024 px): the simulator is the summary rail,

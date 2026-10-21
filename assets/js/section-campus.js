@@ -263,19 +263,21 @@
   /* ============================================================ scope (D3, D4) */
 
   var SCOPE_MEM = null;
+  /** 5 | 15 | 30 for any value; 5 km is the default since 21 Oct 2026. */
+  function scopeOf(v) { v = +v; return v === 15 || v === 30 ? v : 5; }
   function scopeApi() { var I = MCD.inst; return I && I.scope && isFn(I.scope.get) && isFn(I.scope.set) ? I.scope : null; }
   function scopeGet() {
     var A = scopeApi();
-    if (A) { try { var v = +A.get('campus', 30); return v === 15 ? 15 : 30; } catch (e) { /* own below */ } }
+    if (A) { try { return scopeOf(A.get('campus', 5)); } catch (e) { /* own below */ } }
     if (SCOPE_MEM != null) return SCOPE_MEM;
     try {
       var raw = window.sessionStorage.getItem(SCOPE_KEY), o = raw ? JSON.parse(raw) : null;
-      if (o && o.v === 1 && (o.campus === 15 || o.campus === 30)) return o.campus;
+      if (o && o.v === 1 && (o.campus === 5 || o.campus === 15 || o.campus === 30)) return o.campus;
     } catch (e) { /* blocked: memory */ }
-    return 30;
+    return 5;
   }
   function scopeSet(v) {
-    v = v === 15 ? 15 : 30;
+    v = scopeOf(v);
     var A = scopeApi();
     if (A) { try { A.set('campus', v); return; } catch (e) { /* own below */ } }
     SCOPE_MEM = v;
@@ -298,16 +300,16 @@
         if (n) return { el: n, set: function (v) { if (r && isFn(r.set)) r.set(v); } };
       } catch (e) { /* own below */ }
     }
-    var s = seg('Cakupan jarak dari Mabes TNI', [{ v: 15, label: '15 km', title: 'Kampus dalam radius 15 km atau 30 km dari Mabes TNI.' }, { v: 30, label: '30 km', title: 'Kampus dalam radius 15 km atau 30 km dari Mabes TNI.' }],
+    var s = seg('Cakupan jarak dari Mabes TNI', [5, 15, 30].map(function (v) { return { v: v, label: v + ' km', title: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.' }; }),
       function (v) { setKm(v); }, 'scope cp-scope' + (vertical ? ' is-vertical' : ''));
-    s.el.title = 'Kampus dalam radius 15 km atau 30 km dari Mabes TNI.';
+    s.el.title = 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.';
     return s;
   }
   function announce(text) { if (ui && ui.panel && ui.panel.live) ui.panel.live.textContent = text; }
   /** "Cakupan 15 km. 187 kampus tampil." (§10): PDDikti campuses only; design and course schools are counted apart (D13). */
   function scopeWords(v) { computeView(); return 'Cakupan ' + v + ' km. ' + count(V ? V.n : 0, 'kampus') + ' tampil.'; }
   function setKm(v, o) {
-    v = v === 15 ? 15 : 30;
+    v = scopeOf(v);
     if (!st) return;
     var changed = v !== st.km;
     st.km = v;
@@ -319,14 +321,14 @@
     if (!(o && o.quiet)) announce(scopeWords(v));     /* the shared switch says it itself */
     if (v === 30) preloadOuter(1000);
   }
-  function cameraForKm() { var M = MCD.map; if (M && isFn(M.preset)) { try { M.preset(st.km === 15 ? 'cp15' : 'ring30'); } catch (e) { /* the map keeps its view */ } } }
+  function cameraForKm() { var M = MCD.map; if (M && isFn(M.preset)) { try { M.preset(st.km === 5 ? 'cp5' : st.km === 15 ? 'cp15' : 'ring30'); } catch (e) { /* the map keeps its view */ } } }
   /**
-   * Zones (§3.3, §6.3): the 103-kecamatan focus at 30 km, kecamatan15 at 15 km. The call names its section, so it holds
+   * Zones (§3.3, §6.3): the 103-kecamatan focus at 30 km, kecamatan15 at 5 and 15 km. The call names its section, so it holds
    * from the first frame of Kampus even while the map still shows the section before it. The answer of setZones() is
    * not read: during a mount it describes the previous section's zones (fix round 19 Oct 2026: reading it as "mode not
    * supported" replaced the 30 km kecamatan set with a plain circle on every entry from another section).
    */
-  function zoneSpec() { return !st || st.km === 15 ? { mode: 'kecamatan15' } : { mode: 'kecamatan', km: 30 }; }
+  function zoneSpec() { return !st || st.km <= 15 ? { mode: 'kecamatan15' } : { mode: 'kecamatan', km: 30 }; }
   function applyZones() {
     var M = MCD.map;
     if (!M || !isFn(M.setZones)) return;
@@ -344,7 +346,7 @@
 
   function defaults() {
     return {
-      km: 30, show: { univ: true, st: true, desain: true }, status: { negeri: true, swasta: true, kedinasan: true },
+      km: 5, show: { univ: true, st: true, desain: true }, status: { negeri: true, swasta: true, kedinasan: true },
       tiers: { premium: true, atas: true, menengah: true, reguler: true, unknown: true },
       sort: 'mhs', topSort: 'mhs', tab: 'list', q: '', kecBy: 'mhs', kecAll: false, merchAll: false,
       pipeStage: '', pipeProd: '', moreOpen: false, unplacedOpen: false, workOpen: false, selKec: null
@@ -1730,7 +1732,7 @@
     rows.slice(0, KL_MAX).forEach(function (r) { list.appendChild(E('div', { role: 'listitem', class: 'cp-kl__li' }, kecRow(r, kid))); });
     var emptyKids = [];
     if (!rows.length) {
-      if (st.km === 15) emptyKids.push(E('p', { class: 'cp-note' }, E('span', { text: 'Tidak ada kampus dalam 15 km di kecamatan ini. ' }), link('Pilih 30 km untuk melihat lebih banyak.', function () { setKm(30); if (ctx) ctx.select({ kind: 'cpKec', id: kid, extra: { kecamatanId: kid } }); })));
+      if (st.km <= 15) emptyKids.push(E('p', { class: 'cp-note' }, E('span', { text: 'Tidak ada kampus dalam ' + st.km + ' km di kecamatan ini. ' }), link('Pilih 30 km untuk melihat lebih banyak.', function () { setKm(30); if (ctx) ctx.select({ kind: 'cpKec', id: kid, extra: { kecamatanId: kid } }); })));
       else emptyKids.push(note(filterCount() ? EMPTY_FILTER : 'Tidak ada kampus dalam 30 km di kecamatan ini.'));
     }
     var more = link('Lihat semua di daftar', function () { goTab('kec'); }, 'cp-kl__more', 'Buka tab Kecamatan di Daftar & grafik');
@@ -1959,10 +1961,10 @@
     if (!M || !isFn(M.registerLayers)) return;
     mapOffs.push(M.registerLayers('campus', mapLayers, { id: 'campus' }));
     if (isFn(M.registerPosture)) M.registerPosture('campus', {
-      imagery: 'full', camera: st.km === 15 ? 'cp15' : 'ring30', rings: 'schools', layerSet: 'campus', deck: true, buildings: 'off',
-      zones: st.km === 15 ? 'kecamatan15' : { mode: 'kecamatan', km: 30 },
+      imagery: 'full', camera: st.km === 5 ? 'cp5' : st.km === 15 ? 'cp15' : 'ring30', rings: 'schools', layerSet: 'campus', deck: true, buildings: 'off',
+      zones: st.km <= 15 ? 'kecamatan15' : { mode: 'kecamatan', km: 30 },
       attribution: ATTRIBUTION,
-      onRingClick: function (km) { setKm(km <= 15.01 ? 15 : 30); },
+      onRingClick: function (km) { setKm(km <= 5.01 ? 5 : km <= 15.01 ? 15 : 30); },
       ringHint: 'Klik untuk menampilkan kampus sampai jarak ini dari Mabes TNI',
       telemetry: telemetry
     });
@@ -1972,7 +1974,10 @@
       M.registerSelectable('campusSite', function (id) { var s = C.ready() ? C.site(id) : null; return s ? [s.lon, s.lat] : null; });
       M.registerSelectable('cpKec', function () { return null; });
     }
-    if (isFn(M.registerPreset)) M.registerPreset('cp15', { label: '15 km dari Mabes TNI', fit: 'ring', anchor: 'center', km: 15 });
+    if (isFn(M.registerPreset)) {
+      M.registerPreset('cp5', { label: '5 km dari Mabes TNI', fit: 'ring', anchor: 'center', km: 5 });
+      M.registerPreset('cp15', { label: '15 km dari Mabes TNI', fit: 'ring', anchor: 'center', km: 15 });
+    }
     var T = MCD.territory;
     if (T && isFn(T.bind) && isFn(T.popup)) {
       unbindTerr = T.bind({
@@ -2045,10 +2050,10 @@
     if (!M || !pt) return;
     if (isFn(M.flyTo)) M.flyTo({ center: [pt.lon, pt.lat], zoom: 16 });
   }
-  /** Make a campus visible before flying to it: the 30 km scope, its jenis on, the filters that hide it off. */
+  /** Make a campus visible before flying to it: a scope wide enough, its jenis on, the filters that hide it off. */
   function ensureVisible(r, site) {
     var km = (site || r).km;
-    if (isNum(km) && km > 15 && st.km === 15) setKm(30, { camera: false });
+    if (isNum(km) && km > st.km) setKm(km > 15 ? 30 : 15, { camera: false });
     var g = C.group(r);
     if (st.show[g] === false) { st.show[g] = true; saveUi(); }
     var t = C.tierId(r.id);
@@ -2178,7 +2183,7 @@
   /** summary() → the slim rail: "Kampus 30 km" · "Mahasiswa" · "Dosen tetap", the filter count and the scope pair (§3.6). */
   function summary() {
     if (!st) return { items: [], filters: 0 };
-    var scope = { label: 'Cakupan', value: st.km, options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], set: function (v) { setKm(+v); }, title: 'Kampus dalam radius 15 km atau 30 km dari Mabes TNI.' };
+    var scope = { label: 'Cakupan', value: st.km, options: [5, 15, 30].map(function (v) { return { v: v, label: v + ' km' }; }), set: function (v) { setKm(+v); }, title: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.' };
     var nf = filterCount();
     if (!C || !computeView()) {
       var busy = C && C.state('campuses') === 'loading' ? 'Memuat daftar kampus…' : 'Daftar kampus belum dimuat.';
@@ -2241,7 +2246,7 @@
   /* ============================================================ the section */
 
   var SPEC = {
-    lede: 'Kampus dalam 30 km, dengan jumlah mahasiswa dan dosen dari PDDikti.',
+    lede: 'Kampus dalam 5, 15 atau 30 km, dengan jumlah mahasiswa dan dosen dari PDDikti.',
     shows: [
       'Perisai = universitas dan institut. Segitiga = sekolah tinggi, politeknik, akademi, desain dan kursus',
       'Biru = negeri, kuning = swasta, abu-abu = kedinasan. Titik lebih besar = mahasiswa lebih banyak',
@@ -2292,6 +2297,7 @@
       if (MCD.seal && isFn(MCD.seal.on)) { try { var offSeal = MCD.seal.on(function () { if (ctx) { if (ui && ui.work && ui.work.pipe) renderPipe(true); } }); if (isFn(offSeal)) offs.push(offSeal); } catch (e) { /* ignore */ } }
       c.registerCommands(function () {
         return [
+          { label: 'Kampus · Cakupan 5 km', run: function () { setKm(5); }, kw: 'kampus cakupan 5' },
           { label: 'Kampus · Cakupan 15 km', run: function () { setKm(15); }, kw: 'kampus cakupan 15' },
           { label: 'Kampus · Cakupan 30 km', run: function () { setKm(30); }, kw: 'kampus cakupan 30' },
           { label: 'Kampus · Daftar kampus', run: function () { goTab('list'); }, kw: 'kampus daftar universitas csv' },
@@ -2374,7 +2380,7 @@
       if (!ctx) return false;
       var k = /^campus:kec:(\d\d\.\d\d\.\d\d)$/.exec(a);
       if (k) { C.ensure().then(function (ok) { if (ok && ctx) { computeView(); showKec(k[1]); } }); return true; }
-      var sc = /^campus:scope:(15|30)$/.exec(a);
+      var sc = /^campus:scope:(5|15|30)$/.exec(a);
       if (sc) { setKm(+sc[1]); return true; }
       var tb = /^campus:tab:(list|kec|merch|pipe)$/.exec(a);
       if (tb) { goTab(tb[1]); return true; }
