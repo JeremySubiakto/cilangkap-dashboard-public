@@ -202,6 +202,8 @@
   function pois() { return W.MCD_SME_POIS || null; }
   function poisWhen() { var p = pois(), m = (p && p.meta) || {}; return monthYear(m.release || m.generated) || 'Sep 2026'; }
   function go(id, opts) { if (S.ctx) S.ctx.navigate(id, opts); }
+  /** false for a section the config hides (KPR since 22 Oct 2026): its door and commands are not drawn. */
+  function shown(id) { var L = MCD.config && MCD.config.sections; return !L || L.some(function (s) { return s.id === id; }); }
   function btn(label, opts) {
     opts = opts || {};
     var b = el('button', { type: 'button', class: 'btn ' + (opts.cls || 'btn--secondary') + ' ov-btn', title: opts.title || null, aria: opts.aria || null },
@@ -2206,8 +2208,8 @@
       { id: 'merchants', icon: 'sec-merchants', t: 'Merchant (LVM & EDC)',
         line: M.hasBank ? int(M.notYet) + ' merchant belum ada di LVM' : (isNum(M.potential) ? int(M.potential) + ' merchant dalam ' + KM + ' km' : 'Merchant dalam ' + KM + ' km'), b: 'Buka Merchant' },
       { id: 'schools', icon: 'sec-schools', t: 'Sekolah (SMA)', line: smaLine, b: 'Buka Sekolah' },
-      { id: 'property', icon: 'sec-property', t: 'KPR', line: isNum(np) ? int(np) + ' proyek perumahan dalam ' + KPR_KM + ' km' : 'Proyek perumahan dan simulasi KPR', b: 'Buka KPR' }
-    ];
+      shown('property') ? { id: 'property', icon: 'sec-property', t: 'KPR', line: isNum(np) ? int(np) + ' proyek perumahan dalam ' + KPR_KM + ' km' : 'Proyek perumahan dan simulasi KPR', b: 'Buka KPR' } : null
+    ].filter(Boolean);
     /* v6: the Kampus door after Sekolah (D2: same anatomy, no campus names) */
     if (campusDoorOn()) { var cl = campusLine(); cards.splice(2, 0, { id: 'campus', icon: 'sec-campus', t: 'Kampus', line: cl.text, title: cl.title, b: 'Buka Kampus' }); }
     r.campusLine = null;
@@ -2333,12 +2335,12 @@
         var M = S.model || { priority: [] };
         var cmds = [
           { label: 'Buka Merchant (LVM & EDC)', kw: 'merchant lvm edc akuisisi', run: function () { go('merchants'); } },
-          { label: 'Hitung kemampuan bayar nasabah (kalkulator KPR)', kw: 'kpr kalkulator penghasilan angsuran', run: function () { go('property', { view: 'deep', action: 'property:calculator' }); } },
+          shown('property') ? { label: 'Hitung kemampuan bayar nasabah (kalkulator KPR)', kw: 'kpr kalkulator penghasilan angsuran', run: function () { go('property', { view: 'deep', action: 'property:calculator' }); } } : null,
           { label: 'Impor file LVM', kw: 'impor upload rev lvm', run: function () { go('data', { view: 'deep', action: 'data:import' }); } },
           { label: 'Lihat Sasaran EDC (usaha menengah & besar)', kw: 'sasaran edc kartu usaha menengah besar', run: function () { openSasaran('edc'); } },
           { label: 'Lihat Sasaran LVM (usaha kecil & mikro)', kw: 'sasaran lvm qris usaha kecil mikro', run: function () { openSasaran('lvm'); } },
           { label: 'Lihat Jaringan nasional (lewat kantor pusat)', kw: 'jaringan nasional kantor pusat minimarket waralaba chain', run: function () { openSasaran('nasional'); } }
-        ];
+        ].filter(Boolean);
         (M.priority || []).forEach(function (p) {
           cmds.push({ label: 'Prioritas ' + p.rank + ': Kec. ' + p.name, kw: 'kecamatan prioritas kunjungan ' + (p.kota || ''), run: function () { openKec(p.id); } });
         });

@@ -66,7 +66,9 @@
       file: 'assets/js/section-campus.js', css: 'assets/css/section-campus.css',
       layout: 'rails',
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true } },
-    { id: 'property', key: '5', label: 'KPR', short: 'KPR', title: 'KPR', titleFull: 'Proyek perumahan dan KPR di sekitar Mabes TNI',
+    /* hidden: true (22 Oct 2026) takes KPR out of the section row, the keys, search and the Ringkasan doors; the code
+       and data stay. Set it to false to show KPR again. */
+    { id: 'property', key: '5', hidden: true, label: 'KPR', short: 'KPR', title: 'KPR', titleFull: 'Proyek perumahan dan KPR di sekitar Mabes TNI',
       help: 'Proyek perumahan baru dalam 5, 15 atau 30 km dari Mabes TNI.\nIsi penghasilan bersih untuk melihat rumah yang terjangkau.\nHitung angsuran KPR di kalkulator.',
       sheets: [],
       file: 'assets/js/section-property.js', css: 'assets/css/section-property.css',
@@ -123,7 +125,9 @@
     { key: 'c', scope: 'property', action: 'property:color', label: 'Ganti warna peta: keterjangkauan, segmen atau harga' },
     { key: 'p', scope: 'property', action: 'property:print', label: 'Cetak simulasi' }
   ];
-  SECTIONS.forEach(function (s) {
+  /* the sections on screen: a section with `hidden: true` keeps its entry in sectionById, nothing else */
+  var VISIBLE = SECTIONS.filter(function (s) { return !s.hidden; });
+  VISIBLE.forEach(function (s) {
     KEYMAP.unshift({ key: s.key, scope: 'global', action: 'section:' + s.id, label: 'Buka ' + s.label });
   });
 
@@ -265,7 +269,7 @@
     // Auth gate addendum §2.2 (read by MCD.gate.mount()).
     gate: { idleMinutes: 15, map: true },
 
-    sections: SECTIONS,
+    sections: VISIBLE,
     layouts: LAYOUTS,
     keymap: KEYMAP,
     map: MAP,
@@ -329,7 +333,7 @@
   cfg.sectionById = {};
   SECTIONS.forEach(function (s, i) { s.index = i; cfg.sectionById[s.id] = s; });
   cfg.sectionByKey = {};
-  SECTIONS.forEach(function (s) { cfg.sectionByKey[s.key] = s; });
+  VISIBLE.forEach(function (s) { cfg.sectionByKey[s.key] = s; });
   cfg.programById = {};
   PROGRAMS.forEach(function (p) { cfg.programById[p.id] = p; });
 

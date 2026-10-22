@@ -1357,6 +1357,7 @@
     S.navInk = h('li', { class: 'nav__ink', role: 'presentation', 'aria-hidden': 'true' });
     list.appendChild(S.navInk);
     S.tabInk = h('li', { class: 'tabbar__ink', role: 'presentation', 'aria-hidden': 'true' });
+    S.tabInk.style.width = (100 / Math.max(1, S.nav.length)) + '%';   /* one column per section shown */
     bar.appendChild(S.tabInk);
     clear(host);
     host.appendChild(list);
@@ -3372,7 +3373,7 @@
       if (!sec) return;
       add('Tab', sec.label + ' › ' + t[1], function () { navigate(t[0], { view: 'deep', action: 'tablabel:' + t[1] + (t[3] ? '|' + t[3] : '') }); }, { kw: t[2] });
     });
-    add('Tindakan', 'Hitung kemampuan bayar KPR nasabah', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }, { kw: 'kpr kalkulator cicilan gaji dsr' });
+    if (S.byId.property) add('Tindakan', 'Hitung kemampuan bayar KPR nasabah', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }, { kw: 'kpr kalkulator cicilan gaji dsr' });
     add('Tindakan', T.importData, function () { navigate('data', { view: 'deep', action: 'tablabel:Impor' }); }, { pin: true, kw: 'impor upload file excel xlsx csv rev lvm' });
     add('Tindakan', 'Ekspor daftar merchant yang belum ada di LVM (CSV)', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }, { kw: 'ekspor export csv leads daftar kunjungan' });
     add('Tindakan', 'Lihat toko LVM yang perlu diaktifkan kembali', function () { navigate('merchants', { view: 'deep', action: 'tablabel:Status LVM & EDC' }); }, { kw: 'reaktivasi diaktifkan kembali tidak aktif inactive' });
@@ -3553,16 +3554,16 @@
       ['Mencari SMA, SMK dan MA di sekitar Mabes TNI', 'Sekolah › Detail › Daftar sekolah', function () { navigate('schools', { view: 'deep', action: 'tablabel:Daftar sekolah|Daftar SMA' }); }],
       /* v6 (V6_SPEC §6.11) */
       ['Mencari kampus untuk payroll dan kantin', 'Kampus › Detail › Daftar kampus', function () { navigate('campus', { view: 'deep', action: 'tablabel:Daftar kampus' }); }],
-      ['Menghitung kemampuan bayar KPR nasabah', 'KPR › Detail › Kalkulator KPR', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }],
+      S.byId.property ? ['Menghitung kemampuan bayar KPR nasabah', 'KPR › Detail › Kalkulator KPR', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }] : null,
       ['Mengimpor file LVM bulanan', 'Data & Privasi › Detail › Impor', function () { navigate('data', { view: 'deep', action: 'tablabel:Impor' }); }]
-    ];
+    ].filter(Boolean);                                /* null: a hidden section's task */
     var want = h('ul', { class: 'help__tasks' }, tasks.map(function (t) {
       var b = h('button', { type: 'button', class: 'btn btn--secondary help__go', 'aria-label': 'Buka: ' + t[0] }, [h('span', { text: 'Buka' }), icon('chev-r')]);
       b.addEventListener('click', function () { closeHelp(); safe(t[2]); });
       return h('li', { class: 'help__task' }, [h('span', { class: 'help__task-t' }, [h('b', { text: t[0] }), h('span', { class: 'help__task-where', text: t[1] })]), b]);
     }));
     var steps = [
-      ['Pilih bagian', 'Pilih salah satu dari enam bagian di baris atas.\nBagian yang aktif bergaris bawah.'],
+      ['Pilih bagian', 'Pilih salah satu bagian di baris atas.\nBagian yang aktif bergaris bawah.'],
       ['Pilih tampilan', 'Sederhana: angka utama dan peta jalan.\nDetail: semua filter, grafik, tabel dan peta satelit.\nTombolnya ada di judul setiap bagian.'],
       ['Gerakkan peta', 'Tombol peta ada di kanan bawah.\nGunakan Atur ulang peta jika peta bergeser terlalu jauh.\nMenu Peta berisi jarak, lapisan dan Warna asli.'],
       /* items 23 and 30: outlines and label chips, no coloured areas; a soft shade outside the 15 km area */

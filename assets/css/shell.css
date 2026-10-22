@@ -1002,7 +1002,7 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
     background: var(--glass-solid); border-top: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
   }
   /* v6: six sections (Kampus, V6_SPEC §2): 65 px per tab at 390, 60 at 360; labels stay 12 px and never overflow */
-  .tabbar__list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
+  .tabbar__list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
   .tabbar__btn {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     width: 100%; height: var(--tabbar-h); padding: 0 2px; font: 500 12px/14px var(--font-sans); color: var(--text-2);
