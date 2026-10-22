@@ -393,7 +393,8 @@
 
   /**
    * registerSchema(type, {label, dataKey, columns:[{key, type, req, syn[], personal}], required[],
-   *   detect(matchedKeys, normalisedHeaders) → number|false, deny[], monthly:{canonicalKey: prefix}, build(rows, ctx) → records})
+   *   detect(matchedKeys, normalisedHeaders) → number|false, deny[], monthly:{canonicalKey: prefix},
+   *   daily:{canonicalKey: prefix} (columns named <prefix>YYYY-MM-DD, or a date cell as header), build(rows, ctx) → records})
    * req: true (✓ required) · 'any:<group>' (at least one per group) · false.
    */
   function registerSchema(type, schema) {
@@ -402,7 +403,7 @@
       type: type, label: schema.label || type, dataKey: schema.dataKey || type, columns: schema.columns.map(function (c) {
         return { key: c.key, type: c.type || 'string', req: c.req || false, syn: c.syn || [], personal: !!c.personal, note: c.note || null };
       }),
-      detect: schema.detect || null, deny: (schema.deny || []).map(normHeader), monthly: schema.monthly || {},
+      detect: schema.detect || null, deny: (schema.deny || []).map(normHeader), monthly: schema.monthly || {}, daily: schema.daily || {},
       build: schema.build, minScore: schema.minScore || 1, description: schema.description || null
     };
     s.colByKey = {};
@@ -426,9 +427,10 @@
     return s;
   }
 
-  /** Header row → {mapping:{canonical: colIndex}, unmatched:[names], dropped:[names], monthly:{canonical:{ 'YYYY-MM': colIndex }}}. */
+  /** Header row → {mapping:{canonical: colIndex}, unmatched:[names], dropped:[names], monthly:{canonical:{ 'YYYY-MM': colIndex }},
+      daily:{canonical:{ 'YYYY-MM-DD': colIndex }}}. */
   function mapHeaders(headers, type) {
-    var s = schemaOf(type), mapping = {}, unmatched = [], dropped = [], monthly = {};
+    var s = schemaOf(type), mapping = {}, unmatched = [], dropped = [], monthly = {}, daily = {};
     (headers || []).forEach(function (h, i) {
       var raw = str(h), n = normHeader(raw);
       if (!n) return;
@@ -439,11 +441,17 @@
         if (m && +m[2] >= 1 && +m[2] <= 12) { (monthly[canon] = monthly[canon] || {})[m[1] + '-' + m[2]] = i; hitMonth = true; }
       });
       if (hitMonth) return;
+      var hitDay = false;
+      Object.keys(s.daily).forEach(function (canon) {
+        var re = new RegExp('^' + s.daily[canon] + '_?(\\d{4})_(\\d{2})_(\\d{2})$'), m = re.exec(n);
+        if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) { (daily[canon] = daily[canon] || {})[m[1] + '-' + m[2] + '-' + m[3]] = i; hitDay = true; }
+      });
+      if (hitDay) return;
       var k = s.lookup[n];
       if (k && !has(mapping, k)) mapping[k] = i;
       else unmatched.push(raw);
     });
-    return { mapping: mapping, unmatched: unmatched, dropped: dropped, monthly: monthly };
+    return { mapping: mapping, unmatched: unmatched, dropped: dropped, monthly: monthly, daily: daily };
   }
 
   /** Scores a sheet against every registered schema (§F.5 auto-detection + AM-6 §3.4.3). */
@@ -451,7 +459,7 @@
     var heads = (sheet.headers || []).map(normHeader);
     var cands = ORDER.map(function (type) {
       var s = SCHEMAS[type], m = mapHeaders(sheet.headers, type), keys = Object.keys(m.mapping);
-      var score = keys.length + Object.keys(m.monthly).length;
+      var score = keys.length + Object.keys(m.monthly).length + Object.keys(m.daily).length;
       var missing = s.required.filter(function (k) { return keys.indexOf(k) < 0; });
       var groups = Object.keys(s.anyGroups).filter(function (g) { return !s.anyGroups[g].some(function (k) { return keys.indexOf(k) >= 0; }); });
       var ok = !missing.length && score >= s.minScore;
@@ -478,7 +486,7 @@
       var r = rows[i] || [], blank = true;
       for (var j = 0; j < r.length; j++) if (!empty(r[j])) { blank = false; break; }
       if (blank) continue;
-      if (!header) { header = r.map(function (x) { return str(x); }); headerNo = i + 1; continue; }
+      if (!header) { header = r.map(function (x) { return x && typeof x.getTime === 'function' ? (parseDate(x) || str(x)) : str(x); }); headerNo = i + 1; continue; }
       out.push(r); nos.push(i + 1);
     }
     return { headers: header || [], rows: out, rowNos: nos, headerRow: headerNo };
@@ -609,7 +617,7 @@
 
   /** Rows → canonical objects {key: raw, _row, _months:{canon:{ym: raw}}}. */
   function canonRows(sheet, s, m, from, to) {
-    var out = [], mapping = m.mapping, monthly = m.monthly || {}, keys = Object.keys(mapping), mk = Object.keys(monthly);
+    var out = [], mapping = m.mapping, monthly = m.monthly || {}, daily = m.daily || {}, keys = Object.keys(mapping), mk = Object.keys(monthly), dk = Object.keys(daily);
     for (var i = from; i < to; i++) {
       var r = sheet.rows[i], o = { _row: sheet.rowNos ? sheet.rowNos[i] : i + 2 };
       for (var k = 0; k < keys.length; k++) { var v = r[mapping[keys[k]]]; o[keys[k]] = typeof v === 'string' ? v.trim() : v; }
@@ -620,6 +628,13 @@
           Object.keys(cols).forEach(function (ym) { mm[ym] = r[cols[ym]]; });
         });
       }
+      if (dk.length) {
+        o._days = {};
+        dk.forEach(function (canon) {
+          var cols = daily[canon], dd = o._days[canon] = {};
+          Object.keys(cols).forEach(function (ymd) { dd[ymd] = r[cols[ymd]]; });
+        });
+      }
       out.push(o);
     }
     return out;
@@ -627,7 +642,7 @@
 
   function prepare(sheet, type, mapping, opts) {
     var s = schemaOf(type), auto = mapHeaders(sheet.headers, type);
-    var m = { mapping: mapping || auto.mapping, monthly: auto.monthly, unmatched: auto.unmatched, dropped: auto.dropped };
+    var m = { mapping: mapping || auto.mapping, monthly: auto.monthly, daily: auto.daily, unmatched: auto.unmatched, dropped: auto.dropped };
     if (mapping) {
       // A user-edited mapping: canonical → column index or header name. Denied columns stay dropped.
       var fixed = {};
@@ -639,6 +654,7 @@
       var used = {};
       Object.keys(fixed).forEach(function (k) { used[fixed[k]] = 1; });
       Object.keys(m.monthly).forEach(function (c) { Object.keys(m.monthly[c]).forEach(function (ym) { used[m.monthly[c][ym]] = 1; }); });
+      Object.keys(m.daily).forEach(function (c) { Object.keys(m.daily[c]).forEach(function (d) { used[m.daily[c][d]] = 1; }); });
       m.unmatched = sheet.headers.filter(function (h, i) { return !used[i] && str(h) && !denied(normHeader(h), s.deny); });
     }
     var report = newReport(type, sheet, s);
@@ -1064,7 +1080,7 @@
   function looksRaw(dk, r) {
     if (!r || typeof r !== 'object') return false;
     var probes = { lvm: ['storeId', 'createdDate', 'freqMtd'], edc: ['installedDate', 'trxMonth', 'volumeMonth'],
-      sekolah: ['products', 'foundation'], sites: ['kind'] }[dk] || [];
+      sekolah: ['products', 'foundation'], sites: ['kind'], saldo: ['balances'] }[dk] || [];
     return !probes.some(function (k) { return has(r, k); });
   }
 

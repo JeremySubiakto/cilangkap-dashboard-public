@@ -528,3 +528,9 @@ body[data-section="merchants"] .dd-blk[data-fold="daftar"] .ws-fold__t { flex: 0
 @media (prefers-reduced-motion: reduce) {
   .mx-link { transition: none; }
 }
+
+/* Saldo merchant (tab 6): the imported balance report as a table; red = saldo turun, green = naik (MtD) */
+.mx-saldo__tools { margin-bottom: 12px; }
+.mx-saldo__name { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
+.mx-saldo__d--bad { color: var(--status-bad); }
+.mx-saldo__d--ok { color: var(--status-ok); }

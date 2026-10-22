@@ -54,8 +54,9 @@
   /* UI state that survives remounts (view switch); never in the hash or in storage */
   var UI = { tab: 'prio', comboAll: false, heatAll: false, leadShown: PAGE, inactShown: REACT_FIRST, inactOwn: true, q: '', filterOpen: false, scrollTo: null,
     leadSort: 'near', reactSort: 'near', ecTier: 'edc', ecSort: 'score', ecShown: PAGE, ecTip: false, focus: null,
-    natOpen: false, natShown: PAGE, kecSheet: null, explicitNext: false };
-  var TABS = [['prio', 'Prioritas kunjungan'], ['edc', 'Kandidat EDC'], ['kec', 'Kecamatan'], ['cat', 'Jenis usaha'], ['status', 'Status LVM & EDC'], ['info', 'Info & cara hitung']];
+    natOpen: false, natShown: PAGE, kecSheet: null, explicitNext: false, saldoShow: 'all', saldoSort: 'drop', saldoShown: PAGE };
+  var TABS = [['prio', 'Prioritas kunjungan'], ['edc', 'Kandidat EDC'], ['kec', 'Kecamatan'], ['cat', 'Jenis usaha'], ['status', 'Status LVM & EDC'],
+    ['saldo', 'Saldo merchant'], ['info', 'Info & cara hitung']];
   var GM_TIP = 'Buka lokasi ini di Google Maps, di tab baru. Perlu internet.';
   var APPROX_NOTE = 'Titik perkiraan di tengah kelurahan. File LVM tidak memuat koordinat.';
   /* product images (item 29): small and quiet, only where the product is discussed */
@@ -535,6 +536,7 @@
     buildKecTab(R.panels.kec);
     buildCatTab(R.panels.cat);
     buildStatusTab(R.panels.status);
+    buildSaldoTab(R.panels.saldo);
     buildInfoTab(R.panels.info);
     showTab(UI.tab, { silent: true });
   }
@@ -579,7 +581,7 @@
       get: function () { return UI.tab; }
     };
   }
-  var TAB_PARTS = { prio: ['prio', 'leads'], edc: ['edccand'], kec: ['kec', 'heat'], cat: ['cat'], status: ['stores', 'react', 'kpi', 'edc'], info: ['why', 'method'] };
+  var TAB_PARTS = { prio: ['prio', 'leads'], edc: ['edccand'], kec: ['kec', 'heat'], cat: ['cat'], status: ['stores', 'react', 'kpi', 'edc'], saldo: ['saldo'], info: ['why', 'method'] };
   function showTab(id, opts) {
     opts = opts || {};
     if (!R.panels || !R.panels[id] || R.switching) return;
@@ -606,6 +608,7 @@
       case 'kec': safe(paintKec); safe(paintHeat); break;
       case 'cat': safe(paintCat); break;
       case 'status': safe(paintStores); safe(paintReact); safe(paintKpi); safe(paintEdc); break;
+      case 'saldo': safe(paintSaldo); break;
       case 'info': safe(paintMethod); break;
     }
   }
@@ -1671,7 +1674,82 @@
     }
   }
 
-  /* ------------------------------------------------------------- tab 6: Info & cara hitung */
+  /* ------------------------------------------------------------- tab 6: Saldo merchant (dataset 'saldo', MCD.saldo) */
+
+  /* The merchant balance report staff import in Data & Privasi: read in this browser, CIF and account numbers dropped
+     on reading (merchant-saldo.js). A list, biggest MtD drop first; names are hidden while "Samarkan nama" is on. */
+  function buildSaldoTab(panel) {
+    R.saldo = exhibit('saldo', { cls: 'mx-saldo' });
+    R.saldoTools = h('div', { class: 'mx-toolbar mx-saldo__tools' });
+    R.saldoBody = h('div', {});
+    R.saldo.body.appendChild(R.saldoTools);
+    R.saldo.body.appendChild(R.saldoBody);
+    panel.appendChild(R.saldo.el);
+  }
+  function saldoPct(r, last) {
+    var b = r.balances[last];
+    if (!isNum(b) || !isNum(r.mtd) || b - r.mtd <= 0) return null;
+    return r.mtd / (b - r.mtd);
+  }
+  function signedRp(v) { return isNum(v) ? (v > 0 ? '+' : '') + fm().rp(v) : '—'; }
+  function paintSaldo() {
+    if (!R.saldo) return;
+    var Sd = MCD.saldo, list = Sd ? Sd.rows() : [], sm = Sd ? Sd.summary() : null, veil = privacy() === 'veil';
+    var meta = (MCD.data.meta && MCD.data.meta.saldo) || {};
+    var sig = [MCD.data.version, list.length, UI.saldoShow, UI.saldoSort, UI.saldoShown, veil ? 1 : 0].join('|');
+    if (SIG.saldo === sig) return;
+    SIG.saldo = sig;
+    clear(R.saldoTools);
+    clear(R.saldoBody);
+    if (!sm) {
+      setX(R.saldo, 'Saldo merchant nasabah', 'Saldo per tanggal dan perubahan MtD setiap merchant nasabah cabang', 'Sumber: file saldo merchant (belum diimpor).');
+      var go = h('button', { type: 'button', class: 'btn btn--secondary', text: 'Buka Data & Privasi' });
+      go.addEventListener('click', goImport);
+      R.saldoBody.appendChild(h('p', { class: 'mx-none' }, ['Impor file saldo merchant (misalnya Cilangkap Merchant Area.xlsx) di Data & Privasi › Impor. File dibaca di browser ini; CIF dan nomor rekening tidak disimpan. ', go]));
+      return;
+    }
+    var last = sm.asOf;
+    setX(R.saldo, int(sm.drop) + ' dari ' + int(sm.n) + ' merchant nasabah turun saldonya bulan ini',
+      'Saldo per ' + dateText(last) + ' · total ' + fm().rp(sm.total) + ' · ' + int(sm.growth) + ' naik, ' + int(sm.drop) + ' turun (MtD)',
+      'Sumber: ' + (sm.demo ? 'data contoh (ilustrasi)' : 'file saldo merchant' + (meta.file ? ' (' + meta.file + ')' : '')) + ' · dibaca di browser ini; CIF, nomor rekening dan nama resmi tidak disimpan.');
+    R.saldoTools.appendChild(seg('Tampilkan', [['all', 'Semua'], ['drop', 'Turun'], ['growth', 'Naik']], UI.saldoShow,
+      function (v) { UI.saldoShow = v; UI.saldoShown = PAGE; paintSaldo(); }));
+    R.saldoTools.appendChild(seg('Urutkan', [['drop', 'Turun terbanyak'], ['bal', 'Saldo terbesar'], ['name', 'Nama']], UI.saldoSort,
+      function (v) { UI.saldoSort = v; paintSaldo(); }));
+    var rows = list.filter(function (r) { return UI.saldoShow === 'all' || r.flagMtd === UI.saldoShow; });
+    var cmp = UI.saldoSort === 'bal' ? function (a, b) { return (b.balances[last] || 0) - (a.balances[last] || 0); }
+      : UI.saldoSort === 'name' ? function (a, b) { return a.name.localeCompare(b.name); }
+        : function (a, b) { return (isNum(a.mtd) ? a.mtd : 0) - (isNum(b.mtd) ? b.mtd : 0); };
+    rows = rows.slice().sort(cmp);
+    var shown = rows.slice(0, UI.saldoShown);
+    var head = ['Merchant', 'EDC', 'Produk', 'Saldo ' + fm().date(last), 'MtD', 'MtD %', 'MoM', 'Status'];
+    var tb = h('tbody', {});
+    shown.forEach(function (r) {
+      var k = list.indexOf(r) + 1, pct = saldoPct(r, last), tone = r.flagMtd === 'drop' ? 'bad' : (r.flagMtd === 'growth' ? 'ok' : 'none');
+      tb.appendChild(h('tr', {}, [
+        h('td', { class: 'mx-saldo__name', title: veil ? null : (r.dba && r.dba !== r.name ? r.dba : null), text: veil ? 'Merchant ' + k : r.name }),
+        h('td', { class: 'num', text: isNum(r.edc) ? int(r.edc) : (r.hasEdc === false ? '0' : '—') }),
+        h('td', { text: r.product || '—' }),
+        h('td', { class: 'num', text: fm().rp(r.balances[last]) }),
+        h('td', { class: 'num mx-saldo__d mx-saldo__d--' + tone, text: signedRp(r.mtd) }),
+        h('td', { class: 'num mx-saldo__d mx-saldo__d--' + tone, text: isNum(pct) ? (pct > 0 ? '+' : '') + fm().pct(pct, 1) : '—' }),
+        h('td', { class: 'num', text: signedRp(r.mom) }),
+        h('td', {}, [h('span', { class: 'map-dot map-dot--' + tone, 'aria-hidden': 'true' }), ' ', r.flagMtd === 'drop' ? 'Turun' : (r.flagMtd === 'growth' ? 'Naik' : '—')])
+      ]));
+    });
+    var table = h('table', { class: 'tbl tbl--36 mx-saldo__tbl' }, [
+      h('thead', {}, [h('tr', {}, head.map(function (t, i) { return h('th', { scope: 'col', class: i === 0 || i === 2 || i === 7 ? null : 'num', text: t }); }))]), tb]);
+    R.saldoBody.appendChild(h('div', { class: 'tbl-wrap' }, [table]));
+    var foot = h('div', { class: 'tbl-foot' }, [h('span', { text: int(shown.length) + ' dari ' + int(rows.length) + ' merchant' })]);
+    if (rows.length > shown.length) {
+      var more = h('button', { type: 'button', class: 'btn btn--ghost', text: 'Tampilkan lebih banyak' });
+      more.addEventListener('click', function () { UI.saldoShown += PAGE; paintSaldo(); });
+      foot.appendChild(more);
+    }
+    R.saldoBody.appendChild(foot);
+  }
+
+  /* ------------------------------------------------------------- tab 7: Info & cara hitung */
 
   /* Facts from docs/research-tni-products.json (business.products LVM and LVM-MELAJU), docs/research-sme.json
      (smeProducts LVM) and docs/research-schools.json (regulatory), all checked 12 Oct 2026. Nothing about
@@ -2376,6 +2454,8 @@
       if (keys && (keys.indexOf('selection') >= 0 || keys.indexOf('*') >= 0) && ctx && ctx.state && ctx.state.get && !ctx.state.get().selection) endTrail();
       wsCheck();
       page.update(d, keys);
+      /* Saldo merchant follows an import, a vault load and "Samarkan nama" */
+      if (UI.tab === 'saldo' && R.saldo) safe(paintSaldo);
     },
     unmount: function () {
       gvClose(true);                            // Google results never outlive the list view
