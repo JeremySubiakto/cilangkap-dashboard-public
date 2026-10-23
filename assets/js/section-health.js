@@ -40,7 +40,7 @@
     scopeTip: 'Fasilitas kesehatan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
     scopeSay: function (km, n) { return 'Cakupan ' + km + ' km. ' + n + ' fasilitas tampil.'; },
     jenis: 'Jenis', keepOne: 'Paling sedikit satu jenis tampil.', more: 'Filter lain', clear: 'Hapus filter',
-    railRs: function (km) { return 'RS ' + km + ' km'; }, railKl: 'Klinik', railKc: 'Kecantikan',
+    railRs: 'Rumah sakit', railKl: 'Klinik', railKc: 'Kecantikan',
     railRsTitle: function (km, b) { return 'Rumah sakit dalam ' + km + ' km dari Mabes TNI: ' + b.besar + ' besar, ' + b.sedang + ' sedang, ' + b.kecil + ' kecil.'; },
     railKlTitle: function (km) { return 'Klinik kesehatan dalam ' + km + ' km, termasuk klinik gigi, klinik mata dan laboratorium.'; },
     railKcTitle: function (km) { return 'Klinik kecantikan dalam ' + km + ' km.'; },
@@ -1923,11 +1923,11 @@
     var nf = filterCount(), km = st.km;
     if (!H || !computeView()) {
       var busy = H && H.state() === 'loading' ? T.loading : H && H.state() === 'error' ? T.failed : 'Data fasilitas kesehatan belum dimuat.';
-      return { items: [{ value: '—', label: T.railRs(km), title: busy }, { value: '—', label: T.railKl, title: busy }, { value: '—', label: T.railKc, title: busy }], filters: nf, scope: scope };
+      return { items: [{ value: '—', label: T.railRs, title: busy }, { value: '—', label: T.railKl, title: busy }, { value: '—', label: T.railKc, title: busy }], filters: nf, scope: scope };
     }
     var f = fm(), n = V.counts, sh = st.f.show;
     function item(kind, label, title, word) { return sh[kind] === false ? { value: '—', label: label, title: T.kindOff(word) } : { value: f.int(n[kind]), label: label, title: title }; }
-    return { items: [item('rs', T.railRs(km), T.railRsTitle(km, n.bySize), 'Rumah sakit'), item('klinik', T.railKl, T.railKlTitle(km), 'Klinik kesehatan'), item('kecantikan', T.railKc, T.railKcTitle(km), 'Klinik kecantikan')],
+    return { items: [item('rs', T.railRs, T.railRsTitle(km, n.bySize), 'Rumah sakit'), item('klinik', T.railKl, T.railKlTitle(km), 'Klinik kesehatan'), item('kecantikan', T.railKc, T.railKcTitle(km), 'Klinik kecantikan')],
       filters: nf, scope: scope };
   }
   function workspace() {

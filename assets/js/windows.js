@@ -890,22 +890,72 @@
     if (opts.length < 2) return null;
     return { label: sc.label ? String(sc.label) : T.scope, value: +sc.value, options: opts, set: sc.set, title: sc.title ? String(sc.title) : '' };
   }
+  /** The expand glyph: a panel with its left column and a chevron into the map (16 px grid, like the sprite). */
+  function panelOpenIcon() {
+    var s = DOC.createElementNS(NS, 'svg');
+    s.setAttribute('class', 'icon');
+    s.setAttribute('viewBox', '0 0 16 16');
+    s.setAttribute('aria-hidden', 'true');
+    s.setAttribute('focusable', 'false');
+    var r = DOC.createElementNS(NS, 'rect');
+    [['x', '2'], ['y', '2.5'], ['width', '12'], ['height', '11'], ['rx', '2']].forEach(function (a) { r.setAttribute(a[0], a[1]); });
+    var p = DOC.createElementNS(NS, 'path');
+    p.setAttribute('d', 'M5.5 2.5v11M8.5 6l2 2-2 2');
+    s.appendChild(r);
+    s.appendChild(p);
+    return s;
+  }
+  /**
+   * The slim rail (76 px, design pass of 23 Oct 2026): an icon-only expand button whose name and key sit in its
+   * aria-label and in a hover / focus tooltip (aria-hidden: the button already says it), the section's icon and short
+   * label, the scope pair, the filter badge and the numbers. "[" is said only where it works (the adopted rail; the
+   * Sederhana guide's rail opens with its own callback).
+   */
   function buildSlim(cfg, onOpen) {
+    var keyed = !onOpen;
     onOpen = onOpen || toggleRail;
-    var open = h('button', { type: 'button', class: 'ws-slim__open', title: T.openPanelOf(cfg.label) + ' ( [ )', 'aria-label': T.openPanelOf(cfg.label), 'aria-keyshortcuts': '[' }, [icon('chev-r'), h('span', { class: 'ws-slim__open-t', text: T.openPanel })]);
+    var name = T.openPanelOf(cfg.label);
+    var open = h('button', { type: 'button', class: 'ws-slim__open', 'aria-label': name, 'aria-keyshortcuts': keyed ? '[' : null }, [panelOpenIcon()]);
+    var tip = h('span', { class: 'ws-slim__tip', 'aria-hidden': 'true' }, [h('span', { text: name }), keyed ? h('kbd', { class: 'kbd', text: '[' }) : null]);
     var kpis = h('div', { class: 'ws-slim__kpis', role: 'list' });
     var badge = h('span', { class: 'ws-slim__badge', hidden: true });
     /* v6: the scope pair (15 km over 30 km) between the label and the numbers; built on the first summary that has one */
     var scope = h('div', { class: 'ws-slim__scope', hidden: true });
     var el = h('aside', { class: 'ws-slim panel', role: 'region', 'aria-label': T.railRegion(cfg.label), 'data-map-occluder': '' }, [
-      open,
+      open, tip,
       h('span', { class: 'ws-slim__sec', 'aria-hidden': 'true' }, [icon(cfg.icon || 'layers')]),
       h('span', { class: 'ws-slim__lbl', text: cfg.short || cfg.label }),
-      scope, badge, kpis
+      badge, scope, kpis
     ]);
     open.addEventListener('click', function (e) { e.stopPropagation(); onOpen(); });
-    el.addEventListener('click', function (e) { if (e.target === el || (e.target.closest && e.target.closest('.ws-slim__kpi, .ws-slim__sec, .ws-slim__lbl'))) onOpen(); });
-    return { el: el, kpis: kpis, open: open, badge: badge, scope: scope, pair: null };
+    el.addEventListener('click', function (e) { if (e.target === el || (e.target.closest && e.target.closest('.ws-slim__kpis, .ws-slim__sec, .ws-slim__lbl, .ws-slim__badge, .ws-slim__tip'))) onOpen(); });
+    /* the tooltip comes back once the cursor leaves the rail or the focus leaves the button (Esc hid it) */
+    el.addEventListener('pointerleave', function () { el.classList.remove('is-tip-off'); });
+    open.addEventListener('blur', function () { el.classList.remove('is-tip-off'); });
+    watchTipEsc();
+    return { el: el, kpis: kpis, open: open, tip: tip, badge: badge, scope: scope, pair: null };
+  }
+  /**
+   * Esc hides a showing slim-rail tooltip (WCAG 1.4.13: dismissible without moving the cursor or the focus). With the
+   * focus on the expand button the key stops there; under the cursor alone it hides the tip and goes on to the app.
+   */
+  var TIP_ESC = false;
+  function matchesQ(el, q) { try { return !!(el && isFn(el.matches) && el.matches(q)); } catch (e) { return false; } }
+  function tipShown(s) {
+    if (!s || !s.el || !s.tip || hasClass(s.el, 'is-tip-off') || hasClass(s.el, 'is-away')) return false;
+    return matchesQ(s.open, ':focus-visible') || matchesQ(s.open, ':hover') || matchesQ(s.tip, ':hover');
+  }
+  function watchTipEsc() {
+    if (TIP_ESC || !DOC || !isFn(DOC.addEventListener)) return;
+    TIP_ESC = true;
+    DOC.addEventListener('keydown', function (e) {
+      if (!e || e.key !== 'Escape') return;
+      [AD && AD.slim, GUIDE_SLIM].forEach(function (s) {
+        if (!tipShown(s)) return;
+        s.el.classList.add('is-tip-off');
+        if (e.target && s.el.contains && s.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); }
+      });
+    }, true);
   }
   function paintSlim() {
     if (AD && AD.slim) paintSlimEl(AD.slim, summaryOf());
@@ -942,8 +992,8 @@
 
   /**
    * The slim rail's scope pair (V6_SPEC §2, §3.1): div.seg.ws-scope[role=radiogroup][aria-orientation=vertical] with one
-   * button[role=radio] per option (60 × 32 px, "15 km" over "30 km"), aria-checked on the value; Tab lands on the checked
-   * one; ↑ ↓ (and ← →) move and choose, Home / End the first and last. No visible label: the title says it. A click
+   * button[role=radio] per option (50 × 28 px, "15 km" over "30 km", the unit drawn small), aria-checked on the value;
+   * Tab lands on the checked one; ↑ ↓ (and ← →) move and choose, Home / End the first and last. No visible label: the title says it. A click
    * calls scope.set(v) (the section moves every other switch and announces the count); the pair marks the choice at
    * once. The buttons are kept and only their state changes, so the keyboard focus survives the repaint that follows.
    */
@@ -956,7 +1006,7 @@
       clear(host);
       var group = h('div', { class: 'seg ws-scope', role: 'radiogroup', 'aria-orientation': 'vertical', 'aria-label': T.scopeAria });
       var btns = sc.options.map(function (o) {
-        var b = h('button', { type: 'button', class: 'seg__opt ws-scope__opt', role: 'radio', 'aria-checked': 'false', tabindex: '-1', 'data-v': String(o.v), text: o.label });
+        var b = h('button', { type: 'button', class: 'seg__opt ws-scope__opt', role: 'radio', 'aria-checked': 'false', tabindex: '-1', 'data-v': String(o.v) }, unitKids(o.label, 'ws-scope__u'));
         b.addEventListener('click', function (e) { e.stopPropagation(); chooseScope(slim, o.v, false); });
         return b;
       });
@@ -1011,16 +1061,46 @@
     chooseScope(slim, P.opts[to].v, true);
   }
 
+  /**
+   * "34,1 rb" → ["34,1", span " rb"]: a short trailing unit word drawn small. The space goes inside the span, so the
+   * text of the whole stays "34,1 rb" (screen readers and tests read it unchanged).
+   */
+  function unitSplit(s) {
+    var m = /^(.*\d)(\s[A-Za-z]{1,5})$/.exec(String(s));
+    return m ? { num: m[1], unit: m[2] } : { num: String(s), unit: '' };
+  }
+  function unitKids(s, cls) {
+    var u = unitSplit(s);
+    return u.unit ? [u.num, h('span', { class: cls, text: u.unit })] : [u.num];
+  }
+  /** A label whose "15 km" stays on one line: the 76 px rail wraps "Merchant / 15 km", never "km" alone. */
+  function labelKids(s) {
+    var out = [], re = /\S+\s(?:km|rb|jt)(?![A-Za-z])/g, last = 0, m;
+    s = String(s || '');
+    while ((m = re.exec(s))) {
+      if (m.index > last) out.push(s.slice(last, m.index));
+      out.push(h('span', { class: 'ws-slim__nb', text: m[0] }));
+      last = re.lastIndex;
+    }
+    if (last < s.length) out.push(s.slice(last));
+    return out;
+  }
   function paintSlimEl(slim, s) {
     paintScope(slim, s.scope);
     var sig = JSON.stringify([s.filters].concat(s.items.map(function (x) { return [x.value, x.label, x.tone, x.title]; })));
     if (sig === slim.sig) return;
     slim.sig = sig;
     clear(slim.kpis);
+    /* a 7-character number ("985.102") sets every value of the rail a size smaller, so they stay one size; 8 and more
+       ("1.234.567") one size smaller again: no value touches the rail's edges */
+    var widest = Math.max.apply(null, [0].concat(s.items.map(function (it) { return unitSplit(slimFmt(it.value)).num.length; })));
+    slim.kpis.classList.toggle('is-tight', widest >= 7);
     s.items.forEach(function (it) {
-      var v = slimFmt(it.value);
+      var v = slimFmt(it.value), long = unitSplit(v).num.length >= 8;
       slim.kpis.appendChild(h('div', { class: 'ws-slim__kpi' + (it.tone ? ' is-' + it.tone : ''), role: 'listitem', title: it.title || (v + ' ' + (it.label || '')) }, [
-        h('span', { class: 'ws-slim__v', text: v }), h('span', { class: 'ws-slim__k', text: it.label || '' })
+        h('span', { class: 'ws-slim__v' + (long ? ' is-long' : '') }, unitKids(v, 'ws-slim__u')),
+        h('span', { class: 'ws-slim__key', 'aria-hidden': 'true' }),
+        h('span', { class: 'ws-slim__k' }, labelKids(it.label))
       ]));
     });
     slim.badge.hidden = !(s.filters > 0);
@@ -3059,7 +3139,7 @@
       var host = DOC.querySelector ? DOC.querySelector('.section-host[data-host="' + section() + '"]') : null;
       var entry = MCD.config && MCD.config.sectionById ? MCD.config.sectionById[section()] : null;
       if (host) {
-        GUIDE_SLIM = buildSlim({ label: (entry && entry.label) || '', icon: 'sec-' + section() }, function () { GUIDE_OPEN = true; guideFold(false); });
+        GUIDE_SLIM = buildSlim({ label: (entry && entry.label) || '', short: entry && entry.short, icon: 'sec-' + section() }, function () { GUIDE_OPEN = true; guideFold(false); });
         host.appendChild(GUIDE_SLIM.el);
         watchScope();
         var g = model();

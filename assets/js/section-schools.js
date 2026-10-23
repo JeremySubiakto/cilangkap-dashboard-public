@@ -4420,8 +4420,9 @@
   /**
    * v6 (V6_SPEC §3.6): summary() → {items, filters, scope}. The scope is not a filter (D4): `filters` counts status,
    * yayasan TNI, tanpa NPSN and kelas biaya only; `scope` is the slim rail's vertical pair (windows.js paints it).
-   * Items: "SMA 15 km" (SMA alone) or "Sekolah 30 km" with the split per jenis and the schools without a count in the
-   * title, "Siswa 17+" ("—" while the 30 km file loads), then "Nasabah %" (school file) or "Yayasan TNI".
+   * Items: "SMA" (SMA alone) or "Sekolah" (the scope pair above says the distance; the title repeats it) with the split
+   * per jenis and the schools without a count in the title, "Siswa 17+" ("—" while the 30 km file loads), then
+   * "Nasabah %" (school file) or "Yayasan TNI".
    */
   function scopeSummary() {
     return { label: 'Cakupan', value: scopeNow(), options: SCOPES.map(function (v) { return { v: v, label: v + ' km' }; }), title: SCOPE_TIP, aria: SCOPE_ARIA,
@@ -4433,7 +4434,7 @@
     if (!V) return { items: [], filters: nf, scope: sc };
     var k = V.kpi, fmt = fm(), items = [], nn = nounOf(), km = scopeNow();
     var t0 = count(k.n, nn) + ' dalam ' + km + ' km dari Mabes TNI' + filterWords() + (!onlySma() ? ' · ' + splitWords(V.byJ) : '') + (k.noData ? ' · ' + count(k.noData, 'sekolah') + ' tanpa data siswa' : '');
-    items.push({ value: fmt.int(k.n), label: (onlySma() ? 'SMA ' : 'Sekolah ') + km + ' km', title: t0 });
+    items.push({ value: fmt.int(k.n), label: onlySma() ? 'SMA' : 'Sekolah', title: t0 });
     if (V.students && k.stuN && !k.loading) items.push({ value: fmt.int(k.k17), label: 'Siswa 17+', title: fmt.int(k.k17) + ' siswa berusia 17+ (dapat memiliki KTP)' + (k.k17Est ? ', sebagian perkiraan' : '') });
     else if (k.loading) items.push({ value: '—', label: 'Siswa 17+', title: f30State() === 'error' ? FAIL30 : LOAD30 });
     if (V.hasBank) items.push({ value: k.n ? fmt.pct(k.cust / k.n, 0) : '—', label: 'Nasabah', tone: 'ok', title: fmt.int(k.cust) + ' dari ' + count(k.n, nn) + ' telah menjadi nasabah Mandiri' + (V.demo ? ' (data contoh)' : '') });

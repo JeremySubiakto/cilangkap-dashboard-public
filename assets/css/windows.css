@@ -375,46 +375,130 @@ body.ws-adopted .ws-rail.is-overlay { z-index: 25; box-shadow: var(--glass-hl), 
 .ws-rail__fold { position: absolute; top: 10px; right: 10px; z-index: 5; background: var(--glass-card-flat); border-color: var(--glass-border-card); }
 body.ws-adopted .ws-rail .pg-head { padding-right: 40px; }
 
+/* The slim rail (76 px), "Tenang" (design pass of 23 Oct 2026): one centred column and no
+   boxes. An icon-only expand button with its tooltip, the section's line icon in the brand accent over the short label,
+   one segmented distance track, then up to three numbers in the serif voice with a small colour key and short hairlines.
+   The rail sets its own pair size (50 × 28 px) and accent here; tokens.css still carries the V6 60 × 32 px pair
+   (--ws-scope-w / -h, read only by this rail). */
 .ws-slim {
+  --ws-scope-w: 50px; --ws-scope-h: 28px;
+  --ws-accent: var(--gold);                                   /* Gelap: the console gold */
   position: absolute; left: var(--ws-inset); width: var(--ws-rail-slim); z-index: calc(var(--z-rails) - 1);   /* under the full rail as it slides in */
-  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 6px 12px;
-  border-radius: var(--r-glass); cursor: pointer; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; padding: 10px 0 12px;
+  border-radius: var(--r-glass); cursor: pointer;
+  overflow: visible;                                          /* the tooltip leaves the rail; the numbers clip themselves */
   transition: opacity var(--dur-base) var(--ease-out), visibility 0s;
 }
+html[data-theme="day"] .ws-slim { --ws-accent: var(--btn-primary-bg); }   /* Terang: Mandiri navy */
 .ws-slim.is-away { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur-fast) var(--ease-in-out), visibility 0s linear var(--dur-fast); }
+
+/* expand: icon only, 40 × 40, quiet at rest; the whole rail opens the panel, so a cursor anywhere on it lights the button */
 .ws-slim__open {
-  display: grid; justify-items: center; gap: 2px; width: 64px; min-height: 48px; padding: 6px 2px;
-  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); color: var(--text-1); cursor: pointer;
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--text-2); cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
 }
-.ws-slim__open:hover { background: var(--glass-card-hover); }
-.ws-slim__open .icon { width: 16px; height: 16px; }
-.ws-slim__open-t { font: 500 12px/14px var(--font-sans); }
-.ws-slim__sec { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-top: 2px; border-radius: 10px; background: var(--btn-primary-bg); color: var(--btn-primary-ink); }
-.ws-slim__sec .icon { width: 18px; height: 18px; }
-.ws-slim__lbl { font: 600 12px/14px var(--font-sans); color: var(--text-1); text-align: center; overflow-wrap: anywhere; }
-.ws-slim__badge { padding: 2px 6px; border-radius: 999px; background: var(--gold-a16); color: var(--text-1); font: 600 12px/14px var(--font-sans); white-space: nowrap; }
+.ws-slim__open .icon { width: 18px; height: 18px; }
+.ws-slim:hover .ws-slim__open, .ws-slim__open:focus-visible { background: var(--surface-hover); color: var(--text-1); }
+.ws-slim__open:active { background: var(--surface-hover); color: var(--text-1); scale: .96; }
+
+/* the tooltip: "Buka panel Merchant" and the key "[", right of the rail. After 400 ms under the cursor, at once on
+   keyboard focus; it can be hovered (a bridge spans the gap) and Esc hides it (windows.js sets .is-tip-off). The
+   rail's own glass is a backdrop root, so the tip carries the strong tint rather than relying on its blur. */
+.ws-slim__tip {
+  position: absolute; left: calc(100% + 10px); top: 14px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; white-space: nowrap;
+  border-radius: 8px; border: 1px solid var(--glass-border); background: var(--ws-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hl), var(--glass-shadow-sm);
+  font: 500 12px/16px var(--font-sans); color: var(--text-1); cursor: default;
+  opacity: 0; visibility: hidden; translate: -4px 0;
+  transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out), visibility 0s linear var(--dur-fast);
+}
+.ws-slim__tip::before { content: ""; position: absolute; top: 0; bottom: 0; left: -12px; width: 12px; }   /* hover bridge */
+.ws-slim__tip .kbd { min-width: 20px; height: 20px; border-radius: 5px; }
+.ws-slim__open:hover + .ws-slim__tip, .ws-slim__tip:hover { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 400ms; }
+.ws-slim__open:focus-visible + .ws-slim__tip { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 0s; }
+.ws-slim.is-tip-off .ws-slim__tip { opacity: 0; visibility: hidden; transition: none; }
+
+/* the section mark: its line icon in the accent, no tile; the short label; a 16 px accent bar (the tab bar's underline) */
+.ws-slim__sec { display: grid; place-items: center; width: 24px; height: 24px; margin-top: 14px; color: var(--ws-accent); }
+.ws-slim__sec .icon { width: 20px; height: 20px; stroke-width: 1.4; }
+.ws-slim__lbl { max-width: 72px; margin-top: 4px; font: 600 12px/16px var(--font-sans); letter-spacing: .01em; color: var(--text-1); text-align: center; white-space: nowrap; }
+.ws-slim__lbl::after { content: ""; display: block; width: 16px; height: 2px; margin: 6px auto 0; border-radius: 1px; background: var(--ws-accent); }
+.ws-slim__badge { margin-top: 10px; padding: 2px 8px; border-radius: 999px; background: var(--gold-a16); color: var(--text-1); font: 600 12px/16px var(--font-sans); white-space: nowrap; }
 .ws-slim__badge[hidden] { display: none; }
-.ws-slim__kpis { display: grid; gap: 8px; width: 100%; padding-top: 10px; border-top: 1px solid var(--rule); }
-.ws-slim__kpi { display: grid; justify-items: center; gap: 2px; padding: 8px 2px; border-radius: 10px; background: var(--glass-card-flat); text-align: center; }
-.ws-slim__kpi:hover { background: var(--glass-card-hover); }
-.ws-slim__v { font: 600 16px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap; }
-.ws-slim__k { font: 400 12px/14px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; }
-.ws-slim__kpi.is-ok .ws-slim__v::before, .ws-slim__kpi.is-bad .ws-slim__v::before, .ws-slim__kpi.is-mid .ws-slim__v::before, .ws-slim__kpi.is-potential .ws-slim__v::before {
-  content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 4px 2px 0; border-radius: 50%; background: var(--status-ok); vertical-align: middle;
-}
-.ws-slim__kpi.is-bad .ws-slim__v::before { background: var(--status-bad); }
-.ws-slim__kpi.is-mid .ws-slim__v::before { background: var(--status-mid); }
-.ws-slim__kpi.is-potential .ws-slim__v::before { background: var(--status-potential); }
-/* v6 (V6_SPEC §2, §3.1): the scope pair "15 km" over "30 km" between the label and the numbers (y ≈ 283–351 at 1366),
-   the shared .seg look stood on end: a vertical radiogroup of two 60 × 32 px options; no visible label (its title) */
-.ws-slim__scope { display: block; flex: none; }
+
+/* v6 (V6_SPEC §2, §3.1): the scope pair between the label and the numbers, the shared .seg look stood on end: one
+   track, a raised thumb on the choice, 50 × 28 px options ("5" with a small "km"); no visible label (its title) */
+.ws-slim__scope { display: block; flex: none; margin-top: 18px; }
 .ws-slim__scope[hidden] { display: none; }
-.ws-slim .ws-scope { display: grid; grid-template-columns: var(--ws-scope-w); gap: 4px; height: auto; padding: 2px; cursor: default; }
+.ws-slim .ws-scope { display: grid; grid-template-columns: var(--ws-scope-w); gap: 2px; height: auto; padding: 3px; border-radius: 10px; background: var(--surface-raised); box-shadow: none; cursor: default; }
 .ws-slim .ws-scope__opt {
-  width: var(--ws-scope-w); height: var(--ws-scope-h); min-height: var(--ws-scope-h); padding: 0 4px; border-radius: 8px; cursor: pointer;
-  font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+  width: var(--ws-scope-w); height: var(--ws-scope-h); min-height: var(--ws-scope-h); padding: 0; border: 0; border-radius: 7px; cursor: pointer;
+  font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2);
 }
-.ws-slim .ws-scope__opt[aria-checked="true"] { color: var(--text-1); cursor: default; }
+.ws-slim .ws-scope__opt:hover { color: var(--text-1); }
+.ws-slim .ws-scope__u { font-size: 12px; font-weight: 500; white-space: pre; }   /* the option is a flex box: "pre" keeps the space of " km" */
+.ws-slim .ws-scope__opt[aria-checked="true"] {
+  background: var(--glass-card-hover); color: var(--text-1); cursor: default;
+  box-shadow: var(--glass-shadow-card), inset 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--hairline-hi);
+}
+html[data-theme="day"] .ws-slim .ws-scope__opt[aria-checked="true"] { background: var(--glass-solid); box-shadow: var(--glass-shadow-card), 0 2px 6px -2px var(--rule-strong); }
+
+/* the numbers: no boxes. A serif value with a small unit, a 16 × 3 px colour key under it (its room is kept when an
+   item has no tone, so the rhythm holds), the label on up to two balanced lines (never broken inside a word; a number
+   keeps its unit), short 24 px hairlines between. A short rail drops whole items (column wrap), never half a number. */
+.ws-slim__kpis { display: flex; flex-flow: column wrap; align-content: flex-start; flex: 1 1 auto; width: 100%; min-height: 0; margin-top: 18px; overflow: hidden; }
+.ws-slim__kpi { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; padding: 12px 2px 11px; text-align: center; }
+.ws-slim__kpi + .ws-slim__kpi::before { content: ""; position: absolute; top: 0; left: 50%; width: 24px; height: 1px; margin-left: -12px; background: var(--rule-strong); }
+.ws-slim__v { font: 400 21px/24px var(--font-serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: -.015em; color: var(--text-1); white-space: nowrap; }
+.ws-slim__kpis.is-tight .ws-slim__v { font-size: 19px; }    /* a 7-character number in the rail ("985.102"): all values */
+.ws-slim__kpis .ws-slim__v.is-long { font-size: 17px; }     /* 8 characters or more (windows.js) */
+.ws-slim__u { font: 500 12px/1 var(--font-sans); letter-spacing: 0; color: var(--text-2); }
+.ws-slim__key { flex: none; width: 16px; height: 3px; margin: 5px 0; border-radius: 2px; }
+.ws-slim__kpi.is-ok .ws-slim__key { background: var(--status-ok); }
+.ws-slim__kpi.is-bad .ws-slim__key { background: var(--status-bad); }
+.ws-slim__kpi.is-mid .ws-slim__key { background: var(--status-mid); }
+.ws-slim__kpi.is-potential .ws-slim__key { background: var(--status-potential); }
+.ws-slim__k { max-width: 72px; font: 400 12px/15px var(--font-sans); color: var(--text-2); text-wrap: balance; overflow-wrap: normal; hyphens: manual; }
+.ws-slim__nb { white-space: nowrap; }
+
+/* a short window (a 1366 × 768 laptop leaves a ≈ 650 px tall browser): a tighter rhythm keeps all three numbers down
+   to ≈ 620 px (Merchant, two-line labels); below that, whole items drop */
+@media (max-height: 699px) {
+  .ws-slim { padding: 8px 0 10px; }
+  .ws-slim__sec { margin-top: 10px; }
+  .ws-slim__lbl::after { margin-top: 5px; }
+  .ws-slim__badge { margin-top: 8px; }
+  .ws-slim__scope { margin-top: 12px; }
+  .ws-slim__kpis { margin-top: 10px; }
+  .ws-slim__kpi { padding: 9px 2px 8px; }
+  .ws-slim__key { margin: 4px 0; }
+}
+
+/* focus: the shared ring; by day a solid signal ring (the 55 % ring measures 2,3:1 on white glass) */
+html[data-theme="day"] .ws-slim :focus-visible { outline-color: var(--signal); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-slim__tip { translate: none; }
+  .ws-slim__open:active { scale: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ws-slim__tip { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+/* forced colours: the html[data-theme] copies match the specificity of the theme rules above (the Terang thumb,
+   0,4,1, and the Terang ring) and come later, so the system colours win in both themes. Without them, Terang kept the
+   white thumb under HighlightText and the chosen distance read about 1:1. */
+@media (forced-colors: active) {
+  .ws-slim { border: 1px solid CanvasText; }
+  .ws-slim__open { border-color: ButtonText; }
+  .ws-slim .ws-scope { border: 1px solid CanvasText; }
+  .ws-slim .ws-scope__opt[aria-checked="true"], html[data-theme] .ws-slim .ws-scope__opt[aria-checked="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; box-shadow: none; }
+  .ws-slim__kpi + .ws-slim__kpi::before, .ws-slim__lbl::after { forced-color-adjust: none; background: GrayText; }
+  .ws-slim :focus-visible, html[data-theme] .ws-slim :focus-visible { outline-color: Highlight; }
+  .ws-slim__tip { border-color: CanvasText; background: Canvas; }
+}
 
 /* ── 5 · Adopted workspace: the bottom drawer "Daftar & grafik" (peek · half · full) ─ */
 body.ws-adopted .ws-drawer {

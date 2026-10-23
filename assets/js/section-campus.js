@@ -2219,9 +2219,9 @@
 
   /* ============================================================ section contract (v5 workspace, §7.4; v6 scope) */
 
-  /** summary() → the slim rail: "Kampus 30 km" · "Mahasiswa" · "Dosen tetap", the filter count and the scope pair (§3.6). */
-  /* "Kampus 30 km" with a no-break space before "km": the 76 px slim rail wraps it as "Kampus / 30 km", never "km" alone */
-  function railLabel() { return 'Kampus ' + st.km + '\u00a0km'; }
+  /** summary() → the slim rail: "Kampus" · "Mahasiswa" · "Dosen tetap", the filter count and the scope pair (§3.6). */
+  /* "Kampus" alone: the scope pair right above it says the distance, and the title repeats it (design pass, 23 Oct 2026) */
+  function railLabel() { return 'Kampus'; }
   function summary() {
     if (!st) return { items: [], filters: 0 };
     var scope = { label: 'Cakupan', value: st.km, options: [5, 15, 30].map(function (v) { return { v: v, label: v + ' km' }; }), set: function (v) { setKm(+v); }, title: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.' };

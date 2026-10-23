@@ -2224,12 +2224,11 @@
     if (!R.ws) return;
     if (!deep() || !wsOn() || (W.innerWidth || 0) < 1024) unworkspace();
   }
-  /** summary() → {items: [{value, label, tone?, title}] (3), filters, scope}: the slim rail's key numbers (item 43). */
-  function summary() {
-    var r = summaryItems(), I = MCD.inst;
-    if (I && typeof I.scopeSummary === 'function') r.scope = safe(function () { return I.scopeSummary('merchants'); });
-    return r;
-  }
+  /** summary() → {items: [{value, label, tone?, title}] (3), filters}: the slim rail's key numbers (item 43). No scope
+      pair: the three numbers count the whole 15 km, as the cards do, and the "Cakupan 5 km | 15 km" switch moves only
+      the map and the list, so a pair set to 5 km above them contradicted them (design review, 23 Oct 2026). The label
+      keeps "15 km"; the switch stays in the full rail, in Sederhana and on the map. */
+  function summary() { return summaryItems(); }
   function summaryItems() {
     var m = model(), n = S() ? S().filterCount() : 0;
     if (!m || !m.totals) return { items: [], filters: n };

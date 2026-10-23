@@ -1,7 +1,12 @@
-/* Public prototype notice (only in the public copy, never in the internal repo). */
-.public-proto-note{position:fixed;left:12px;bottom:12px;z-index:2147483000;max-width:min(92vw,520px);
-  padding:6px 12px;border-radius:999px;background:rgba(11,31,51,.88);color:#fff;
-  font:600 12px/1.35 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.01em;
-  box-shadow:0 2px 10px rgba(0,0,0,.18);pointer-events:none}
-.public-proto-note b{color:#F2B705;font-weight:700}
-@media print{.public-proto-note{display:none}}
+/* Public prototype notice (only in the public copy, never in the internal repo).
+   23 Oct 2026: shown ONLY on the sign-in screen (html.mcd-locked), never over the dashboard. It stays there because
+   the public page carries the bank's name and asks for a password: strangers must see it is not an official site. */
+.public-proto-note{display:none}
+html.mcd-locked .public-proto-note{display:block;position:fixed;left:50%;bottom:max(10px,env(safe-area-inset-bottom));
+  transform:translateX(-50%);z-index:2147483000;width:max-content;max-width:calc(100vw - 32px);
+  padding:5px 12px;border-radius:999px;background:rgba(8,24,48,.62);color:rgba(255,255,255,.86);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  font:500 11.5px/1.35 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.01em;text-align:center;
+  pointer-events:none}
+html.mcd-locked .public-proto-note b{color:#F2B705;font-weight:600}
+@media print{.public-proto-note{display:none!important}}
