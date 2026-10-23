@@ -2293,8 +2293,10 @@
       clear(wrap);
       var label = (done && done.label) || T.quickDone;
       wrap.appendChild(h('span', { class: 'ws-quick__done' }, [icon('check'), h('span', { text: label.replace(/^✓\s*/, '') })]));
-      var note = done && done.text ? h('span', { class: 'ws-quick__note', text: done.text }) : null;
-      if (o.compact && o.noteEl) { o.noteEl.textContent = (done && done.text) || ''; o.noteEl.hidden = !(done && done.text); }
+      /* v6 §7.6: the row keeps its words; its title carries the storage line ("Terenkripsi dengan kata sandi dashboard.") */
+      var note = done && done.text ? h('span', { class: 'ws-quick__note', text: done.text, title: done.title || null }) : null;
+      if (done && done.title) wrap.setAttribute('title', done.title); else wrap.removeAttribute('title');
+      if (o.compact && o.noteEl) { o.noteEl.textContent = (done && done.text) || ''; o.noteEl.hidden = !(done && done.text); if (done && done.title) o.noteEl.setAttribute('title', done.title); else o.noteEl.removeAttribute('title'); }
       else if (note) wrap.appendChild(note);
       if (done && isFn(done.edit)) {
         if (o.compact) wrap.appendChild(h('span', { class: 'ws-quick__sep', 'aria-hidden': 'true', text: '·' }));
@@ -2475,10 +2477,12 @@
       if (n && !n.parentNode) bodyEl.insertBefore(h('div', { class: 'ws-hint' }, [n]), bodyEl.firstChild);
     });
   }
-  /** One "ⓘ Sumber" per card: the source line and the hints already seen open on demand. */
-  function sourceButton(text, notes) {
+  /** One "ⓘ Sumber" per card: the source line and the hints already seen open on demand. v6 (D22): a section may pass
+      model.provBadge {src, alt, width, height}, a source badge from assets/brand/ shown before the line on a white
+      rounded tile (items 46–47; never recoloured or stretched). */
+  function sourceButton(text, notes, badge) {
     var id = uid('ws-src');
-    var lines = h('div', { class: 'ws-src__text', id: id, hidden: true }, [text ? h('p', { text: text }) : null]);
+    var lines = h('div', { class: 'ws-src__text', id: id, hidden: true }, [badgeTile(badge), text ? h('p', { text: text }) : null]);
     var n = (notes || []).filter(Boolean);
     if (n.length) {
       lines.appendChild(h('p', { class: 'ws-src__h t-eyebrow', text: T.notes }));
@@ -2493,6 +2497,12 @@
       if (c) { c.dirty = true; relayout('swap', { still: true }); }
     });
     return h('div', { class: 'ws-src' }, [b, lines]);
+  }
+  function badgeTile(b) {
+    if (!b || typeof b.src !== 'string' || !/^assets\/brand\/[a-z0-9-]+\.(png|webp|svg)$/.test(b.src)) return null;
+    var hh = isNum(b.height) && b.height > 0 && b.height <= 40 ? Math.round(b.height) : 24;
+    var ww = isNum(b.width) && b.width > 0 ? Math.round(b.width) : null;
+    return h('span', { class: 'inst-logo ws-src__badge' }, [h('img', { src: b.src, alt: String(b.alt || ''), height: String(hh), width: ww ? String(ww) : null, decoding: 'async' })]);
   }
   function seenNotes(model) {
     return (model.hints || []).filter(function (x) { return x && pref().hints[x.id] && SEEN[x.id] && !(x.node && x.node.isConnected); }).map(function (x) { return SEEN[x.id]; });
@@ -2519,7 +2529,7 @@
     });
     moved.forEach(function (a, i) { if (i === 0 && !veiled()) { a.className = 'btn btn--secondary ws-link-btn gmaps-link gmaps-link--route'; acts.appendChild(a); } else if (a.parentNode) a.parentNode.removeChild(a); });
     var prov = model.prov || '';
-    if (prov || seenNotes(model).length) acts.appendChild(sourceButton(prov, seenNotes(model)));
+    if (prov || seenNotes(model).length) acts.appendChild(sourceButton(prov, seenNotes(model), model.provBadge));
     foot.hidden = !acts.firstChild;
   }
 

@@ -3,7 +3,7 @@
  * COPY_STYLE_EN item 48d; decisions D14, D15, D16, D36). Bank Mandiri KCP Jakarta Cilangkap · Dashboard Akuisisi.
  *
  * Staff add public places from the place cards ("+ Rencana kunjungan"): schools, campuses, merchants of the public
- * listing, KPR projects, TNI pangkalan and dealers. The plan starts at KCP Cilangkap (D16), is ordered by
+ * listing and KPR projects. The plan starts at KCP Cilangkap (D16), is ordered by
  * MCD.visitPlan (or kept in the user's own order), shows "Tiba ± HH.MM" per stop and opens in Google Maps through
  * links that hold COORDINATES ONLY (MCD.visitPlan.mapsLinks, which fails closed). Leads, LVM-only stores, kecamatan
  * and pages are never added (item 49): every stop is re-checked by MCD.visitPlan.checkStop and by a per-kind id rule.
@@ -38,13 +38,15 @@
  *   labels() → {title, chip, button, aria}, overlay() → {stops, line, returnToStart} | null,
  *   placement(ctx) → {mode: 'pin' | 'sheet' | 'over' | 'full', side?, refuse?}, mount(host, {mode}) → {el, update, destroy}
  * }
- * stop = a fresh {id, kind, label, lon, lat, geoPrecision?}; kinds and ids (§1.7.3): sekolah npsn:… / app:…,
- *   kampus pt:… / osm:… / ovt:… (+ #n for another campus point), merchant poi:<row index>, kpr project:<id>,
- *   satuan site:<id>, dealer dealer:<lon>,<lat>(#k). Map aliases (smaSchool, poi, project, tni) are accepted.
+ * stop = a fresh {id, kind, label, lon, lat, geoPrecision?}; kinds and ids (§1.7.3): sekolah npsn:… / app:<lon>,<lat>,
+ *   kampus pt:… / osm:… / ovt:… (+ #n for another campus point), merchant poi:<row index>, kpr project:<id>.
+ *   Map aliases (smaSchool, poi, project) are accepted. The kinds satuan and dealer were removed with the KSM & KKB
+ *   section (22 Oct 2026, docs/V7_SPEC.md D39) and are refused; a kesehatan kind comes with the Kesehatan section
+ *   (D40, wired by the V8 build), not before.
  *
  * Seams for Phase B (feature-detected, nothing breaks without them): MCD.windows.planCard({placement, title, root,
  * onClose}) → handle (SHELL: the pin kind 'plan', the surviving tray chip "Rencana · n", Sederhana replacing the
- * sheet); MCD.map.setPlanOverlay / clearPlanOverlay (MAP); "+ Rencana kunjungan" through quick() (PLACES, TNI,
+ * sheet); MCD.map.setPlanOverlay / clearPlanOverlay (MAP); "+ Rencana kunjungan" through quick() (PLACES,
  * WEALTH). Events: on(fn) and the document event 'mcd:plan' carry {type, n, reason?} only, never a label or an id.
  *
  * Safe DOM only (textContent, setAttribute; no innerHTML, no eval), CSP-safe, no network, no logging of data.
@@ -69,19 +71,20 @@
   var DWELLS = [15, 30, 45, 60];
   var DEPART_FIRST = 6 * 60, DEPART_LAST = 18 * 60, DEPART_STEP = 15;
   var DEFAULT_OPTS = { mode: 'mobil', returnToStart: true, keepOrder: false, departAt: '08:30', dwellMin: 30 };
-  var KINDS = ['sekolah', 'kampus', 'merchant', 'kpr', 'satuan', 'dealer'];
+  var KINDS = ['sekolah', 'kampus', 'merchant', 'kpr'];   // D39: no satuan, no dealer
   // One id rule per kind (§1.7.3). A merchant is a public listing only (poi:<row index>); an LVM-only store has no
-  // public id and is never planned (D16).
+  // public id and is never planned (D16). An NPSN is 6 or 8 digits, a few carry a letter prefix ('NP' + 6 digits in
+  // data/schools.js). A school without an NPSN is 'app:<lon>,<lat>' (schools-core idOf and
+  // tools/build-school-students.py write toFixed(5), e.g. 'app:106.90416,-6.32555'); no free-text app: form exists.
+  // tests/plan-v7.test.mjs checks every id of the data files against these rules, so a format drift fails the suite.
   var ID_RE = {
-    sekolah: /^(npsn:\d{6,10}|app:[A-Za-z0-9._-]{1,40})$/,
+    sekolah: /^(npsn:[A-Z]{0,2}\d{6,10}|app:-?\d{1,3}\.\d{1,6},-?\d{1,2}\.\d{1,6})$/,
     kampus: /^(pt:\d{6}|osm:(node|way|relation)\/\d{1,15}|ovt:[0-9a-f]{8,40})(#\d{1,3})?$/,
     merchant: /^poi:\d{1,7}$/,
-    kpr: /^project:[A-Za-z0-9._-]{1,80}$/,
-    satuan: /^site:[a-z0-9-]{2,40}$/,
-    dealer: /^dealer:\d{2,3}\.\d{5},-\d{1,2}\.\d{5}(#\d{1,2})?$/
+    kpr: /^project:[A-Za-z0-9._-]{1,80}$/
   };
-  var KIND_NAME = { sekolah: 'Sekolah', kampus: 'Kampus', merchant: 'Merchant', kpr: 'Proyek KPR', satuan: 'Pangkalan TNI', dealer: 'Dealer' };
-  var KIND_ICON = { sekolah: 'sec-schools', kampus: 'sec-campus', merchant: 'sec-merchants', kpr: 'sec-property', satuan: 'sec-tni', dealer: 'pin' };
+  var KIND_NAME = { sekolah: 'Sekolah', kampus: 'Kampus', merchant: 'Merchant', kpr: 'Proyek KPR' };
+  var KIND_ICON = { sekolah: 'sec-schools', kampus: 'sec-campus', merchant: 'sec-merchants', kpr: 'sec-property' };
   var COARSE = { KELURAHAN: 'pusat kelurahan', KECAMATAN: 'pusat kecamatan' };
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   var WEEKDAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -99,7 +102,7 @@
     removeOne: 'Hapus dari rencana',
     removed: 'Tujuan dihapus dari rencana.',
     privateStop: 'Data nasabah tidak pernah masuk rencana kunjungan atau tautan Google Maps. Cari nasabah tersebut di sistem bank.',
-    notPublic: 'Tempat ini tidak dapat masuk rencana kunjungan. Yang dapat: sekolah, kampus, merchant dari data publik, proyek KPR, pangkalan TNI dan dealer.',
+    notPublic: 'Tempat ini tidak dapat masuk rencana kunjungan. Yang dapat: sekolah, kampus, merchant dari data publik dan proyek KPR.',
     badPoint: 'Tempat ini tidak memiliki koordinat yang benar.',
     noPlanner: 'Perencana kunjungan belum termuat. Muat ulang halaman.',
     tooMany: 'Maksimal 15 tujuan dalam satu rencana.',
@@ -313,7 +316,9 @@
     changed('load');
   }
 
-  /** The sealed copy → memory (another tab's change, the first load). Changes made before the load are merged. */
+  /** The sealed copy → memory (another tab's change, the first load). The sealed day moves to today first (an older
+   *  plan becomes `prev`); stops added in this page before the copy opened are then added to today (no doubles, at
+   *  most 15), whatever date the page started with, so they are never lost and an older sealed plan is never dropped. */
   function adopt() {
     var st = store();
     if (!st) return;
@@ -323,17 +328,18 @@
     var before = S.pre ? S.today : null;
     S.today = t || emptyDay(todayStr(), S.today.opts);
     S.prev = p && p.stops.length ? p : null;
-    var write = false;
+    S.pre = false;
+    var write = rollover();
     if (before && before.stops.length) {
-      if (before.date === S.today.date) {
-        var ids = {};
-        S.today.stops.forEach(function (s) { ids[s.id] = 1; });
-        before.stops.forEach(function (s) { if (!ids[s.id] && S.today.stops.length < MAX_STOPS) S.today.stops.push(s); });
-      } else if (before.date > S.today.date) S.today = before;
+      var ids = {};
+      S.today.stops.forEach(function (s) { ids[s.id] = 1; });
+      before.stops.forEach(function (s) {
+        if (ids[s.id] || S.today.stops.length >= MAX_STOPS) return;
+        ids[s.id] = 1;
+        S.today.stops.push(s);
+      });
       write = true;
     }
-    S.pre = false;
-    if (rollover()) write = true;
     if (write) persist();
   }
 
@@ -458,7 +464,9 @@
   function guard() {
     if (S.locked) return { ok: false, code: 'locked', message: T.locked };
     if (!S.loaded && !store()) S.loaded = true;
-    if (S.loaded && rollover()) persist();
+    // the day moved before the midnight check ran: listeners hear it (count and type only); no repaint from here,
+    // because paint() itself reads the day through labels()
+    if (S.loaded && rollover()) { persist(); emit({ type: 'day', n: S.today.stops.length }); }
     return null;
   }
 
@@ -663,7 +671,9 @@
     };
   }
 
+  /** Words for the top bar, the tray chip and Lainnya; the day is checked first, so after midnight the title moves on. */
   function labels() {
+    guard();
     var n = S.today.stops.length;
     return { title: T.title + ' · ' + dateLabel(S.today.date), chip: T.chip(n), button: T.button(n), aria: T.aria(n) };
   }
@@ -753,14 +763,13 @@
     return el;
   }
   function icon(name, cls) {
-    var d = doc(), use = name;
-    if (d && isFn(d.getElementById) && name === 'sec-tni' && !d.getElementById('i-sec-tni')) use = 'pin';
+    var d = doc();
     var s = d.createElementNS(NS, 'svg');
     s.setAttribute('class', 'icon' + (cls ? ' ' + cls : ''));
     s.setAttribute('aria-hidden', 'true');
     s.setAttribute('focusable', 'false');
     var u = d.createElementNS(NS, 'use');
-    u.setAttribute('href', '#i-' + use);
+    u.setAttribute('href', '#i-' + name);
     s.appendChild(u);
     return s;
   }
@@ -1161,8 +1170,9 @@
     var before = flipBefore();
     S.rowEls = {};
     clear(S.content);
+    var title = labels().title;   // checks the day first, so the body below paints the same day as the title
     var veil = veiled(), phone = S.frame ? S.frame.mode === 'full' : isPhone(), t = S.today, n = t.stops.length;
-    if (S.titleEl) S.titleEl.textContent = labels().title;
+    if (S.titleEl) S.titleEl.textContent = title;
     var mem = memoryLine();
     if (mem) S.content.appendChild(h('p', { class: 'pl-state', text: mem }));
     var c = n ? compute() : null;
@@ -1190,7 +1200,7 @@
     restoreFocus(fk);
     flipAfter(before);
     syncOverlay();
-    if (S.frame && S.frame.handle && isFn(S.frame.handle.retitle)) safe(S.frame.handle.retitle, S.frame.handle, [labels().title]);
+    if (S.frame && S.frame.handle && isFn(S.frame.handle.retitle)) safe(S.frame.handle.retitle, S.frame.handle, [title]);
   }
 
   function syncOverlay() {

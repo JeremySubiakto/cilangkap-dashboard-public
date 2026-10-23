@@ -136,6 +136,8 @@
 .lu-switch__v { min-width: 44px; padding: 3px 8px; border-radius: var(--r-ctl); background: var(--surface-well); color: var(--text-2); font-weight: 600; text-align: center; }
 .lu-switch[aria-checked="true"] { border-color: var(--rule-gold); }
 .lu-switch[aria-checked="true"] .lu-switch__v { background: var(--gold-a16); color: var(--text-1); }
+/* Data contoh: still focusable (the demo line says why), does nothing */
+.lu-switch[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
 
 .lu-field { max-width: 320px; }
 .lu-initials { text-transform: uppercase; max-width: 120px; }

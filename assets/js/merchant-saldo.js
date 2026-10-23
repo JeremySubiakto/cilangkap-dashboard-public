@@ -9,11 +9,18 @@
  *   MCD.saldo.rows()     → the imported records (Merchant › Saldo merchant draws them)
  *   MCD.saldo.summary()  → {n, asOf, dates[], drop, growth, total, totalPrev} or null without data
  *   MCD.saldo.schema     the importer schema (type 'saldo')
+ *
+ * Merged into the private repository on 23 Oct 2026 (private/merge-public/MERGE_NOTES.md), with three guards of the
+ * private funding module (docs/MERCHANT_FUNDING.md §2, §5): only rows of KCP Jakarta Cilangkap (12903) are kept, the
+ * others are counted in the import note and dropped; the address, actype and sccode columns are dropped with CIF,
+ * account number and official name; and the MID table of the region report (one row per terminal) is not this file.
  * ========================================================================== */
 (function (MCD) {
   'use strict';
 
   var KEY = 'saldo';
+  /* our branch (as MCD.funding.HOME / HOME_NAME): the code decides, the name only for a row without a code */
+  var HOME = '12903', HOME_NAME = 'JAKARTA CILANGKAP';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
   function str(v) { return v == null ? '' : String(v).trim(); }
@@ -27,11 +34,23 @@
   }
   function flag(v) { var s = str(v).toLowerCase(); return s === 'drop' ? 'drop' : (s === 'growth' ? 'growth' : null); }
   function yes(v) { var s = str(v).toLowerCase(); return s === 'ada' || s === 'ya' || s === 'y' || s === '1' || s === 'true'; }
+  /** A branch code as digits without leading zeros ('12903', 12903, '12903.0'); '', 0, '-' → null. */
+  function codeOf(v) { var d = str(v).replace(/\.0+$/, ''); return /^\d+$/.test(d) && +d !== 0 ? String(+d) : null; }
+  /** "KCP JAKARTA CILANGKAP", "Kcp  Jakarta Cilangkap" → 'JAKARTA CILANGKAP'; '', '0', '-' → ''. */
+  function branchKey(v) { var k = str(v).toUpperCase().replace(/\s+/g, ' ').replace(/^(KCP|KC)\s+/, '').trim(); return k === '0' || k === '-' ? '' : k; }
+  /** 'ours' | 'other' | 'none' (a row without code and name) for one row. */
+  function branchOf(r) {
+    var c = codeOf(r.kode_cabang);
+    if (c) return c === HOME ? 'ours' : 'other';
+    var n = branchKey(r.nama_cabang);
+    if (n) return n === HOME_NAME ? 'ours' : 'other';
+    return 'none';
+  }
 
   var SCHEMA = {
     label: 'Saldo merchant',
     dataKey: KEY,
-    description: 'Satu baris per merchant nasabah: saldo per tanggal, perubahan YtD, MoM, MtD dan DtD.\nCIF, nomor rekening dan nama resmi dihapus saat file dibaca.',
+    description: 'Satu baris per merchant nasabah: saldo per tanggal, perubahan YtD, MoM, MtD dan DtD.\nCIF, nomor rekening, nama resmi dan alamat dihapus saat file dibaca.\nHanya merchant KCP Jakarta Cilangkap (12903) yang disimpan.',
     columns: [
       { key: 'nama', req: true, syn: ['commonname', 'common_name', 'nama_merchant', 'merchant_name'] },
       { key: 'nama_dba', syn: ['merchantdbaname', 'merchant_dba_name', 'dba_name', 'nama_usaha'] },
@@ -47,10 +66,14 @@
     ],
     /* the customer's identity never enters the dashboard */
     deny: ['cifno', 'cif', 'no_cif', 'nocif', 'norekening', 'no_rekening', 'norek', 'rekening', 'account_number', 'merchantofficialname',
-      'merchant_official_name', 'nama_resmi', 'nama_nasabah', 'owner_name', 'nama_pemilik', 'pemilik'],
+      'merchant_official_name', 'nama_resmi', 'nama_nasabah', 'owner_name', 'nama_pemilik', 'pemilik',
+      /* merge 23 Oct 2026: never kept either (MERCHANT_FUNDING §5) */
+      'alamat', 'alamat_merchant', 'alamat_usaha', 'address', 'actype', 'sccode'],
     daily: { saldo: '' },
     /* the balance columns (dates) make it this file; without them it is not */
     detect: function (keys, heads, m) {
+      /* the region report's MID table (one row per EDC terminal, two blocks of the same dates) is not this file */
+      if ((heads || []).indexOf('mid') >= 0) return false;
       var days = m && m.daily && m.daily.saldo ? Object.keys(m.daily.saldo).length : 0;
       return days >= 2 ? 4 + days : false;
     },
@@ -58,8 +81,15 @@
   };
 
   function build(rows, ctx) {
-    var out = [], latest = null;
+    var out = [], latest = null, other = 0, none = 0;
+    /* a file without branch columns is the branch's own extract; with them, only our rows stay */
+    var map = ctx.mapping || {}, byBranch = Object.prototype.hasOwnProperty.call(map, 'kode_cabang') || Object.prototype.hasOwnProperty.call(map, 'nama_cabang');
     rows.forEach(function (r, i) {
+      if (byBranch) {
+        var b = branchOf(r);
+        if (b === 'other') { other++; return; }
+        if (b === 'none') { none++; return; }
+      }
       var name = str(r.nama) || str(r.nama_dba);
       if (!name) { ctx.issue(r._row, 'nama', null, 'REQUIRED_MISSING', 'error'); return; }
       var days = (r._days && r._days.saldo) || {}, balances = {};
@@ -73,13 +103,17 @@
         name: name, dba: str(r.nama_dba) || null,
         edc: isNum(num(r.jumlah_edc)) ? Math.round(num(r.jumlah_edc)) : null, hasEdc: r.ada_edc == null ? null : yes(r.ada_edc),
         product: str(r.produk) && str(r.produk) !== '0' ? str(r.produk) : null, segment: str(r.segmen) || null,
-        branchCode: str(r.kode_cabang).replace(/\.0+$/, '') || null, branch: str(r.nama_cabang) || null, area: str(r.area) || null,
+        branchCode: codeOf(r.kode_cabang), branch: branchKey(r.nama_cabang) ? str(r.nama_cabang) : null, area: str(r.area) || null,
         balances: balances, ytd: num(r.ytd), mom: num(r.mom), mtd: num(r.mtd), dtd: num(r.dtd),
         flagMom: flag(r.flag_mom), flagMtd: flag(r.flag_mtd),
         src: { file: ctx.file || null, sheet: ctx.sheet || null, row: r._row }, _demo: false
       });
     });
     if (latest) ctx.report.asOf = latest;
+    /* counts only: no other branch's code, name or amount is kept */
+    if (other) ctx.report.notes.push(other + ' baris milik cabang lain tidak disimpan. Hanya merchant KCP Jakarta Cilangkap (12903) yang dibaca.');
+    if (none) ctx.report.notes.push(none + ' baris tanpa kode dan nama cabang tidak disimpan.');
+    ctx.report.branchRows = { kept: out.length, otherBranch: other, noBranch: none };
     return out;
   }
 
@@ -113,5 +147,5 @@
   }
   register();
 
-  MCD.saldo = { rows: rows, dates: dates, summary: summary, schema: SCHEMA };
+  MCD.saldo = { rows: rows, dates: dates, summary: summary, schema: SCHEMA, HOME: HOME };
 })(window.MCD = window.MCD || {});

@@ -368,6 +368,12 @@
   /** phonesOf(string, {mobile}) → [{display, tel, mobile, noArea}] (§5.1; D18: no tel: without an area code). */
   function phonesOf(value, o) {
     o = o || {};
+    /* integration 22 Oct 2026: one rule for every screen. MCD.inst.phonesOf when it is loaded; this copy keeps its
+       tel rule (62 counts as the country code only with '+' or at 10 digits or more, then dials as tel:+62…) */
+    var I = root.MCD && root.MCD.inst;
+    if (!o.keepMobile && I && typeof I.phonesOf === 'function') {
+      try { return I.phonesOf(value, { mobile: !!o.mobile }).map(function (x) { return { display: x.display, tel: x.tel, mobile: x.mobile, noArea: x.noArea }; }); } catch (e) { /* own rule below */ }
+    }
     if (Array.isArray(value)) {
       return value.map(function (p) { return p && typeof p === 'object' ? phonesOf(String(p.number || ''), { mobile: !!p.mobile, keepMobile: true })[0] : null; }).filter(Boolean);
     }
@@ -379,11 +385,13 @@
       if (!p || /[^0-9+()\-.\s]/.test(p)) return;
       var digits = p.replace(/\D/g, '');
       if (digits.length < 7 || digits.length > 15) return;
-      var noArea = !/^(0|62)/.test(digits);
       var plus = /^\s*\+/.test(p);
+      var tel = plus ? (/^0/.test(digits) ? 'tel:' + digits : 'tel:+' + digits)
+        : /^0/.test(digits) ? 'tel:' + digits : (/^62/.test(digits) && digits.length >= 10 ? 'tel:+' + digits : null);
+      var noArea = !tel;
       var mob = o.keepMobile ? !!o.mobile : !!(o.mobile && /^(08|628)/.test(digits));
       if (out.some(function (x) { return x.digits === digits; })) return;
-      out.push({ display: p.replace(/\s+/g, ' '), tel: noArea ? null : 'tel:' + (plus ? '+' : '') + digits, mobile: mob, noArea: noArea, digits: digits });
+      out.push({ display: p.replace(/\s+/g, ' '), tel: tel, mobile: mob, noArea: noArea, digits: digits });
     });
     return out.map(function (x) { return { display: x.display, tel: x.tel, mobile: x.mobile, noArea: x.noArea }; });
   }
@@ -395,6 +403,8 @@
     if (!p[0] || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(p[1])) return null;
     return s;
   }
+  /* sites the data marks 'ok' that a later check found parked; shown as 'dibuang' until data/campuses.js is rebuilt */
+  C.WEB_PARKED = { 'ovt:78704605978f': 'Italian Fashion School' };
   C.safeUrl = safeUrl;
   C.phonesOf = phonesOf;
   C.mailOf = mailOf;
@@ -412,14 +422,17 @@
     var src = r.src || {}, D = data(), gen = (D && D.meta && D.meta.generated) || null;
     var phones = src.phone === 'pddikti' ? phonesOf(r.phone, { mobile: !!r.mobile }).map(function (p) { p.src = 'pddikti'; return p; }) : [];
     var em = src.email === 'pddikti' ? mailOf(r.email) : null;
-    var w = safeUrl(r.website), ok = /^(ok|dialihkan|belum)$/.test(String(r.webCheck || ''));
+    /* integration 22 Oct 2026: a parked domain the data still marks 'ok' (same list as MCD.inst, V6_SPEC §14.4) */
+    var parked = Object.prototype.hasOwnProperty.call(C.WEB_PARKED, r.id);
+    var w = parked ? null : safeUrl(r.website), ok = /^(ok|dialihkan|belum)$/.test(String(r.webCheck || ''));
     var srcW = src.website;
     if (w && (srcW === 'osm' || srcW === 'overture' || srcW === 'pddikti-email') && !/^(ok|dialihkan)$/.test(String(r.webCheck || ''))) w = null;
     var website = w ? { url: w.url, host: w.host, https: w.https, social: w.social, checked: r.webCheck || null, link: ok, src: srcW || null } : null;
     return {
       id: r.kode ? { kind: 'Kode PT', value: String(r.kode) } : null,
       phones: phones, email: em ? { value: em, src: 'pddikti' } : null, emailDropped: false,
-      website: website, websiteDropped: r.webCheck === 'dibuang',
+      website: website, websiteDropped: parked || r.webCheck === 'dibuang',
+      websiteDroppedText: parked ? 'Alamat situs lembaga ini tidak ditampilkan karena tidak lagi aktif sebagai situs lembaga.' : null,
       akreditasi: r.akreditasi || null, address: r.address ? String(r.address) + (r.postcode ? ' ' + r.postcode : '') : null,
       officialName: null, fetched: gen,
       refUrl: r.kode ? C.pddiktiUrl(r.name) : null, refLabel: r.kode ? 'Cari di PDDikti' : null
@@ -909,12 +922,13 @@
 
   /* ------------------------------------------------------------ search (Cari) */
 
-  /** search(q, max) → rows whose name or short name matches (2-letter short names exactly: "UI"). */
+  /** search(q, max) → rows whose name or short name matches (2-letter short names exactly: "UI"); a whole short name
+      or a whole name comes first ("Universitas Indonesia" before "Universitas Indonesia Maju"; final fix round). */
   C.search = function (q, max) {
     var I = index(), key = searchKey(q);
     if (!I || key.length < 2) return [];
     var out = [], lim = isNum(max) ? max : 8;
-    var exact = I.rows.filter(function (r) { return r.short && searchKey(r.short) === key; });
+    var exact = I.rows.filter(function (r) { return (r.short && searchKey(r.short) === key) || searchKey(r.name) === key; });
     exact.forEach(function (r) { if (out.length < lim) out.push(r); });
     if (key.length >= 3) {
       I.rows.forEach(function (r) {

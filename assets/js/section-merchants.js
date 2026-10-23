@@ -2341,7 +2341,9 @@
         { label: 'Merchant: hapus filter', run: function () { S().resetFilters(); }, kw: 'atur ulang filter' },
         { label: 'Merchant: ekspor daftar merchant yang belum ada di LVM', run: function () { if (!deep()) goTab(c, 'prio', 'leads'); else exportLeads(); }, kw: 'ekspor export csv leads daftar' },
         { label: 'Merchant: toko yang perlu diaktifkan kembali', run: function () { goTab(c, 'status', 'react'); }, kw: 'reaktivasi tidak aktif aktifkan kembali' },
-        { label: 'Merchant: UREG dan USAK per cabang', run: function () { goTab(c, 'status', 'kpi'); }, kw: 'ureg usak target cabang' }
+        { label: 'Merchant: UREG dan USAK per cabang', run: function () { goTab(c, 'status', 'kpi'); }, kw: 'ureg usak target cabang' },
+        /* merge 23 Oct 2026: the teammates' Saldo merchant tab (d812dfe) */
+        { label: 'Merchant: saldo merchant nasabah', run: function () { goTab(c, 'saldo'); }, kw: 'saldo merchant nasabah turun naik mtd mom ytd' }
       ];
       /* kecamatan entries only while the shell's search does not index the kecamatan itself (plan A-17) */
       if (!(MCD.app && typeof MCD.app.registerSearch === 'function')) {
@@ -2490,7 +2492,7 @@
         scrollToPart(lk ? 'leads' : 'prio', 160);
         return true;
       }
-      if ((mm = /^merchants:tab:(prio|edc|kec|cat|status|info)$/.exec(a))) { if (ctx) goTab(ctx, mm[1]); return true; }
+      if ((mm = /^merchants:tab:(prio|edc|kec|cat|status|saldo|info)$/.exec(a))) { if (ctx) goTab(ctx, mm[1]); return true; }
       if ((mm = /^merchants:kec:(\d\d\.\d\d\.\d\d)$/.exec(a))) { showKecOnMap(mm[1]); return true; }
       if ((mm = /^merchants:poi:(\d+)$/.exec(a))) { openPoi(+mm[1]); return true; }
       /* Ringkasan "Sasaran LVM" / "Sasaran EDC" (item 35): the Kandidat EDC tab and the map filtered to that tier,

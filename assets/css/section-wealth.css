@@ -1,11 +1,12 @@
 /* ==========================================================================
- * Section 7 · Calon Prioritas (body[data-section="wealth"], .wl-*)  docs/V7_SPEC.md §5
+ * Calon Prioritas (body[data-section="wealth"], .wl-*)  docs/V7_SPEC.md §5 (D39: the section's key number comes from the shell)
  * The panel (Sederhana guide and Detail summary rail): the public-data line, scope, "Jenis tempat" chips with one
  * explaining line, three cards (Kecamatan daya beli tinggi · Tempat sasaran · Tempat terdekat), the lead count line
  * (full rail only, D17); the drawer "Daftar & grafik" (Daftar tempat · Kecamatan); the card folds (Mengapa calon
  * Prioritas · Cara masuk · Jarak & rute) and the kecamatan list. Calm: one neutral ink for every kind, the shape says
  * the kind; daya beli as 1–3 small bars, never a fill or a colour scale (item 23, D11). Tokens only (tokens.css,
  * brand.css). Day and Night; 1440 / 1366 / 1024 / 390. Text 12 px or larger; targets 40 px in Sederhana, 44 px on phones.
+ * A-14: no weight 700, mono at 500 at most. Hover tints only where the device can hover (MOBILE_UX_PLAN M11).
  * ========================================================================== */
 
 body[data-section="wealth"] {
@@ -18,7 +19,7 @@ body[data-section="wealth"] {
   font: inherit; font-weight: 600; color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
 }
-.wl-link:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .wl-link:hover { text-decoration-color: var(--text-1); } }
 .wl-link:focus-visible, .wl-mini__row:focus-visible, .wl-row-btn:focus-visible, .wl-kec__row:focus-visible,
 .wl-chip-btn:focus-visible, .wl-tab:focus-visible, .wl-seg .seg__opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .wl-note { margin: 6px 0 0; font: 400 12.5px/18px var(--font-sans); color: var(--text-2); }
@@ -94,7 +95,7 @@ body[data-section="wealth"] .guide .wl-chips .chip { min-height: 40px; }
 .wl-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .wl-mini__row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; width: 100%; padding: 7px 6px;
   border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.wl-mini__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .wl-mini__row:hover { background: var(--surface-hover); } }
 .wl-mini__row > svg { margin-top: 2px; }
 .wl-mini__txt { display: grid; gap: 1px; min-width: 0; }
 .wl-mini__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -140,7 +141,7 @@ body[data-section="wealth"] .guide .wl-chips .chip { min-height: 40px; }
 .wl-list__more:empty { display: none; }
 .wl-row-btn { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; min-height: 40px; padding: 6px 8px;
   border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.wl-row-btn:hover { background: var(--surface-hover); }
+@media (hover: hover) { .wl-row-btn:hover { background: var(--surface-hover); } }
 .wl-row-btn > svg { margin-top: 2px; }
 .wl-row-btn__txt { display: grid; gap: 1px; min-width: 0; }
 .wl-row-btn .dd-list__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -149,8 +150,10 @@ body[data-section="wealth"] .guide .wl-chips .chip { min-height: 40px; }
 .wl-kec { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 .wl-kec__row { display: grid; grid-template-columns: 24px 14px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 8px;
   border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.wl-kec__row:hover { background: var(--surface-hover); }
-.wl-kec__rank { font: 600 12px/16px var(--font-mono); color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
+@media (hover: hover) { .wl-kec__row:hover { background: var(--surface-hover); } }
+/* a tap shows a pressed tint on touch screens instead of a hover that stays (MOBILE_UX_PLAN M11) */
+@media (hover: none) { .wl-mini__row:active, .wl-row-btn:active, .wl-kec__row:active { background: var(--surface-hover); } }
+.wl-kec__rank { font: 500 12px/16px var(--font-mono); color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
 .wl-kec__name { font: 500 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wl-kec__legend { margin-top: 12px; }
 

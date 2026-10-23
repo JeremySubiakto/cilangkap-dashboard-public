@@ -1162,6 +1162,9 @@
   }
   /** tierOfRow(i) → the tier of listing row i or null (for the map filter "Sasaran"). */
   function tierOfRow(i) { var list = allCandidates(), k = EC.pos && i >= 0 && i < EC.pos.length ? EC.pos[i] : -1; return k >= 0 ? list[k].tier : null; }
+  /** v6 integration (22 Oct 2026, Kampus request): true when the tiers are already scored for the current data, so
+      tierOfRow() costs nothing. Never scores: false before the first scoring or after the data changed. */
+  function tiersReady() { if (!EC.list || !M.val) return false; var m = model(); return !!(m && EC.key === ecKey(m)); }
   /** edcShare() → {edc, lvm, nasional, share}: Sasaran EDC among the local merchants that are not on LVM yet (item 37 aimed
       at 15-25% of all merchants; without the national chains of item 42 it is about 14%, docs/EDC_SCORE.md §7). */
   function edcShare() { var c = edcTierCounts(); return { edc: c.edc, lvm: c.lvm, nasional: c.nasional, share: c.edc + c.lvm ? c.edc / (c.edc + c.lvm) : null }; }
@@ -1837,7 +1840,7 @@
     // Sasaran EDC / LVM from three factors (item 37) and the live Google re-rank (item 33, memory only)
     EDC_RULES: EDC_RULES, EDC_RULE: EDC_RULE, CROWD_PTS: CROWD_PTS, edcRule: edcRule, setEdcRule: setEdcRule, edcRuleText: function () { return EDC_RULES[RULE_ID]; },
     TIERS: TIERS, TIER_FILTER: TIER_FILTER, TICKET_WORDS: TICKET_WORDS, TICKET_LEVELS: TICKET_LEVELS, LEVEL3: LEVEL3, TICKET_GROUP: TICKET_GROUP,
-    BUSY_MIN: BUSY_MIN, BIG_MIN: BIG_MIN, qualifiesEdc: qualifiesEdc, tierOfRow: tierOfRow, tierId: tierId, tierOf: tierOf, isEdcTier: isEdcTier,
+    BUSY_MIN: BUSY_MIN, BIG_MIN: BIG_MIN, qualifiesEdc: qualifiesEdc, tierOfRow: tierOfRow, tiersReady: tiersReady, tierId: tierId, tierOf: tierOf, isEdcTier: isEdcTier,
     /** item 42 scope switch (read only; docs/EDC_SCORE.md §7) */
     nasionalAll: function () { return NASIONAL_ALL; },
     edcCandidates: edcCandidates, edcTierCounts: edcTierCounts, edcOf: edcOf, edcShare: edcShare, factors: factors, ticketOf: ticketOf, catWords: catWords,

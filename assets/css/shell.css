@@ -742,7 +742,7 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 .tb-search { justify-content: flex-start; width: clamp(240px, 22vw, 340px); padding: 0 8px 0 12px; color: var(--band-ink-2); font-weight: 400; }
 .tb-search .icon, .tb-ctl .icon, .tb-unsaved .icon { width: 16px; height: 16px; flex: none; }
 .tb-search__t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-.tb-search__w, .tb-search__s { display: none; }
+.tb-search__w, .tb-search__s, .tb-search__u { display: none; }
 .tb-search__k { flex: none; padding: 4px 6px; border: 1px solid var(--band-rule); border-radius: 6px; font: 500 12px/1 var(--font-sans); color: var(--band-ink-3); }
 .tb-theme { min-width: 104px; }
 .tb-theme__i { display: inline-grid; place-items: center; }
@@ -756,7 +756,7 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 .brand-band .badge--reveal .badge__more { display: none; }
 .tb-danantara { font-size: 12px; }
 @media (max-width: 1439px) {
-  .tb-search { width: 220px; }
+  .tb-search { width: 244px; }   /* final fix round: "Cari merchant, sekolah, kampus" fits (192 of 198 px) */
   /* shorter label and no ⌘K badge (it stays in the tooltip), so the label is never cut */
   .tb-search__t, .tb-search__k { display: none; }
   .tb-search__s { display: inline; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
@@ -768,8 +768,8 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
    branch name never slides under it (1440 px: the name ran 21 px under the search box) */
 @media (min-width: 1280px) {
   body.has-unsaved .tb-search { width: 220px; }
-  body.has-unsaved .tb-search__t, body.has-unsaved .tb-search__k { display: none; }
-  body.has-unsaved .tb-search__s { display: inline; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  body.has-unsaved .tb-search__t, body.has-unsaved .tb-search__k, body.has-unsaved .tb-search__s { display: none; }
+  body.has-unsaved .tb-search__u { display: inline; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 }
 @media (max-width: 1279px) {
   .tb-search { width: 40px; padding: 0; justify-content: center; }
@@ -1001,7 +1001,8 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--glass-solid); border-top: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
   }
-  /* v6: six sections (Kampus, V6_SPEC §2): 65 px per tab at 390, 60 at 360; labels stay 12 px and never overflow */
+  /* v6: one column per section shown (teammates' 0ef909e, 22 Oct 2026: KPR hidden, so five: 78 px per tab at 390, 72 at
+     360; six were 65 and 60 px); labels stay 12 px and never overflow */
   .tabbar__list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
   .tabbar__btn {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -1079,6 +1080,7 @@ body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) 
 .nav.has-ink .nav__btn[aria-current="page"]::after { opacity: 0; }
 /* phones: the tab bar's marker moves one column per step (its own width = one column) */
 .tabbar__list { position: relative; }
+/* width: one column of six here; app.js sets it to 100% / (sections shown) inline (0ef909e) */
 .tabbar__ink { position: absolute; left: 0; top: 0; width: calc(100% / 6); height: 3px; list-style: none; pointer-events: none; opacity: 0; transition: transform var(--dur-base) var(--ease-out); }
 .tabbar__ink::before { content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 3px; border-radius: 0 0 2px 2px; background: var(--grad-accent); }
 .tabbar__list.has-ink .tabbar__ink { opacity: 1; }

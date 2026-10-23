@@ -332,7 +332,13 @@
     name = fileKey(name);
     if (!name) return 'error';
     if (dataOf(name)) return 'ready';
-    return LOAD[name] ? LOAD[name].state : 'idle';
+    if (LOAD[name]) return LOAD[name].state;
+    /* integration 22 Oct 2026: a load a section started itself (Sekolah's SC.lazy, Kampus) has its state in the shell */
+    var A = mcd().app;
+    if (A && typeof A.lazyState === 'function') {
+      try { var s = A.lazyState(FILES[name].lazy); if (s === 'loading' || s === 'error') return s; } catch (e) { /* idle */ }
+    }
+    return 'idle';
   }
   function emitData(name) {
     var st = dataState(name);
@@ -416,7 +422,9 @@
 
   var SCOPE_KEY = 'mcd.scope.v1';
   var SCOPE_VALUES = [5, 15, 30];
-  var SCOPE_DEFAULTS = { schools: 5, campus: 5, merchants: 5, property: 5 };
+  /* merge of the public prototype (23 Oct 2026): the two sections that came after the teammates' base, Kesehatan
+     ('health') and Calon Prioritas ('wealth'), open at 5 km as well */
+  var SCOPE_DEFAULTS = { schools: 5, campus: 5, merchants: 5, property: 5, health: 5, wealth: 5 };
   /* the merchant file (data/sme-pois.js) ends at 15 km, so Merchant has no 30 km */
   var SCOPE_LIMITS = { merchants: [5, 15] };
   var SCOPE_SECTION = /^[a-z][a-z0-9-]{0,23}$/;
@@ -484,7 +492,9 @@
     schools: 'Sekolah dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
     campus: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.',
     merchants: 'Merchant dalam radius 5 km atau 15 km dari Mabes TNI. Data merchant hanya sampai 15 km.',
-    property: 'Proyek perumahan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.'
+    property: 'Proyek perumahan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.',
+    health: 'Fasilitas kesehatan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
+    wealth: 'Tempat dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.'
   };
 
   /**
@@ -835,9 +845,48 @@
   }
 
   /**
+   * The highest class an estimate (basis perkiraan) can reach, from meta.perkiraanRule.table (final fix round, 23 Oct
+   * 2026): kampus → 'Menengah'; sekolah by jenjang 'SMA' | 'SMK' | 'MA' → 'Atas' | 'Reguler' | 'Menengah' in the 18 Oct
+   * data. null when the file or the row of the table is missing.
+   */
+  var CAP_JENIS = ['SMA', 'SMK', 'MA'];
+  function perkiraanCap(kind, jenis) {
+    var T = dataOf('tiers'), meta = T && T.meta, tab = meta && meta.perkiraanRule && meta.perkiraanRule.table;
+    var row = tab ? tab[kind === 'kampus' ? 'kampus' : String(jenis || '').toUpperCase()] : null;
+    if (!row || typeof row !== 'object') return null;
+    var best = null;
+    Object.keys(row).forEach(function (a) { var tm = tierMetaOf(meta, row[a]); if (tm && (!best || tm.level > best.level)) best = tm; });
+    return best;
+  }
+  /**
+   * capLine(kind, jenis?) → the honest line about estimates (final fix round): "Perkiraan untuk kampus paling tinggi
+   * Menengah. Kampus dengan biaya tinggi yang tidak mempublikasikan biaya dapat tampil lebih rendah." For a school with
+   * its jenjang: "Perkiraan untuk SMA swasta paling tinggi Atas. …"; without one, every jenjang in one line. '' when
+   * the tier file is not in.
+   */
+  function capLine(kind, jenis) {
+    if (kind === 'kampus') {
+      var c = perkiraanCap('kampus');
+      return c ? 'Perkiraan untuk kampus paling tinggi ' + c.label + '. Kampus dengan biaya tinggi yang tidak mempublikasikan biaya dapat tampil lebih rendah.' : '';
+    }
+    var tail = ' Sekolah dengan biaya tinggi yang tidak mempublikasikan biaya dapat tampil lebih rendah.';
+    var j = String(jenis || '').toUpperCase();
+    if (CAP_JENIS.indexOf(j) >= 0) {
+      var cj = perkiraanCap('sekolah', j);
+      return cj ? 'Perkiraan untuk ' + j + ' swasta paling tinggi ' + cj.label + '.' + tail : '';
+    }
+    var parts = [];
+    CAP_JENIS.forEach(function (x) { var cx = perkiraanCap('sekolah', x); if (cx) parts.push(cx.label + ' untuk ' + x + ' swasta'); });
+    if (!parts.length) return '';
+    var said = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' dan ' + parts[parts.length - 1] : parts[0];
+    return 'Perkiraan paling tinggi ' + said + '.' + tail;
+  }
+
+  /**
    * tierBlock(id, {kind?, veiled?, cls?, open?}) → the "Kelas biaya" fold (§4.4): chip, basis words, fee text, quote,
    * "Sumber: situs resmi …, dibaca …", "Buka sumber biaya" (new tab; not while veiled), the no-fee line from the row's
    * check (D21), the row note, then the entry line. Loads the tier file when needed and refreshes in place.
+   * An estimate also says how high an estimate can go (capLine; o.jenis 'SMA' | 'SMK' | 'MA' for a school).
    */
   function tierBlock(id, o) {
     o = o || {};
@@ -873,6 +922,7 @@
       } else if (t.checkWords) {
         b.appendChild(note(t.checkWords, 'inst-note--check'));
       }
+      if (t.basis === 'perkiraan') { var cl = capLine(kind, o.jenis); if (cl) b.appendChild(note(cl, 'inst-note--cap')); }
       if (t.note) b.appendChild(note(t.note));
       b.appendChild(note(entryLine(kind), 'inst-note--entry'));
     }
@@ -895,6 +945,8 @@
       : 'Dari jenis sekolah: sekolah negeri masuk Reguler. SPK (Satuan Pendidikan Kerja Sama) tanpa biaya resmi paling tinggi Atas.');
     lines.push(camp ? 'Perkiraan berarti kelas biaya dihitung dari jenis kampus dan daya beli area karena biaya resmi tidak dipublikasikan.'
       : 'Perkiraan berarti kelas biaya dihitung dari jenis sekolah dan daya beli area karena biaya resmi tidak dipublikasikan.');
+    var cap = capLine(kind);
+    if (cap) lines.push(cap);
     if (counts && isNum(counts.biaya)) {
       lines.push(camp ? 'Biaya resmi ditemukan untuk ' + fmtInt(counts.biaya) + ' kampus. Selebihnya dari jenis kampus atau perkiraan.'
         : 'Biaya resmi ditemukan untuk ' + fmtInt(counts.biaya) + ' sekolah. Selebihnya dari jenis sekolah atau perkiraan.');
@@ -1064,6 +1116,12 @@
   var CAMPUS_SRC = { pddikti: 'PDDikti' };
   var CAMPUS_WEB_DERIVED = { 'pddikti-email': 'Domain e-mail resmi di PDDikti', osm: 'OpenStreetMap', overture: 'Overture Maps' };
   var LINK_CHECKS = { ok: 1, dialihkan: 1, belum: 1 };
+  /* integration 22 Oct 2026 (V6_SPEC §14.4, data follow-up): rows whose site the data marks 'ok' although a later check
+     found a parked domain. The screen treats them as 'dibuang' (no address, its own line) until data/campuses.js is
+     rebuilt with the stricter check; tests/final-v6.test.mjs flags this list once the data agrees. */
+  var WEB_PARKED = { 'ovt:78704605978f': 'Italian Fashion School' };
+  var PARKED_LINE = 'Alamat situs lembaga ini tidak ditampilkan karena tidak lagi aktif sebagai situs lembaga.';
+  var DROPPED_LINE = 'Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.';
   var REF_URL = 'https://referensi.data.kemendikdasmen.go.id/pendidikan/npsn/';
   var PDDIKTI_SEARCH = 'https://pddikti.kemdiktisaintek.go.id/search/{q}';
 
@@ -1188,7 +1246,8 @@
     var eSrc = campusSrcWords(src.email, date);
     var m = eSrc ? mailOf(r.email) : null;
     if (m) c.email = { value: m.value, href: m.href, src: eSrc };
-    if (r.webCheck === 'dibuang') c.websiteDropped = true;
+    if (own(WEB_PARKED, key)) { c.websiteDropped = true; c.websiteDroppedText = PARKED_LINE; }
+    else if (r.webCheck === 'dibuang') c.websiteDropped = true;
     else if (r.website) {
       var ws = src.website, wSrc = null;
       if (own(CAMPUS_SRC, ws)) wSrc = campusSrcWords(ws, date);
@@ -1337,7 +1396,7 @@
           b.appendChild(note(c.kind === 'sekolah' ? 'Kontak sekolah belum tercatat di daftar resmi. Lihat Data Referensi Kemendikdasmen.'
             : c.kind === 'kampus' ? 'Kontak kampus belum tercatat di PDDikti.' : 'Kontak lembaga ini belum tercatat.', 'inst-note--none'));
           if (c.emailDropped) b.appendChild(note('E-mail di daftar resmi tampak milik pribadi, sehingga tidak ditampilkan.'));
-          if (c.websiteDropped) b.appendChild(note('Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.'));
+          if (c.websiteDropped) b.appendChild(note(c.websiteDroppedText || DROPPED_LINE));
         } else {
           b.appendChild(c.phones.length ? phoneRow(c, o, rowSrc(c.phones[0].src)) : kv('Telepon', h('span', { class: 'inst-miss', text: 'Telepon belum tercatat.' })));
           if (c.email) {
@@ -1363,7 +1422,7 @@
       if (c.state === 'ready' && !c.noNpsn && !hide) {
         var noneAll = !c.phones.length && !c.email && !c.website;
         if (c.website) b.appendChild(webRow(c, rowSrc(c.website.src)));
-        else if (c.websiteDropped && !noneAll) b.appendChild(kv('Situs resmi', h('span', { class: 'inst-miss', text: 'Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.' })));
+        else if (c.websiteDropped && !noneAll) b.appendChild(kv('Situs resmi', h('span', { class: 'inst-miss', text: c.websiteDroppedText || DROPPED_LINE })));
         else if (!noneAll) b.appendChild(kv('Situs resmi', h('span', { class: 'inst-miss', text: 'Situs resmi belum tercatat.' })));
       }
       if (ready && c.akreditasi) {
@@ -1400,6 +1459,20 @@
     return f.el;
   }
 
+  /* ============================================================ list drawer */
+
+  /**
+   * listDrawerState() → 'full' | 'half': how high "Lihat daftar …" (Sekolah, Kampus) opens the shell's bottom drawer.
+   * On screens up to 900 px tall the half drawer shows the list's tools and only two or three rows (1366×768: 2,
+   * 1440×900: 3), so the list opens to full height there (final fix round, 23 Oct 2026). A tab click keeps the shell's
+   * half height.
+   */
+  var LIST_FULL_MAX_H = 900;
+  function listDrawerState() {
+    var h = root && typeof root.innerHeight === 'number' ? root.innerHeight : 0;
+    return h > 0 && h <= LIST_FULL_MAX_H ? 'full' : 'half';
+  }
+
   /* ================================================================== API */
 
   return {
@@ -1419,6 +1492,8 @@
     tierLegendRows: tierLegendRows,
     tierLegendNodes: tierLegendNodes,
     tierTipLines: tierTipLines,
+    capLine: capLine,
+    listDrawerState: listDrawerState,
     tierCsv: tierCsv,
     TIERS: FILTER_IDS.slice(),
     contactOf: contactOf,

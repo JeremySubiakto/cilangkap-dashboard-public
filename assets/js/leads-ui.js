@@ -28,11 +28,20 @@
  * Safeguards (item 49, §9.3, §9.7, §11.4): a count the module hides never reaches the DOM (no text, title,
  * aria-label, data-* attribute, width or sort position); only the module's own marks ("<5", "–", "disembunyikan",
  * "—") are shown. No export, print, link, map, "+ Rencana kunjungan" or "+ Tindak lanjut". No cell value of the
- * user's file in the mapping table or the report. When the page is hidden the panel body leaves the DOM for a
+ * user's file in the mapping table or the report. A column the module denies on the first read (by header or by its
+ * values) keeps a disabled select; a pick the module denies for the field chosen is undone (W9). Under Data contoh the
+ * switch and "Matikan dan hapus daftar leads" do nothing (MCD.policy neither logs nor clears then, D27). When the page is hidden the panel body leaves the DOM for a
  * cover; the panel closes on lock, section switch, "Samarkan nama", Data contoh and after 5 minutes without input.
- * The rule Calon top up KSM stays off while the branch has not filled its tenor (D31). No browser storage, no
- * network, no console output, no join between a unit code and a TNI site. Plain Indonesian (COPY_DECK_ID §1–4).
- * Safe DOM only (createElement, textContent, setAttribute). No bank policy number in this file.
+ * The rule Calon top up KSM stays off while the branch has not filled its tenor (D31); a rule the UI shows as off
+ * never gets a table, row list, rail line or chip, also when it was the remembered rule. No browser storage, no
+ * network, no console output, no join between a unit code and any place on the map (D31). Plain Indonesian
+ * (COPY_DECK_ID §1–4). Safe DOM only (createElement, textContent, setAttribute). No bank policy number in this file.
+ *
+ * D39 (22 Oct 2026, the KSM & KKB section is removed): the lead rules stay as written (they read the bank's own
+ * customer report, not the removed section), and no label of this lane names the removed tab or its calculator.
+ * This file reads only MCD.leads, MCD.data, MCD.state, MCD.policy (forLeads, missing, actor, setActor, log,
+ * clear, on), MCD.nav and MCD.app. Count lines go to the KPR and Calon Prioritas full rails and the Posisi cabang
+ * rows (DPK, KSM, KKB), each through railLine / chip.
  * ========================================================================== */
 (function (root, factory) {
   var api = factory(root);
@@ -178,6 +187,8 @@
     colWhy: 'Alasan',
     notUsed: 'Tidak digunakan',
     cifMissing: 'Kolom CIF wajib ada.',
+    mapRefused: 'Kolom {kolom} tidak dapat digunakan untuk {data}.',
+    mapKept: 'Pilihan sebelumnya tetap berlaku.',
     headerless: 'Tambahkan baris judul kolom di file, lalu pilih file lagi.',
     asOf: 'Tanggal data',
     asOfEmpty: 'Isi tanggal data.',
@@ -310,6 +321,10 @@
 
   function emit(reason) {
     S.cache.sig = null;
+    // the open panel follows a threshold or list change: redrawn from the module, or closed when the list is gone
+    if (S.panel && (reason === 'policy' || reason === 'data')) {
+      if (!available()) close('off'); else render();
+    }
     S.listeners.slice().forEach(function (fn) { safe(function () { fn({ reason: reason }); }); });
     S.mounts.slice().forEach(function (m) { safe(function () { m.update(reason); }); });
     var d = doc();
@@ -608,6 +623,10 @@
     var p = S.panel;
     if (!p || p.covered) return;
     var l = L(), v = view(), mem = S.memory, k = v.k, recs = records(), meta = listMeta() || {};
+    // D31: a remembered rule that is off now (its threshold was emptied) gives way to the first usable rule
+    if (mem && mem.rule && (!v.rules[mem.rule] || v.rules[mem.rule].off)) {
+      mem = S.memory = { rule: pickRule(v, null), by: mem.by, where: null, pages: 1 };
+    }
     clear(p.body);
     var fp = recs.length && recs[0] && recs[0].fp ? recs[0].fp : '—';
     p.body.appendChild(h('p', { cls: 'lu-file', text: fill(T.fileLine, { file: meta.file || '—', m: v.total.text, tanggal: fmtDate(meta.asOf), fp: fp }) }));
@@ -788,9 +807,13 @@
     return v;
   }
 
-  /** Turning leads on (§8.3): a fresh masking key, the switch, the thresholds, payload.leads pending, Riwayat. */
+  /**
+   * Turning leads on (§8.3): a fresh masking key, the switch, the thresholds, payload.leads pending, Riwayat.
+   * Refused under Data contoh: MCD.policy logs nothing then (§8.5), so the D27 Riwayat would miss the entry.
+   */
   function turnOn(initials) {
     var l = L();
+    if (demoOn()) return Promise.reject(new Error(T.demo));
     if (!l) return Promise.reject(new Error(T.readFail));
     var bytes;
     try { bytes = l.newKeyBytes(); } catch (e) { return Promise.reject(e); }
@@ -806,8 +829,12 @@
       return true;
     });
   }
-  /** "Matikan dan hapus daftar leads" (§8.3): list and key gone, module defaults, payload.leads {on: false} pending. */
+  /**
+   * "Matikan dan hapus daftar leads" (§8.3): list and key gone, module defaults, payload.leads {on: false} pending.
+   * → false and nothing changed under Data contoh (MCD.policy neither logs nor clears leads.k then, §8.2, §8.5).
+   */
   function turnOff() {
+    if (demoOn()) return false;
     close('off');
     var l = L(), p = P();
     if (l) { safe(function () { l.clear(); }); safe(function () { l.reset(); }); }
@@ -817,6 +844,7 @@
     S.dirty = true; S.offPending = true; S.cuts = null; S.memory = null; S.expired = null;
     plog('leads-off', {});
     emit('off');
+    return true;
   }
 
   function openOnDialog(ctx, after) {
@@ -831,6 +859,7 @@
     check.addEventListener('change', sync);
     ok.addEventListener('click', function () {
       if (ok.disabled) return;
+      if (demoOn()) { err.textContent = T.demo; err.hidden = false; return; }
       var who = takeActor(f);
       if (!who || !check.checked) { sync(); return; }
       ok.disabled = true;
@@ -852,10 +881,14 @@
     var dlg = dialog({ title: T.offTitle, lines: T.offBody });
     var f = initialsField();
     var ok = btn(T.offOk, 'btn--danger', null);
+    var err = h('p', { cls: 'lu-err', attrs: { role: 'alert' } });
+    err.hidden = true;
     function sync() { ok.disabled = !initialsOk(f.value()); }
     f.input.addEventListener('input', function () { f.error(''); sync(); });
     ok.addEventListener('click', function () {
       if (ok.disabled) return;
+      // Data contoh switched on while this dialog was open: nothing is cleared and nothing logged (§8.5)
+      if (demoOn()) { err.textContent = T.demo; err.hidden = false; return; }
       if (!takeActor(f)) { sync(); return; }
       dlg.close();
       turnOff();
@@ -863,6 +896,7 @@
       else if (after) after();
     });
     dlg.box.appendChild(f.el);
+    dlg.box.appendChild(err);
     dlg.box.appendChild(h('div', { cls: 'lu-actions' }, [btn(T.cancel, 'btn--secondary', function () { dlg.close(); }), ok]));
     sync();
     f.input.focus();
@@ -879,9 +913,13 @@
     m.update = function () {
       var l = L(), isOn = !!(l && safe(function () { return l.enabled(); })), meta = listMeta(), recs = records();
       var hadFocus = m.root && m.root.contains(doc().activeElement) && doc().activeElement.classList && doc().activeElement.classList.contains('lu-switch');
+      // Data contoh: the switch and "Matikan" stay focusable but do nothing; the demo line says why (§9.5).
+      // MCD.policy neither logs nor clears under Data contoh, so a change here would miss the D27 Riwayat.
+      var demo = demoOn();
+      var lock = demo ? { 'aria-disabled': 'true', 'aria-describedby': 'lu-set-demo' } : {};
       var sw = h('button', {
-        cls: 'lu-switch', attrs: { type: 'button', role: 'switch', 'aria-checked': isOn ? 'true' : 'false' },
-        on: { click: function () { if (isOn) openOffDialog(ctx, focusSwitch); else openOnDialog(ctx, focusSwitch); } }
+        cls: 'lu-switch', attrs: Object.assign({ type: 'button', role: 'switch', 'aria-checked': isOn ? 'true' : 'false' }, lock),
+        on: { click: function () { if (demoOn()) return; if (isOn) openOffDialog(ctx, focusSwitch); else openOnDialog(ctx, focusSwitch); } }
       }, [h('span', { cls: 'lu-switch__l', text: T.switchLabel }), h('span', { cls: 'lu-switch__v', text: isOn ? T.on : T.off })]);
       var card = h('section', { cls: 'lu-card lu-settings', attrs: { translate: 'no', 'aria-labelledby': 'lu-set-t' } }, [
         h('div', { cls: 'lu-card__head' }, [h('h3', { cls: 'lu-card__t', attrs: { id: 'lu-set-t' }, text: T.title }), sw])
@@ -891,7 +929,7 @@
       card.appendChild(ul);
       card.appendChild(line(T.approval, 'lu-approval'));
       if (isOn && S.session.onSince) card.appendChild(line(fill(T.activeSince, { tanggal: fmtIsoDate(S.session.onSince), inisial: S.session.onBy || '—' }), 'is-strong'));
-      if (demoOn()) card.appendChild(line(T.demo));
+      if (demo) card.appendChild(h('p', { cls: 'lu-note', attrs: { id: 'lu-set-demo' }, text: T.demo }));
       else if (isOn && !recs.length && !S.expired) card.appendChild(line(T.noList));
       else if (isOn && recs.length && retention(meta && meta.asOf).notice) card.appendChild(line(T.old45, 'lu-warn'));
       if (S.expired) {
@@ -899,7 +937,7 @@
       }
       if (isOn && S.dirty && !S.expired) card.appendChild(h('div', { cls: 'lu-banner' }, [line(T.onBanner), saveBtn()]));
       if (!isOn && S.offPending) card.appendChild(h('div', { cls: 'lu-banner' }, [line(T.offBanner), saveBtn()]));
-      if (isOn) card.appendChild(h('div', { cls: 'lu-actions' }, [btn(T.offBtn, 'btn--danger', function () { openOffDialog(ctx, focusSwitch); })]));
+      if (isOn) card.appendChild(h('div', { cls: 'lu-actions' }, [btn(T.offBtn, 'btn--danger', function () { if (!demoOn()) openOffDialog(ctx, focusSwitch); }, lock)]));
       if (m.root) detach(m.root);
       m.root = card;
       clear(container).appendChild(card);
@@ -963,13 +1001,13 @@
     ensureWired();
     ctx = ctx || {};
     var m = { container: container, st: 'gate', gatePassed: false, sheets: null, sheet: null, file: null, userMap: null, chk: null,
-      asOf: todayYmd(), result: null, run: null, msg: null, progressEl: null };
+      asOf: todayYmd(), result: null, run: null, msg: null, progressEl: null, mapMsg: null, sels: null, locked: null };
     function reset(st) {
       (m.sheets || []).forEach(wipeSheet);
       wipeSheet(m.sheet);
       dropResult(m.result);
       if (m.run) m.run.cancelled = true;
-      m.sheets = null; m.sheet = null; m.file = null; m.userMap = null; m.chk = null; m.result = null; m.run = null;
+      m.sheets = null; m.sheet = null; m.file = null; m.userMap = null; m.chk = null; m.result = null; m.run = null; m.mapMsg = null; m.sels = null; m.locked = null;
       m.st = st || 'gate';
     }
     function go(st, msg) { m.st = st; m.msg = msg || null; draw(); }
@@ -1073,27 +1111,53 @@
       if (!chk) { wipeSheet(m.sheet); m.sheet = null; go('error', T.readFail); return; }
       m.chk = chk;
       m.userMap = Object.assign({}, chk.mapping);
+      // W9: a column the module denies on the first read (by header or by its values) stays denied, its select locked
+      m.locked = {};
+      chk.columns.forEach(function (c) { if (c.status === 'ditolak') m.locked[c.col] = true; });
+      m.mapMsg = null;
       m.asOf = todayYmd();
       go('map');
     }
+    /**
+     * A pick in the "Digunakan untuk" select (W9). Columns denied on the first read are locked (drawMapping), so no
+     * pick can take a field away from its column for a column that stays denied. checkMapping scans a column by the
+     * kind of its field (an unmapped column as text), so a usable column can still be denied for the field picked
+     * (the CIF column as Segmen reads as account numbers): that pick is undone, the field stays on its previous
+     * column and one line says so. "Tidak digunakan" is always taken.
+     */
     function remap(col, field) {
       var l = L(), next = {};
+      if (m.locked && m.locked[col]) return;
       Object.keys(m.userMap).forEach(function (f) { if (m.userMap[f] !== col && f !== field) next[f] = m.userMap[f]; });
       if (field) next[field] = col;
-      m.userMap = next;
-      m.chk = l.checkMapping(m.sheet, m.userMap);
+      var chk = l.checkMapping(m.sheet, next);
+      var got = field ? chk.columns.filter(function (c) { return c.col === col; })[0] : null;
+      if (field && (!got || got.status !== 'dipakai')) {
+        var was = m.chk.columns.filter(function (c) { return c.col === col; })[0] || got || { header: '' };
+        m.mapMsg = [fill(T.mapRefused, { kolom: was.header, data: FIELD_NAMES[field] || field }), got && got.why, T.mapKept]
+          .filter(Boolean).join(' ');
+      } else {
+        m.userMap = next;
+        m.chk = chk;
+        m.mapMsg = null;
+      }
       draw();
+      var back = m.sels && m.sels[col];
+      if (back && typeof back.focus === 'function') back.focus();
     }
     function drawMapping(card) {
       var l = L(), chk = m.chk, fields = l.FIELDS || Object.keys(FIELD_NAMES);
       var tbody = h('tbody');
+      m.sels = {};
       chk.columns.forEach(function (c) {
-        var headerDenied = !!safe(function () { return l.headerDenied(c.header); }) || chk.headerless;
+        // locked: a header that names personal data, a file without a header row, or a column denied on the first read
+        var locked = chk.headerless || !!(m.locked && m.locked[c.col]) || !!safe(function () { return l.headerDenied(c.header); });
         var sel = h('select', { cls: 'select lu-select', attrs: { 'aria-label': T.colUse + ' · ' + c.header } });
         sel.appendChild(h('option', { attrs: { value: '' }, text: T.notUsed }));
         fields.forEach(function (f) { sel.appendChild(h('option', { attrs: { value: f }, text: FIELD_NAMES[f] || f })); });
         sel.value = c.field || '';
-        if (headerDenied) sel.disabled = true;
+        if (locked) sel.disabled = true;
+        else m.sels[c.col] = sel;
         sel.addEventListener('change', function () { if (!sel.disabled) remap(c.col, sel.value || null); });
         tbody.appendChild(h('tr', { cls: 'is-' + c.status }, [
           h('th', { attrs: { scope: 'row' }, text: c.header }),
@@ -1106,6 +1170,7 @@
         h('thead', null, [h('tr', null, [T.colFile, T.colUse, T.colStatus, T.colWhy].map(function (t) { return h('th', { attrs: { scope: 'col' }, text: t }); }))]),
         tbody
       ])]));
+      if (m.mapMsg) card.appendChild(h('p', { cls: 'lu-note lu-warn', attrs: { role: 'alert' }, text: m.mapMsg }));
       if (chk.headerless) card.appendChild(line(T.headerless, 'lu-err'));
       else if (!chk.ok) card.appendChild(line(T.cifMissing, 'lu-err'));
       var date = h('input', { cls: 'input lu-date', attrs: { type: 'date', id: 'lu-asof', required: true, max: todayYmd(), autocomplete: 'off', 'aria-describedby': 'lu-asof-e' } });
@@ -1192,6 +1257,8 @@
         plog('leads-import', { fp: r.file && r.file.fp, m: n >= k ? n : '<' + k, asOf: r.report.asOf });
         S.cuts = r.report.cuts || null;
         S.session.stale = false;
+        // row numbers belong to the file they came from: a new list keeps the rule and grouping, not the row list
+        if (S.memory) S.memory = { rule: S.memory.rule, by: S.memory.by, where: null, pages: 1 };
         dropResult(r);
         m.result = null; m.msg = null;
         go('done');

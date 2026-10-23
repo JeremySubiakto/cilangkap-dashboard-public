@@ -1,11 +1,15 @@
 /* ==========================================================================
- * MCD.sections.position + MCD.position: section 8 "Posisi cabang" (key 8, layout 'page', group 'cabang').
+ * MCD.sections.position + MCD.position: the page "Posisi cabang" (layout 'page', group 'cabang'; its key number
+ * comes from the shell registry).
  * v7 build contract: docs/V7_SPEC.md §6 (page), §1.7.6 (MCD.position), §6.5 and §6.6 (chips and landing states),
  * D12 (fixed order, no ranking by largest gap), D13 (one resolver MCD.nav.gapTarget), D17 (lead chips only for
- * counts that MCD.leadsUi shows), D22 (KSM concentration next to every KSM target, the full sentence once per
- * screen), D24 (rank only, no peer branch names; amounts veiled by "Samarkan nama"), D28 (not printed, not
- * translated), D32 ("Lihat ..." chip words, "Mendekati Prioritas"), §10.1, §10.5, §11.4. User decision of
- * 19 Oct 2026: Posisi cabang is visible to every signed-in staff member, rank only, never printable.
+ * counts that MCD.leadsUi shows), D24 (rank only, no peer branch names; amounts veiled by "Samarkan nama"), D28
+ * (not printed, not translated), D32 ("Lihat ..." chip words, "Mendekati Prioritas"), §10.5, §11.4. User
+ * decision of 19 Oct 2026: Posisi cabang is visible to every signed-in staff member, rank only, never printable.
+ * D39 (22 Oct 2026, the KSM & KKB section removed): the KSM, KKB and KPR rows of the KPI file stay as branch facts;
+ * there is no KSM concentration line, no policy limit line and no link to a removed tab. A KSM or KKB row points
+ * to the Leads panel ("Calon KSM di Leads: {n}", "Calon KKB di Leads: {n}") while the lead list shows that count,
+ * else it carries no chip.
  *
  * One page in a fixed order (the Kepala cabang reads the same order every month):
  *   1. Head: eyebrow "POSISI CABANG · {PERIODE} · AREA {AREA}", the file line "File KPI: {Terbaru | Perlu
@@ -20,9 +24,10 @@
  * Chips carry an id only (a gapTarget token, a task id or a lead rule id), never a value. A place chip resolves
  * through MCD.nav.gapTarget(token, {kpi}) and MCD.nav.go(target, {from: 'position'}) when the shell has MCD.nav
  * (SHELL lane, Phase B); until then the local landing table below (the same §6.6 states) is passed to
- * ctx.navigate. A chip whose section is not in the registry (MCD.config.sections) is not drawn. A DPK, tabungan
- * or consumer gap never resolves to Kredit TNI (§6.6, W17). Lead chips come from MCD.leadsUi.chip(rule) and are
- * drawn only while that module says the count is shown, never while "Samarkan nama" is on.
+ * ctx.navigate. A chip leads only to the sections of CHIP_SECTIONS and only when that section is in the registry
+ * (MCD.config.sections); any other answer of the resolver draws nothing. Lead chips come from
+ * MCD.leadsUi.chip(rule) and are drawn only while that module says the count is shown (switch on, ≥ 1024 px, a
+ * list loaded, the count not hidden), never while "Samarkan nama" is on.
  *
  * Privacy: the KPI model holds every branch of the area (for ranks). The page never renders another branch's
  * name, code or value; import notes that name another office are counted in one line ("{n} catatan tentang
@@ -33,8 +38,9 @@
  *
  * Data, read-only: MCD.kpi.fromRecords(MCD.data.kpi_cabang) (assets/js/kpi-import.js; amounts in Rp juta,
  * ratios as fractions), MCD.data.meta.kpi_cabang (importedAt), MCD.data.lvm_kpi (UREG, the Rev LVM report),
- * MCD.policy.ksmShareMax() (optional "Batas porsi KSM", percent), MCD.tni.concentration() (when present, the
- * one source of the KSM line), MCD.leadsUi (lead chips). Everything is feature-detected. Safe DOM only.
+ * MCD.leadsUi (lead chips; the page redraws on its 'mcd:leads' event and on 'mcd:policy', since the lead
+ * thresholds decide which counts are shown). Everything is feature-detected. Safe DOM only. No bank policy
+ * number in this file.
  * ========================================================================== */
 (function (W, MCD) {
   'use strict';
@@ -57,9 +63,9 @@
     print: 'Halaman ini memuat data bank dan tidak dicetak dari dashboard.',
     freshTitle: 'Terbaru berarti data bulan lalu atau dua bulan lalu.',
     goalTitle: 'Kredit consumer dibagi DPK, dihitung dashboard dari file KPI.',
-    shareTitle: 'Kredit KSM dibagi kredit consumer cabang, dihitung dashboard dari file KPI.',
+    mixTitleAttr: 'Saldo kredit setiap produk dibagi kredit consumer cabang, dihitung dashboard dari file KPI.',
     nplLine: 'Kualitas kredit ditangani melalui proses penagihan cabang.',
-    mixLine: 'Booking KPR dan KKB menambah kredit tanpa menambah porsi KSM.',
+    nplAreaMissing: 'NPL area belum ada di file ini.',
     prodTitle: 'Booking per produk',
     mixTitle: 'Kredit menurut produk',
     allTitle: 'Semua KPI',
@@ -98,18 +104,21 @@
     { id: 'akuisisi', label: 'Akuisisi', keys: ['newCifTabungan', 'rekeningBersaldo', 'ureg', 'usak', 'fbi', 'skorKpi'] }
   ];
 
-  /* Chips per KPI (§6.5): the place chip, then the task chip; ids only. 'per-produk' scrolls to "Booking per
-     produk"; a lead chip is drawn by MCD.leadsUi.chip(rule) with its own count. */
+  /* Chips per KPI (§6.5 as changed by D39): the place chip, then the task chip; ids only. 'per-produk' scrolls to
+     "Booking per produk"; a lead chip is drawn by MCD.leadsUi.chip(rule) with its own count. KSM and KKB have
+     no place or task chip (their section is removed, D39): only the lead chip, which is absent unless the lead
+     list shows that count. */
   function P(target, label) { return { type: 'place', target: target, label: label }; }
   function T(target, label) { return { type: 'task', target: target, label: label }; }
   function L(rule, label) { return { type: 'lead', target: 'leads:' + rule, rule: rule, label: label }; }
   var LEAD_PRIO = L('calonPrioritas', 'Mendekati Prioritas di Leads');
   var LEAD_KSM = L('calonKsm', 'Calon KSM di Leads');
+  var LEAD_KKB = L('calonKkb', 'Calon KKB di Leads');
   var CHIPS = {
-    'booking.ksm': [P('tni', 'Lihat pangkalan TNI'), T('ksm', 'Hitung KSM'), LEAD_KSM],
-    'kredit.ksm': [P('tni', 'Lihat pangkalan TNI'), T('ksm', 'Hitung KSM'), LEAD_KSM],
-    'booking.autoloan': [P('tni', 'Lihat dealer KKB'), T('kkb', 'Hitung KKB')],
-    'kredit.autoloan': [P('tni', 'Lihat dealer KKB'), T('kkb', 'Hitung KKB')],
+    'booking.ksm': [LEAD_KSM],
+    'kredit.ksm': [LEAD_KSM],
+    'booking.autoloan': [LEAD_KKB],
+    'kredit.autoloan': [LEAD_KKB],
     'booking.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR')],
     'kredit.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR')],
     'booking.consumer': [P('per-produk', 'Lihat per produk')],
@@ -130,17 +139,18 @@
     ureg: [P('merchants', 'Lihat merchant')],
     nplRetail: [], nplConsumer: [], skorKpi: []
   };
-  var KSM_KEYS = { 'booking.ksm': 1, 'kredit.ksm': 1 };
-  var KKB_KEYS = { 'booking.autoloan': 1, 'kredit.autoloan': 1 };
+  /* The lead rules this page asks MCD.leadsUi about (its redraw signature). */
+  var LEAD_RULES = ['calonPrioritas', 'calonKsm', 'calonKkb'];
   var CAMPUS_DOSEN = { casa: 1, casaRatio: 1, tabungan: 1 };
   var MERCHANT_PRIO = { ureg: 1, usak: 1, rekeningBersaldo: 1 };
-  var TOKEN_SECTION = { tni: 'tni', wealth: 'wealth', schools: 'schools', campus: 'campus', merchants: 'merchants', property: 'property' };
-  var TASK_SECTION = { ksm: 'tni', kkb: 'tni', 'kpr-calc': 'property' };
+  /* The only sections a place or task chip may open (D39: nothing else, whatever a resolver answers). */
+  var CHIP_SECTIONS = { wealth: 1, schools: 1, campus: 1, merchants: 1, property: 1 };
+  var TASKS = { 'kpr-calc': 1 };
   /* Import notes that may name another office (§6.2); they are counted, never shown. */
   var PEER_CODES = { NO_DATA: 1, BY_NAME: 1, DUP_CODE: 1, RANK_FILE: 1 };
 
   var S = { ctx: null, host: null, page: null, slot: null, root: null, printEl: null, allOpen: false, srcOpen: false,
-    onPolicy: null, leadsOn: null, now: null, model: null, sig: null, allFold: null, srcFold: null };
+    onExt: null, leadsOn: null, now: null, model: null, sig: null, allFold: null, srcFold: null };
 
   /* --------------------------------------------------------------- helpers */
 
@@ -162,9 +172,16 @@
     return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d).replace('.', ',');
   }
   /** Percent from a fraction, 1 decimal (2 only when 1 would round a non-zero value to zero): '30,5'. */
-  function pctNum(x) {
-    var d = Math.abs(x) > 0 && Math.round(Math.abs(x) * 1000) === 0 ? 2 : 1;
-    return num(x * 100, d);
+  function pctDigits(x) { return Math.abs(x) > 0 && Math.round(Math.abs(x) * 1000) === 0 ? 2 : 1; }
+  function pctNum(x) { return num(x * 100, pctDigits(x)); }
+  /**
+   * NPL against the area at the precision the card shows (so "1,5% · area 1,5%" never reads "Di atas area"):
+   * 'Di atas area' (tone bad) · 'Di bawah area' · 'Sama dengan area' (tone ok); null without both values.
+   */
+  function compareArea(v, area) {
+    if (!isNum(v) || !isNum(area)) return null;
+    var p = Math.pow(10, Math.max(pctDigits(v), pctDigits(area)) + 2), a = Math.round(v * p), b = Math.round(area * p);
+    return { text: a > b ? 'Di atas area' : (a < b ? 'Di bawah area' : 'Sama dengan area'), tone: a > b ? 'bad' : 'ok' };
   }
   function pct(x) { return isNum(x) ? pctNum(x) + '%' : '—'; }
   /** Capaian shown with one decimal, cut (not rounded) so 99,96% never reads "100,0%" next to "kurang". */
@@ -172,8 +189,6 @@
     if (!isNum(c)) return '—';
     return num(Math.floor(c * 1000 + 1e-7) / 10, 1) + '%';
   }
-  /** A percent number the branch typed (policy), shown as written: 60 → '60', 62,5 → '62,5'. */
-  function plainPct(p) { return num(p, Math.round(p) === p ? 0 : (Math.round(p * 10) === p * 10 ? 1 : 2)); }
   function veiled() {
     var c = S.ctx;
     if (c && isFn(c.privacy)) return safe(c.privacy, c) === 'veil';
@@ -257,14 +272,10 @@
   function target(section, action, landing, label) {
     return { section: section, view: 'deep', action: action, landing: landing, label: label };
   }
-  /** The §6.6 landing state of a gapTarget token for a KPI (the local copy of MCD.nav.gapTarget). A DPK, tabungan
-      or consumer KPI never resolves to Kredit TNI: only the KSM and KKB keys do. */
+  /** The §6.6 landing state of a gapTarget token for a KPI (the local copy of MCD.nav.gapTarget). Only the tokens
+      of CHIP_SECTIONS answer; any other token (the importer still proposes tokens of removed tabs) gives null. */
   function landing(token, kpi) {
     switch (token) {
-      case 'tni':
-        if (KSM_KEYS[kpi]) return target('tni', 'tni:tab:units:half:pipe', { drawerTab: 'units', drawer: 'half', sort: 'pipe' }, 'Lihat pangkalan TNI');
-        if (KKB_KEYS[kpi]) return target('tni', 'tni:tab:dealers:half:near', { drawerTab: 'dealers', drawer: 'half', sort: 'near', chips: ['dealers'] }, 'Lihat dealer KKB');
-        return null;
       case 'wealth':
         return target('wealth', 'wealth:tab:kec:half', { drawerTab: 'kec', drawer: 'half' }, 'Lihat calon Prioritas');
       case 'schools':
@@ -283,10 +294,8 @@
         return null;
     }
   }
-  /** Task chips (the local copy of MCD.nav.task). */
+  /** Task chips (the local copy of MCD.nav.task): the KPR calculator only. */
   function taskTarget(id) {
-    if (id === 'ksm') return { section: 'tni', view: 'deep', action: 'tni:calc:ksm', label: 'Hitung KSM' };
-    if (id === 'kkb') return { section: 'tni', view: 'deep', action: 'tni:calc:kkb', label: 'Hitung KKB' };
     if (id === 'kpr-calc') return { section: 'property', view: 'deep', action: 'property:calculator', label: 'Buka kalkulator KPR' };
     return null;
   }
@@ -295,17 +304,19 @@
     if (!Array.isArray(list)) return true;
     return list.some(function (s) { return s && s.id === id; });
   }
-  /** Where a chip leads: {section, view, action, …} or null (unknown token, or a section not in the registry). */
+  /** Where a chip leads: {section, view, action, …} or null (unknown token or task, a section outside
+      CHIP_SECTIONS, or a section not in the registry). */
   function resolve(chip, kpi) {
     if (!chip) return null;
     var N = MCD.nav, t = null;
     if (chip.type === 'place') {
-      if (!TOKEN_SECTION[chip.target]) return null;
+      if (!CHIP_SECTIONS[chip.target]) return null;
       t = N && isFn(N.gapTarget) ? safe(N.gapTarget, N, [chip.target, { kpi: kpi }]) : landing(chip.target, kpi);
     } else if (chip.type === 'task') {
+      if (!TASKS[chip.target]) return null;
       t = N && isFn(N.task) ? safe(N.task, N, [chip.target]) : taskTarget(chip.target);
     }
-    if (!t || !t.section || !sectionKnown(t.section)) return null;
+    if (!t || !t.section || !CHIP_SECTIONS[t.section] || !sectionKnown(t.section)) return null;
     return t;
   }
   function leadsUsable() {
@@ -313,43 +324,18 @@
     if (!LU || !isFn(LU.chip) || veiled()) return false;
     return isFn(LU.available) ? !!safe(LU.available, LU) : true;
   }
+  /** What the lead chips of this page would show now (memory only, for the redraw signature): null while the
+      lead list is not usable here; else, per rule, the chip's own text or null when the module hides it. */
+  function leadSig() {
+    if (!leadsUsable()) return null;
+    var LU = MCD.leadsUi;
+    return LEAD_RULES.map(function (rule) {
+      var el = safe(LU.chip, LU, [rule]);
+      return el && el.nodeType === 1 ? String(el.textContent || '') : null;
+    });
+  }
 
   /* ------------------------------------------------------------ the model */
-
-  function policyLimit() {
-    var P0 = MCD.policy;
-    if (!P0 || !isFn(P0.ksmShareMax)) return null;
-    var v = safe(P0.ksmShareMax, P0);
-    return isNum(v) ? v : null;
-  }
-  /** KSM concentration (D22, §10.1): kredit KSM ÷ kredit consumer of the file, NPL retail of the branch and the
-      area, and the branch's optional limit. MCD.tni.concentration() is the one source when it is loaded. */
-  function concentration(kpi, home) {
-    var c = null, T0 = MCD.tni;
-    if (T0 && isFn(T0.concentration)) {
-      var t = safe(T0.concentration, T0);
-      if (t && isNum(t.ksmShare) && (!t.period || !kpi || t.period === kpi.period)) {
-        c = { ksmShare: t.ksmShare, nplRetail: isNum(t.nplRetail) ? t.nplRetail : null, nplArea: isNum(t.nplArea) ? t.nplArea : null,
-          period: t.period || (kpi && kpi.period) || null, limitPct: isNum(t.limitPct) ? t.limitPct : null };
-      }
-    }
-    if (!c) {
-      var b = home || null;
-      var ksm = b ? get(b.kpi, 'kredit.ksm') : null, cons = b ? get(b.kpi, 'kredit.consumer') : null;
-      if (!isNum(ksm) || !isNum(cons) || cons <= 0) return null;
-      var area = kpi && kpi.areaTotal ? get(kpi.areaTotal.kpi, 'nplRetail') : null;
-      c = { ksmShare: ksm / cons, nplRetail: get(b.kpi, 'nplRetail'), nplArea: isNum(area) ? area : null, period: kpi ? kpi.period : null, limitPct: null };
-      if (!isNum(c.nplRetail)) c.nplRetail = null;
-    }
-    if (!isNum(c.limitPct)) c.limitPct = policyLimit();
-    c.over = isNum(c.limitPct) && c.ksmShare * 100 > c.limitPct;
-    c.sentence = 'KSM ' + pctNum(c.ksmShare) + '% dari kredit consumer cabang.' +
-      (isNum(c.nplRetail) ? ' NPL retail ' + pct(c.nplRetail) + (isNum(c.nplArea) ? ' (area ' + pct(c.nplArea) + ')' : '') + '.' : '');
-    c.short = 'Porsi KSM ' + pct(c.ksmShare);
-    c.limitLine = c.over ? 'Porsi KSM di atas batas yang diisi cabang (' + plainPct(c.limitPct) + '%).' : null;
-    c.title = TXT.shareTitle;
-    return c;
-  }
 
   function fieldSource(kpi, key) {
     var f = ((kpi && kpi.fields) || []).filter(function (x) { return x && x.key === key; })[0];
@@ -381,19 +367,19 @@
       kurang: isNum(r.kurang) ? r.kurang : null, lebih: isNum(lebih) ? lebih : null, met: met,
       status: statusOf(cap), rank: isNum(r.rank) ? r.rank : null, of: isNum(r.of) ? r.of : null,
       chips: (CHIPS[r.key] || []).map(function (c) { return { type: c.type, label: c.label, target: c.target }; }),
-      source: fieldSource(kpi, r.key), line: null
+      source: fieldSource(kpi, r.key)
     };
   }
 
   /**
    * MCD.position.model() → {state: 'empty' | 'demo' | 'ready', reason, kpi, period, periodLabel, area, freshness,
-   * importedAt, rank, goal: {consumer, dpk, ratio}, cards: [4], products: [3], mix, concentration, rows, groups,
-   * warnings, peerWarnings, warningCount, source}. Pure: reads MCD.data and MCD.kpi, writes nothing.
+   * importedAt, rank, goal: {consumer, dpk, ratio}, cards: [4], products: [3], mix, rows, groups, warnings,
+   * peerWarnings, warningCount, source}. Pure: reads MCD.data and MCD.kpi, writes nothing.
    * state 'empty' has reason 'no-file' (no KPI dataset) or 'home-missing' (the file has no row for 12903).
    */
   function model() {
     var M = { state: 'empty', reason: 'no-file', kpi: null, period: null, periodLabel: null, area: null, freshness: null, importedAt: null,
-      rank: null, goal: null, cards: [], products: [], mix: null, concentration: null, rows: [], groups: GROUPS,
+      rank: null, goal: null, cards: [], products: [], mix: null, rows: [], groups: GROUPS,
       warnings: [], peerWarnings: 0, warningCount: 0, source: null };
     if (demoOn()) { M.state = 'demo'; M.reason = null; return M; }
     var D = MCD.data, K = MCD.kpi;
@@ -432,9 +418,6 @@
         by.ureg.source = 'Dari laporan Rev LVM yang diimpor (UREG tidak ada di file KPI).';
       }
     }
-    var conc = concentration(kpi, home);
-    M.concentration = conc;
-    if (conc) ['kredit.ksm', 'booking.ksm'].forEach(function (k) { if (by[k]) by[k].line = conc.short; });
     M.rows = rows;
     M.rank = { r: get(home.rank, 'skorKpi'), of: (kpi.rankOf && kpi.rankOf.skorKpi) || kpi.peerCount || null };
 
@@ -449,12 +432,9 @@
         var area = kpi.areaTotal ? get(kpi.areaTotal.kpi, 'nplRetail') : null;
         c.value = r.actual; c.area = isNum(area) ? area : null;
         c.missing = !isNum(r.actual);
-        c.compare = null;
-        if (!c.missing && isNum(c.area)) {
-          var a = Math.round(r.actual * 10000), b = Math.round(c.area * 10000);
-          c.compare = a > b ? 'Di atas area' : (a < b ? 'Di bawah area' : 'Sama dengan area');
-          c.tone = a > b ? 'bad' : 'ok';
-        }
+        var cmp = c.missing ? null : compareArea(r.actual, c.area);
+        c.compare = cmp ? cmp.text : null;
+        if (cmp) c.tone = cmp.tone;
         c.chips = [];
       } else {
         c.missing = !isNum(r.capaian);
@@ -467,7 +447,7 @@
     });
     M.products = PRODUCTS.map(function (p) {
       var r = by[p.key] || { key: p.key, chips: [] };
-      return { key: p.key, short: p.short, id: p.id, tone: p.tone, row: r, missing: !isNum(r.capaian), line: p.id === 'ksm' && conc ? conc.short : null };
+      return { key: p.key, short: p.short, id: p.id, tone: p.tone, row: r, missing: !isNum(r.capaian) };
     });
     if (isNum(cons) && cons > 0) {
       var known = 0;
@@ -583,27 +563,22 @@
     if (r.met) return 'Tercapai' + (isNum(r.lebih) && r.better !== 'down' ? ' · lebih ' + valText(r.unit, r.lebih, veil) : '');
     return (isNum(r.kurang) ? 'kurang ' + valText(r.unit, r.kurang, veil) + ' · ' : '') + r.status;
   }
-  function concLines(c, full) {
-    if (!c) return [];
-    var out = [h('p', { class: 'pos-conc' + (full ? ' pos-conc--full' : ''), title: full ? c.title : c.sentence, text: full ? c.sentence : c.short })];
-    if (c.limitLine) out.push(h('p', { class: 'pos-limit', text: c.limitLine }));
-    return out;
-  }
   /** The big value with the rank on the same row (keeps a card near 180 px tall at 1366×768, §6.8). */
   function bigRow(r, value, title) {
     var rk = rankText(r.rank, r.of);
     return h('div', { class: 'pos-card__big' }, h('p', { class: 'pos-card__v', title: title || null }, value),
       rk ? h('span', { class: 'pos-card__rank', text: rk }) : null);
   }
-  function cardEl(c, M, veil, isDeep) {
+  function cardEl(c, veil, isDeep) {
     var r = c.row || {}, kids = [];
     if (c.kind === 'npl') {
       if (c.missing) kids.push(h('p', { class: 'pos-card__miss', text: TXT.missing }));
       else {
         kids.push(bigRow({}, h('span', { text: pct(c.value) }), r.source));
-        kids.push(h('p', { class: 'pos-card__m' + (c.compare ? ' pos-card__m--' + c.tone : ''), text: 'area ' + pct(c.area) + (c.compare ? ' · ' + c.compare : '') }));
+        /* the area line only with the area's value; a file without it says so in words, never a bare "area —" */
+        kids.push(c.compare ? h('p', { class: 'pos-card__m pos-card__m--' + c.tone, text: 'area ' + pct(c.area) + ' · ' + c.compare })
+          : h('p', { class: 'pos-card__m', text: TXT.nplAreaMissing }));
       }
-      concLines(M.concentration, true).forEach(function (n) { kids.push(n); });
       kids.push(h('p', { class: 'pos-card__note', text: TXT.nplLine }));
     } else if (c.missing) {
       kids.push(h('p', { class: 'pos-card__miss', text: TXT.missing }));
@@ -618,7 +593,8 @@
           line.addEventListener('click', function () { scrollToId('pos-prod-' + s.id); });
           return h('li', { class: 'pos-sub__row' }, line);
         }
-        var chip = sr ? chipsEl(sr.chips, s.key, false, function (x) { return x.type === 'place'; }) : null;
+        /* Sederhana: the line's place chip (KPR), or its lead chip (KSM, KKB) while the lead list shows that count */
+        var chip = sr ? chipsEl(sr.chips, s.key, false, function (x) { return x.type !== 'task'; }) : null;
         return h('li', { class: 'pos-sub__row' }, h('span', { class: 'pos-sub__line' }, h('span', { class: 'pos-sub__k', text: s.short }), h('span', { class: 'pos-sub__t', text: text })), chip);
       })));
       if (isDeep) { var pc = chipsEl(c.chips, c.key, true); if (pc) kids.push(pc); }
@@ -650,7 +626,6 @@
       }
       var info = [];
       if (!p.missing) info.push(h('p', { class: 'pos-prow__m pos-card__m--' + toneOf(r.status), text: kurangLine(r, veil) }));
-      if (p.id === 'ksm' && M.concentration) concLines(M.concentration, false).forEach(function (n) { info.push(n); });
       var ch = p.missing ? null : chipsEl(r.chips, p.key, true);
       if (info.length || ch) kids.push(h('div', { class: 'pos-prow__f' }, info.length ? h('div', { class: 'pos-prow__i' }, info) : null, ch));
       return h('div', { class: 'pos-prow', id: 'pos-prod-' + p.id, tabindex: '-1' }, kids);
@@ -662,19 +637,15 @@
     var kids = [h('h2', { class: 'pos-x__t', id: 'pos-mix-t', text: TXT.mixTitle })];
     if (!M.mix) kids.push(h('p', { class: 'pos-card__miss', text: TXT.missing }));
     else {
-      var c = M.concentration;
       var label = function (p) { return p.label + ' ' + (isNum(p.share) ? pct(p.share) : '—'); };
       var aria = 'Kredit consumer menurut produk: ' + M.mix.parts.map(label).join(', ') + '.';
-      kids.push(h('div', { class: 'pos-share', role: 'img', 'aria-label': aria }, M.mix.parts.filter(function (p) { return isNum(p.share) && p.share > 0; }).map(function (p) {
-        return h('span', { class: 'pos-share__seg pos-fill--' + p.tone, style: { width: (p.share * 100).toFixed(2) + '%' }, title: p.key === 'kredit.ksm' && c ? c.sentence : label(p) });
+      kids.push(h('div', { class: 'pos-share', role: 'img', 'aria-label': aria, title: TXT.mixTitleAttr }, M.mix.parts.filter(function (p) { return isNum(p.share) && p.share > 0; }).map(function (p) {
+        return h('span', { class: 'pos-share__seg pos-fill--' + p.tone, style: { width: (p.share * 100).toFixed(2) + '%' }, title: label(p) });
       })));
       kids.push(h('ul', { class: 'pos-legend' }, M.mix.parts.map(function (p) {
-        var miss = !isNum(p.share);
-        return h('li', { class: 'pos-legend__i', title: miss ? TXT.missing : (p.key === 'kredit.ksm' && c ? c.sentence : null) },
+        return h('li', { class: 'pos-legend__i', title: isNum(p.share) ? null : TXT.missing },
           h('span', { class: 'pos-legend__sw pos-fill--' + p.tone, 'aria-hidden': 'true' }), h('span', { text: label(p) }));
       })));
-      if (c && c.limitLine) kids.push(h('p', { class: 'pos-limit', text: c.limitLine }));
-      kids.push(h('p', { class: 'pos-card__note', text: TXT.mixLine }));
     }
     return h('section', { class: 'pos-x pos-mix', 'aria-labelledby': 'pos-mix-t' }, kids);
   }
@@ -687,10 +658,7 @@
       g.keys.forEach(function (k) {
         var r = by[k];
         if (!r) return;
-        var c = M.concentration;
-        var name = h('th', { scope: 'row', class: 'pos-tbl__k', title: r.source || null }, h('span', { class: 'pos-tbl__l', text: r.label }),
-          r.line ? h('span', { class: 'pos-tbl__line', title: c ? c.sentence : null, text: r.line }) : null,
-          r.line && c && c.limitLine ? h('span', { class: 'pos-limit', text: c.limitLine }) : null);
+        var name = h('th', { scope: 'row', class: 'pos-tbl__k', title: r.source || null }, h('span', { class: 'pos-tbl__l', text: r.label }));
         var cells;
         if (!isNum(r.actual) && !isNum(r.target)) {
           cells = [h('td', { class: 'pos-tbl__miss', attrs: { colspan: '5', 'data-label': TXT.cols[1] }, text: TXT.missing })];
@@ -758,7 +726,7 @@
   function signature() {
     var D = MCD.data || {}, meta = (D.meta && D.meta[DATASET]) || {};
     return JSON.stringify([D.version, (D[DATASET] || []).length, meta.importedAt || null, (D.lvm_kpi || []).length, demoOn(), veiled(), deep(),
-      policyLimit(), leadsUsable(), S.now ? String(clock().getTime()) : null]);
+      leadSig(), S.now ? String(clock().getTime()) : null]);
   }
   /** Builds the page into the slot. Returns the model it drew. */
   function render() {
@@ -771,7 +739,7 @@
     else if (M.state === 'empty') kids = [stateEl(M.reason === 'home-missing' ? TXT.homeMissing : TXT.empty, true)];
     else {
       kids = [headEl(M, veil), goalEl(M, veil),
-        h('div', { class: 'pos-cards', role: 'list', 'aria-label': 'Empat kekurangan utama' }, M.cards.map(function (c) { return cardEl(c, M, veil, isDeep); }))];
+        h('div', { class: 'pos-cards', role: 'list', 'aria-label': 'Empat kekurangan utama' }, M.cards.map(function (c) { return cardEl(c, veil, isDeep); }))];
       if (isDeep) {
         kids.push(h('div', { class: 'pos-panels' }, prodEl(M, veil), mixEl(M)));
         kids.push(allEl(M, veil));
@@ -840,8 +808,9 @@
       if (!S.slot) { S.slot = (S.page && S.page.body) || root; render(); }
       printGuard(true);
       var doc = W.document;
-      S.onPolicy = function () { if (S.slot && signature() !== S.sig) render(); };
-      if (doc && isFn(doc.addEventListener)) doc.addEventListener('mcd:policy', S.onPolicy);
+      /* the lead chips follow the lead list (import, switch, thresholds); redrawn only when what they show changed */
+      S.onExt = function () { if (S.slot && signature() !== S.sig) render(); };
+      if (doc && isFn(doc.addEventListener)) { doc.addEventListener('mcd:leads', S.onExt); doc.addEventListener('mcd:policy', S.onExt); }
       if (c && isFn(c.registerCommands)) {
         c.registerCommands(function () {
           return [
@@ -859,8 +828,8 @@
     },
     unmount: function () {
       var doc = W.document;
-      if (S.onPolicy && doc && isFn(doc.removeEventListener)) doc.removeEventListener('mcd:policy', S.onPolicy);
-      S.onPolicy = null;
+      if (S.onExt && doc && isFn(doc.removeEventListener)) { doc.removeEventListener('mcd:leads', S.onExt); doc.removeEventListener('mcd:policy', S.onExt); }
+      S.onExt = null;
       printGuard(false);
       if (S.host && S.host.classList) S.host.classList.remove('pos-host');
       if (S.host && isFn(S.host.removeAttribute)) S.host.removeAttribute('translate');
@@ -886,7 +855,6 @@
     taskTarget: taskTarget,
     resolve: resolve,
     follow: follow,
-    concentration: function () { var M = model(); return M.concentration; },
     isPeerWarning: isPeerWarning,
     CHIPS: CHIPS,
     CARD_KEYS: CARD_KEYS,

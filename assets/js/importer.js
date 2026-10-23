@@ -427,6 +427,12 @@
     return s;
   }
 
+  /** An Excel date serial of 2010–2059 (40179 … 58439) → 'YYYY-MM-DD', else null (a count or a code is not a date). */
+  function serialYmd(n) {
+    if (!isNum(n) || n < 40179 || n > 58439 || Math.round(n) !== n) return null;
+    return new Date((n - 25569) * DAY).toISOString().slice(0, 10);
+  }
+
   /** Header row → {mapping:{canonical: colIndex}, unmatched:[names], dropped:[names], monthly:{canonical:{ 'YYYY-MM': colIndex }},
       daily:{canonical:{ 'YYYY-MM-DD': colIndex }}}. */
   function mapHeaders(headers, type) {
@@ -443,8 +449,12 @@
       if (hitMonth) return;
       var hitDay = false;
       Object.keys(s.daily).forEach(function (canon) {
-        var re = new RegExp('^' + s.daily[canon] + '_?(\\d{4})_(\\d{2})_(\\d{2})$'), m = re.exec(n);
-        if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) { (daily[canon] = daily[canon] || {})[m[1] + '-' + m[2] + '-' + m[3]] = i; hitDay = true; }
+        var re = new RegExp('^' + s.daily[canon] + '_?(\\d{4})_(\\d{2})_(\\d{2})$'), m = re.exec(n), ymd = null;
+        if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) ymd = m[1] + '-' + m[2] + '-' + m[3];
+        /* merge 23 Oct 2026: a date cell read without its date format arrives as its Excel serial ("46313", as the
+           branch's balance reports and tests/fixtures/funding-synthetic.json carry it); only for an empty prefix */
+        else if (!s.daily[canon] && /^\d{5}$/.test(n)) ymd = serialYmd(+n);
+        if (ymd) { (daily[canon] = daily[canon] || {})[ymd] = i; hitDay = true; }
       });
       if (hitDay) return;
       var k = s.lookup[n];

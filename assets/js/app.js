@@ -112,8 +112,11 @@
     help: 'Bantuan',
     search: 'Cari',
     searchField: 'Cari kecamatan, merchant, sekolah, kampus atau proyek',
-    searchLabel: 'Cari kecamatan, merchant atau SMA',   /* visible in the band; fits without "…" from 1440 px */
-    searchShort: 'Cari kecamatan, merchant',            /* 1280–1439 px */
+    /* final fix round (23 Oct 2026): the band says that schools and campuses are searchable; kecamatan stays in the
+       aria-label and the palette placeholder. Each fits its box without "…" (Inter Tight 14 px). */
+    searchLabel: 'Cari merchant, sekolah atau kampus',   /* from 1440 px: 218 of 230 px */
+    searchShort: 'Cari merchant, sekolah, kampus',       /* 1280–1439 px, box 244 px: 192 of 198 px */
+    searchTight: 'Cari merchant atau sekolah',           /* while "Data belum disimpan" shows (box 220 px): 164 of 174 px */
     searchPlaceholder: 'Ketik nama kecamatan, merchant, sekolah, kampus, proyek atau perintah',
     lock: 'Kunci',
     lockAria: 'Kunci dashboard',
@@ -785,6 +788,7 @@
     };
   }
   var LAZY_LOADS = {};
+  var LAZY_STATE = {};
   function lazy(name) {
     var spec = Object.prototype.hasOwnProperty.call(LAZY, name) ? LAZY[name] : null;
     if (!spec) return Promise.reject(new Error('unknown lazy data: ' + name));
@@ -792,8 +796,16 @@
     if (LAZY_LOADS[name]) return LAZY_LOADS[name];
     var p = (spec.present() ? Promise.resolve() : injectScript(spec.src)).then(function () { return spec.init(); });
     LAZY_LOADS[name] = p;
-    p.then(function () { lazyLanded(name); }, function () { if (LAZY_LOADS[name] === p) delete LAZY_LOADS[name]; });
+    LAZY_STATE[name] = 'loading';
+    p.then(function () { if (LAZY_LOADS[name] === p) LAZY_STATE[name] = 'ready'; lazyLanded(name); },
+      function () { if (LAZY_LOADS[name] === p) { delete LAZY_LOADS[name]; LAZY_STATE[name] = 'error'; } });
     return p;
+  }
+  /** integration 22 Oct 2026: lazyState(name) → 'idle' | 'loading' | 'ready' | 'error', whoever started the load
+      (MCD.inst reads it, so a file a section loaded itself shows the same state in every fold). Never loads. */
+  function lazyState(name) {
+    if (!Object.prototype.hasOwnProperty.call(LAZY, name)) return 'error';
+    return LAZY_STATE[name] || 'idle';
   }
   /** 'mcd:lazy' {name} on document once a lazy file is in (Cari shows the names it holds); never throws. */
   function lazyLanded(name) {
@@ -1214,7 +1226,7 @@
     t.palette = h('button', { type: 'button', class: 'tb-search', title: T.search + ' · ' + keyK, 'aria-label': T.searchField,
       'aria-keyshortcuts': IS_MAC ? 'Meta+K' : 'Control+K' }, [
       icon('search'), h('span', { class: 'tb-search__t', text: T.searchLabel }), h('span', { class: 'tb-search__s', text: T.searchShort }),
-      h('span', { class: 'tb-search__w', text: T.search }),
+      h('span', { class: 'tb-search__u', text: T.searchTight }), h('span', { class: 'tb-search__w', text: T.search }),
       h('span', { class: 'tb-search__k', 'aria-hidden': 'true', text: keyK })
     ]);
     t.palette.addEventListener('click', function () { openPalette(); });
@@ -1628,6 +1640,8 @@
     S.sectionRoot.appendChild(host);
     S.furniture = host;
     S.legendHidden = storageGet(LEGEND_KEY, true) !== false;      /* folded to the pill unless this browser opened it */
+    /* integration 22 Oct 2026: on a phone the legend starts folded at every sign-in (open, it covers most of the map) */
+    if ((root.innerWidth || 0) > 0 && root.innerWidth < 768) S.legendHidden = true;
     syncLegend();
     renderMapControls();
   }
@@ -3323,6 +3337,8 @@
     ['merchants', 'Kecamatan', 'per kecamatan coverage combo heatmap', 'Per kecamatan'],
     ['merchants', 'Jenis usaha', 'per jenis usaha kategori restoran toko kelontong umkm donut', 'Per jenis usaha'],
     ['merchants', 'Status LVM & EDC', 'status reaktivasi tidak aktif target ureg usak edc cabang'],
+    /* merge of the public prototype (23 Oct 2026): the imported merchant balance report (assets/js/merchant-saldo.js) */
+    ['merchants', 'Saldo merchant', 'saldo merchant nasabah turun naik mtd mom ytd casa'],
     ['merchants', 'Info & cara hitung', 'metode cara hitung rumus mengapa livin merchant', 'Info & metode'],
     /* v6 (V6_SPEC §3.2): "Daftar SMA" became "Daftar sekolah"; the old label still finds the tab */
     ['schools', 'Daftar sekolah', 'sma smk ma madrasah sekolah daftar yayasan tni ekspor kontak kelas biaya', 'Daftar SMA'],
@@ -3437,27 +3453,48 @@
   }
   /** Results of the registered search providers (merchant names, SMA, projects …) for a query. */
   function providerItems(q) {
-    var out = [];
+    var out = [], all = cfg().sectionById || {};
     Object.keys(SEARCH).forEach(function (id) {
+      /* a section the config hides (`hidden: true`, KPR since 22 Oct 2026) gives no results, even when its file
+         registered a provider at load time */
+      if (Object.prototype.hasOwnProperty.call(all, id) && !S.byId[id]) return;
       var list = null;
       try { list = SEARCH[id](q); } catch (e) { list = null; }
       (Array.isArray(list) ? list : []).slice(0, 12).forEach(function (r) {
-        if (r && r.label && typeof r.run === 'function') out.push({ group: r.group || 'Hasil', label: String(r.label), sub: r.sub ? String(r.sub) : '', run: r.run, provided: true });
+        if (r && r.label && typeof r.run === 'function') {
+          out.push({ group: r.group || 'Hasil', label: String(r.label), sub: r.sub ? String(r.sub) : '', run: r.run, provided: true,
+            kw: r.kw ? String(r.kw) : '', alias: Array.isArray(r.alias) ? r.alias.map(function (a) { return norm(a).trim(); }).filter(Boolean) : [] });
+        }
       });
     });
     return out;
   }
 
   function scoreItem(it, toks) {
-    var label = norm(it.label), hay = label + ' ' + norm(it.sub || '') + ' ' + norm(it.group) + ' ' + norm(it.kw || '');
+    var label = norm(it.label), hay = label + ' ' + norm(it.sub || '') + ' ' + norm(it.group) + ' ' + norm(it.kw || '') + ' ' + (it.alias || []).join(' ');
     var sc = 0;
     for (var i = 0; i < toks.length; i++) {
       var t = toks[i], p = hay.indexOf(t);
       if (p < 0) return -1;
       sc += label.indexOf(t) === 0 ? 6 : (new RegExp('(^|[^a-z0-9])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(label) ? 4 : (label.indexOf(t) >= 0 ? 2 : 1));
     }
+    if (exactHit(it, toks.join(' '))) sc += 12;
     /* places first: a kecamatan before a merchant with the same word in its name */
     return sc + (it.group === 'Kecamatan' ? 4 : it.group === 'Kelurahan' ? 2 : (it.provided ? -1 : 0));
+  }
+
+  /**
+   * The query is the whole name (final fix round, 23 Oct 2026): the label itself, the label without its "(…)", the short
+   * name in "(…)" ("UNJ" for "Universitas Negeri Jakarta (UNJ)") or an alias a provider gives ("jis" for Jakarta
+   * Intercultural School). Such a hit ranks above every partial match.
+   */
+  function exactHit(it, q) {
+    var label = norm(it.label).replace(/\s+/g, ' ').trim();
+    if (!q || !label) return false;
+    if (label === q || label.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim() === q) return true;
+    var m, re = /\(([^)]*)\)/g;
+    while ((m = re.exec(label))) { if (m[1].trim() === q) return true; }
+    return (it.alias || []).indexOf(q) >= 0;
   }
 
   function openPalette() {
@@ -3902,7 +3939,8 @@
     /** lazy('street-index') → Promise<MCD.geocodeLocal>, lazy('travel-routes') → Promise<MCD.travel>: inject large public
         data once, after sign-in (route lines: call MCD.distance.route, which loads the routes itself). v6: lazy(
         'school-students' | 'institution-tiers' | 'school-contacts' | 'campuses') → Promise<the file's global>. */
-    lazy: function (name) { return lazy(name); }
+    lazy: function (name) { return lazy(name); },
+    lazyState: function (name) { return lazyState(String(name || '')); }
   };
 
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start, { once: true });

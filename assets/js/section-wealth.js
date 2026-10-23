@@ -1,5 +1,7 @@
 /* ==========================================================================
- * MCD.sections.wealth: section 7 "Calon Prioritas" (key 7; docs/V7_SPEC.md §5, D11, D17, D32; COPY_STYLE_EN item 48 b).
+ * MCD.sections.wealth: the section "Calon Prioritas" (id wealth; docs/V7_SPEC.md §5, D11, D17, D32, D39; COPY_STYLE_EN
+ * item 48 b). Its key number and place in the section row come from the shell (D39 shifts them; nothing here pins one).
+ * D39 (22 Oct 2026): the loan section is withdrawn; large-ticket merchants come from the public merchant listings only.
  *
  * Where the branch can meet people who may become Mandiri Prioritas customers, from PUBLIC data only: schools and
  * campuses of kelas biaya Premium or Atas, housing projects of segment premium and menengah atas, large-ticket
@@ -181,22 +183,27 @@
     return null;
   }
 
-  /* ============================================================ scope (15 | 30 km, a view setting, never a filter) */
+  /* ============================================================ scope (5 | 15 | 30 km, a view setting, never a filter) */
 
+  /* Merge of the public prototype (23 Oct 2026): every map section opens at 5 km with 15 and 30 km as options (the
+     teammates' rule of 21 Oct 2026, applied here in spirit since Calon Prioritas came after their base). 5 km: camera
+     '5', the 15 km kecamatan zones and the 15 km kecamatan set in the ranking, places within 5 km. */
+  var SCOPES = [5, 15, 30];
+  function scopeOf(v) { v = +v; return v === 15 || v === 30 ? v : 5; }
   var SCOPE_MEM = null;
   function scopeApi() { var I = MCD.inst; return I && I.scope && isFn(I.scope.get) && isFn(I.scope.set) ? I.scope : null; }
   function scopeGet() {
     var A = scopeApi();
-    if (A) { try { var v = +A.get(ID, 15); return v === 30 ? 30 : 15; } catch (e) { /* own below */ } }
+    if (A) { try { return scopeOf(A.get(ID, 5)); } catch (e) { /* own below */ } }
     if (SCOPE_MEM != null) return SCOPE_MEM;
     try {
       var raw = window.sessionStorage.getItem(SCOPE_KEY), o = raw ? JSON.parse(raw) : null;
-      if (o && o.v === 1 && (o[ID] === 15 || o[ID] === 30)) return o[ID];
+      if (o && o.v === 1 && SCOPES.indexOf(o[ID]) >= 0) return o[ID];
     } catch (e) { /* blocked: memory */ }
-    return 15;
+    return 5;
   }
   function scopeSet(v) {
-    v = v === 30 ? 30 : 15;
+    v = scopeOf(v);
     var A = scopeApi();
     if (A) { try { A.set(ID, v); return; } catch (e) { /* own below */ } }
     SCOPE_MEM = v;
@@ -207,7 +214,7 @@
       window.sessionStorage.setItem(SCOPE_KEY, JSON.stringify(o));
     } catch (e) { /* the value stays in memory */ }
   }
-  var SCOPE_TIP = 'Tempat dalam radius 15 km atau 30 km dari Mabes TNI.';
+  var SCOPE_TIP = 'Tempat dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.';
   function scopeSwitch() {
     var I = MCD.inst;
     if (I && isFn(I.scopeSwitch)) {
@@ -219,18 +226,18 @@
         if (n) return { el: n, set: function (v) { if (r && isFn(r.set)) r.set(v); } };
       } catch (e) { /* own below */ }
     }
-    var s = seg('Cakupan jarak dari Mabes TNI', [{ v: 15, label: '15 km', title: SCOPE_TIP }, { v: 30, label: '30 km', title: SCOPE_TIP }], function (v) { setKm(v); }, 'scope wl-scope');
+    var s = seg('Cakupan jarak dari Mabes TNI', SCOPES.map(function (v) { return { v: v, label: v + ' km', title: SCOPE_TIP }; }), function (v) { setKm(v); }, 'scope wl-scope');
     s.el.title = SCOPE_TIP;
     return s;
   }
   function announce(text) { if (ui && ui.panel && ui.panel.live) ui.panel.live.textContent = text; }
   function setKm(v, o) {
-    v = v === 30 ? 30 : 15;
+    v = scopeOf(v);
     if (!st) return;
     o = o || {};
     var was = st.km;
+    st.km = v;            /* first: MCD.inst.scope.set calls this section's own listener at once, which must see the new value */
     scopeSet(v);
-    st.km = v;
     if (was === v && !o.force) return;
     V = null;
     applyZones();
@@ -240,8 +247,10 @@
     if (!o.quiet) announce('Cakupan ' + v + ' km. ' + count(V ? V.places.length : 0, 'tempat') + ' tampil.');
     if (v === 30) preloadOuter(600);
   }
-  function cameraForKm() { var M = MCD.map; if (M && isFn(M.preset)) { try { M.preset(st.km === 15 ? 'sme15' : 'ring30'); } catch (e) { /* the map keeps its view */ } } }
-  function zoneSpec() { return !st || st.km === 15 ? { mode: 'kecamatan15' } : { mode: 'kecamatan', km: 30 }; }
+  /** The camera of a scope: the 5 km ring ('5', MCD.config.map.presets), 'sme15' or 'ring30'. */
+  function cameraOf(km) { return km === 5 ? '5' : km === 15 ? 'sme15' : 'ring30'; }
+  function cameraForKm() { var M = MCD.map; if (M && isFn(M.preset)) { try { M.preset(cameraOf(st.km)); } catch (e) { /* the map keeps its view */ } } }
+  function zoneSpec() { return !st || st.km <= 15 ? { mode: 'kecamatan15' } : { mode: 'kecamatan', km: 30 }; }
   /** The section's own zones; the call ends by itself when another section takes the map (map.js setZones). */
   function applyZones() {
     var M = MCD.map;
@@ -261,7 +270,7 @@
   function defaults() {
     var k = {};
     Wc.KINDS.forEach(function (x) { k[x.id] = x.on; });
-    return { km: 15, kinds: k, sort: 'near', tab: 'places', workOpen: false, openOnMount: false, selKec: null, landing: null };
+    return { km: 5, kinds: k, sort: 'near', tab: 'places', workOpen: false, openOnMount: false, selKec: null, landing: null };
   }
   function loadState() {
     var s = defaults(), saved = sget(UI_KEY, null);
@@ -541,7 +550,7 @@
   }
   function summary() {
     if (!st || !Wc) return { items: [], filters: 0 };
-    var scope = { label: 'Cakupan', value: st.km, options: [{ v: 15, label: '15 km' }, { v: 30, label: '30 km' }], set: function (v) { setKm(+v); }, title: SCOPE_TIP };
+    var scope = { label: 'Cakupan', value: st.km, options: SCOPES.map(function (v) { return { v: v, label: v + ' km' }; }), set: function (v) { setKm(+v); }, title: SCOPE_TIP };
     computeView();
     var f = fm(), d = dpkRow();
     var items = [
@@ -779,10 +788,24 @@
     ];
     return blk(Wc.TEXT.route, kids, 'wl-dd--route', { id: 'rute', preview: distText(p), open: false });
   }
-  function actionRow(p) {
-    var pq = planQuick(p), hq = homeQuick(p), row = E('div', { class: 'wl-actions wl-actions--head' });
-    if (pq && !pq.done && isFn(pq.run)) row.appendChild(btn(pq.label || '+ Rencana kunjungan', null, function () { var r = pq.run(); if (r && r.ok === false && r.message) toast(r.message, 'warn'); }, 'btn--secondary btn--bar'));
-    if (hq) row.appendChild(btn(hq.label, null, function () { hq.run(); }, 'btn--ghost btn--bar'));
+  /**
+   * How many head quick actions MCD.windows paints. The v5/v6 windows.js paints the first only (quickEl); the SHELL lane
+   * may raise it by setting MCD.windows.QUICK_MAX. Without MCD.windows the card has no head, so 0.
+   */
+  function quickMax() {
+    var W0 = WS();
+    if (!W0) return 0;
+    var n = W0.QUICK_MAX;
+    return isNum(n) && n >= 1 ? Math.floor(n) : 1;
+  }
+  /** The quick actions the head cannot show, as a row at the top of the card body ("Lihat di {tab} ›" is never lost). */
+  function actionRow(list) {
+    var row = E('div', { class: 'wl-actions wl-actions--head' });
+    (list || []).forEach(function (q) {
+      if (!q || q.done || !isFn(q.run)) return;
+      row.appendChild(btn(q.label || '+ Rencana kunjungan', null, function () { var r = q.run(); if (r && r.ok === false && r.message) toast(r.message, 'warn'); },
+        q.nav ? 'btn--ghost btn--bar' : 'btn--secondary btn--bar', q.title || null));
+    });
     return row.childNodes.length ? row : null;
   }
   /** The place card (§5.4): head quick actions, three folds, the Google links in the footer (hidden while veiled). */
@@ -790,9 +813,10 @@
     o = o || {};
     if (!p) return null;
     var body = [whyBlock(p), wayBlock(p), routeBlock(p)];
-    if (!WS()) { var ar = actionRow(p); if (ar) body.unshift(ar); }
     var b = placeBrief(p);
     var quick = [planQuick(p), homeQuick(p)].filter(Boolean);
+    var ar = actionRow(quick.slice(quickMax()));
+    if (ar) body.unshift(ar);
     return {
       kind: 'wlPlace', key: 'wealth:' + p.id,
       eyebrow: Wc.eyebrow(p).toUpperCase(), title: labelOf(p),
@@ -1028,9 +1052,9 @@
     var M = MCD.map;
     if (!M || !isFn(M.registerPosture) || !st) return;
     M.registerPosture(ID, {
-      imagery: 'full', camera: st.km === 15 ? 'sme15' : 'ring30', rings: 'schools', layerSet: 'wealth', deck: true, buildings: 'off',
+      imagery: 'full', camera: cameraOf(st.km), rings: 'schools', layerSet: 'wealth', deck: true, buildings: 'off',
       zones: zoneSpec(), attribution: ATTRIBUTION,
-      onRingClick: function (km) { setKm(km <= 15.01 ? 15 : 30); },
+      onRingClick: function (km) { setKm(km <= 5.01 ? 5 : km <= 15.01 ? 15 : 30); },
       ringHint: 'Klik untuk menampilkan tempat sampai jarak ini dari Mabes TNI',
       telemetry: telemetry
     });
@@ -1107,7 +1131,7 @@
   function focusPlace(p) {
     if (!ctx || !p) return false;
     if (st.kinds[p.kind] === false) { st.kinds[p.kind] = true; saveUi(); V = null; }
-    if (p.km > 15 && st.km === 15) setKm(30, { camera: false });
+    if (p.km > st.km) setKm(p.km > 15 ? 30 : 15, { camera: false });
     else refresh(['kinds']);
     var M = MCD.map;
     if (M && isFn(M.focusPoint)) { try { if (M.focusPoint({ lon: p.lon, lat: p.lat, zoom: 16, kind: 'wealthPlace', id: p.id }) !== false) return true; } catch (e) { /* select below */ } }
@@ -1276,12 +1300,13 @@
       registerMap();
       offs.push(Wc.on(debounce(function () { if (ctx) { V = null; refresh(['data']); runPendingFocus(); } }, 60)));
       var I = MCD.inst;
-      if (I && I.scope && isFn(I.scope.on)) { try { var offS = I.scope.on(function (ev) { if (ev && ev.section && ev.section !== ID) return; var v = scopeGet(); if (st && v !== st.km) setKm(v); }); if (isFn(offS)) offs.push(offS); } catch (e) { /* ignore */ } }
+      if (I && I.scope && isFn(I.scope.on)) { try { var offS = I.scope.on(function (ev) { if (ev && ev.section && ev.section !== ID) return; var v = scopeGet(); if (st && v !== st.km) setKm(v, { quiet: true }); }); if (isFn(offS)) offs.push(offS); } catch (e) { /* ignore */ } }
       var onDistEvt = function () { onDistance(); };
       window.addEventListener('mcd:distance', onDistEvt);
       offs.push(function () { window.removeEventListener('mcd:distance', onDistEvt); });
       c.registerCommands(function () {
         return [
+          { label: 'Calon Prioritas · Cakupan 5 km', run: function () { setKm(5); }, kw: 'calon prioritas cakupan 5 wealth' },
           { label: 'Calon Prioritas · Cakupan 15 km', run: function () { setKm(15); }, kw: 'calon prioritas cakupan 15 wealth' },
           { label: 'Calon Prioritas · Cakupan 30 km', run: function () { setKm(30); }, kw: 'calon prioritas cakupan 30 wealth' },
           { label: 'Calon Prioritas · Daftar tempat', run: function () { goTab('places'); }, kw: 'calon prioritas daftar tempat sekolah kampus perumahan merchant' },
@@ -1356,7 +1381,7 @@
       if (!ctx || !st) return false;
       var k = /^wealth:kec:(\d\d\.\d\d\.\d\d)$/.exec(a);
       if (k) { showKec(k[1]); return true; }
-      var sc = /^wealth:scope:(15|30)$/.exec(a);
+      var sc = /^wealth:scope:(5|15|30)$/.exec(a);
       if (sc) { setKm(+sc[1]); return true; }
       var tb = /^wealth:tab:(.+)$/.exec(a);
       if (tb) { runTab(tb[1].split(':')); return true; }

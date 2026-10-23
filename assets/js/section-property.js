@@ -2568,6 +2568,9 @@
     if (!a || !ctx) return false;
     if (refs.search) refs.search.value = '';
     setFilter({ area: id, q: '' });
+    /* merge 23 Oct 2026: with the 5 km default (872c39a) an area farther out would show no project at all; when the
+       distance filter hides every project of the area, it goes to "Semua" (a distance that still shows some stays) */
+    if (S().filters.bands.length) { compute(); if (R && !R.filtered.length) setFilter({ bands: [] }); }
     if (view === 'deep' && refs.rr) {
       setRailTab('projects');
       openRr();
@@ -3603,7 +3606,15 @@
     var p = index().byId[id];
     if (!p) { ctx.toast('Proyek ini tidak ditemukan di data KPR.', 'warn'); return false; }
     compute();
-    if (R && !R.filtered.some(function (x) { return x.p.id === id; })) clearFilters();
+    var shown = function () { return R && R.filtered.some(function (x) { return x.p.id === id; }); };
+    if (R && !shown()) {
+      clearFilters();
+      /* merge 23 Oct 2026: the cleared filters come back to the 5 km default (872c39a), which may still hide a farther
+         project, so the distance widens to 15 km, then 30 km, then "Semua" until it shows (no camera move here: the
+         flight below frames the project) */
+      [15, 30, 0].some(function (km) { compute(); if (shown()) return true; setFilter({ bands: bandsWithin(km) }); return false; });
+      compute();
+    }
     if (MCD.map && typeof MCD.map.focusPoint === 'function') {
       safe(function () { MCD.map.focusPoint({ lon: p.lon, lat: p.lat, zoom: 16, kind: 'project', id: id }); });
       flewTo = true;

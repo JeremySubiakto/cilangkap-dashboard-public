@@ -1,7 +1,7 @@
 /* ==========================================================================
  * MCD.visitPlan: the daily visit planner core (v7 groundwork, docs/COPY_STYLE_EN.md item 48d).
  *
- * Staff pick up to 15 targets across the tabs (merchants, schools, campuses, KPR projects, TNI units). The planner
+ * Staff pick up to 15 targets across the tabs (merchants, schools, campuses, KPR projects). The planner
  * orders them by travel time from KCP Jakarta Cilangkap and turns the order into Google Maps multi-stop links that
  * hold COORDINATES ONLY. Every number is an estimate; Google Maps decides the real route. Method, calibration and
  * limits: docs/VISIT_PLAN.md.
@@ -20,8 +20,10 @@
  * minutes (ties: km). Deterministic: no randomness, ties broken by input position. At most 15 stops.
  *
  * Privacy (item 49), fail closed. Every point (stops, start, link points) must be a public place: its kind must be on
- * PUBLIC_KINDS (cabang, awal, merchant, sekolah, kampus, kpr, satuan, dealer; or a map alias: kcp, mandiri_branch,
- * poi, mxPoi, smaSchool, project, tni). Anything else, or no kind, refuses the WHOLE request ('invalid-kind').
+ * PUBLIC_KINDS (cabang, awal, merchant, sekolah, kampus, kpr; or a map alias: kcp, mandiri_branch, poi, mxPoi,
+ * smaSchool, project). Anything else, or no kind, refuses the WHOLE request ('invalid-kind'). The kinds satuan and
+ * dealer (and the alias tni) were removed with the KSM & KKB section on 22 Oct 2026 (docs/V7_SPEC.md D39); a
+ * kesehatan kind comes with the Kesehatan section (D40, docs/HEALTH_SPEC.md), not before.
  * Backstops refuse it as customer data ('private', checked first): a private / isPrivate / sensitive flag; a non-string
  * kind; a customer word (lead, nasabah, customer, cif, debitur, calon, prospek, …) anywhere in kind, type, dataset,
  * source, layer or schema, or at the start of the id; any customer or personal key (cif, nik, noRek, nama, telepon, …)
@@ -99,9 +101,9 @@
   var EPS = 1e-9;
   // Item 49, fail closed: ONLY these kinds of public place are planned or linked; any other kind, or none, is refused.
   // Lowercase, matched after trim. Aliases are the map's own point kinds for the same public places (assets/js/map.js).
-  var PUBLIC_KINDS = Object.freeze(['cabang', 'awal', 'merchant', 'sekolah', 'kampus', 'kpr', 'satuan', 'dealer']);
+  var PUBLIC_KINDS = Object.freeze(['cabang', 'awal', 'merchant', 'sekolah', 'kampus', 'kpr']);
   var KIND_ALIAS = { kcp: 'cabang', mandiri_branch: 'cabang', poi: 'merchant', mxpoi: 'merchant', smaschool: 'sekolah',
-    project: 'kpr', tni: 'satuan' };
+    project: 'kpr' };
   // Backstops, each enough on its own to make a point private (code 'private'):
   //  · a customer word anywhere in kind, type, dataset, source, layer or schema ('lead-ksm', 'leadKsm', 'calon-nasabah',
   //    'nasabah-prioritas', type 'lead', dataset 'leads', …), or at the start of the id ('lead:41'); a non-string kind;
@@ -332,8 +334,7 @@
 
   var LEAD_TEXT = 'Data nasabah (lead) tidak pernah masuk perencana kunjungan atau tautan Google Maps. ' +
     'Cari nasabah tersebut di sistem bank.';
-  var KIND_TEXT = 'bukan tempat umum yang bisa direncanakan. Yang bisa: cabang, merchant, sekolah, kampus, proyek KPR, ' +
-    'satuan TNI dan dealer.';
+  var KIND_TEXT = 'bukan tempat umum yang bisa direncanakan. Yang bisa: cabang, merchant, sekolah, kampus dan proyek KPR.';
 
   /* ------------------------------------------------------------ ordering (pure) */
 

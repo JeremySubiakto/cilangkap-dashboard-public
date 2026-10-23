@@ -30,7 +30,8 @@
  *
  * API
  *   ready() → bool · ensureData() → Promise<bool>
- *   kecamatan() → [{id, name, kota, kotaName, label, potential, in15, distKm}] (the kecamatan that reach 15 km)
+ *   kecamatan() → [{id, name, chipName, kota, kotaName, label, potential, in15, distKm}] (the kecamatan that reach 15 km)
+ *   chipName(kecamatanId) → "Cipayung" | "Cipayung (Depok)": the chip / list name (a repeated name says its kota)
  *   kecamatanIdOf(text, kotaText?) → Kemendagri id | null   (LVM text such as "Kramatjati (Kramat Jati)")
  *   boundsOf(kecamatanId) → [[w, s], [e, n]] | null
  *   stats(input) → Stats · statsFromRecords(lvmRows, edcRows, opts?) → Stats
@@ -175,6 +176,41 @@
     var s = k.short || k.name || '';
     return k.kind === 'kabupaten' ? 'Kabupaten ' + s : (/^kota/.test(k.kind || '') ? 'Kota ' + s : s);
   }
+  /* fix round 22 Oct 2026: two kecamatan names repeat in data/admin-areas.js (Cipayung: Jakarta Timur and Depok; Setu:
+     Kab. Bekasi and Tangerang Selatan), and at 30 km both get a chip. The one nearest Mabes TNI keeps the bare name (the
+     branch's own Cipayung); the other says its kota: "Cipayung (Depok)", "Setu (Tangsel)". */
+  var KOTA_ABBR = { 'Tangerang Selatan': 'Tangsel', 'Jakarta Pusat': 'Jakpus', 'Jakarta Utara': 'Jakut', 'Jakarta Barat': 'Jakbar',
+    'Jakarta Selatan': 'Jaksel', 'Jakarta Timur': 'Jaktim' };
+  function kotaShort(k) {
+    if (!k) return '';
+    var s = k.short || k.name || '';
+    if (KOTA_ABBR[s]) return KOTA_ABBR[s];
+    return k.kind === 'kabupaten' ? 'Kab. ' + s : s;
+  }
+  var CHIPN = { src: null, map: null };
+  /** chipName(kecId) → the kecamatan's name on a chip or a list row: the plain name, or "Cipayung (Depok)" when the name
+      repeats in data/admin-areas.js and another kecamatan of that name is nearer Mabes TNI; null when unknown. */
+  function chipName(kecId) {
+    var A = admin();
+    if (!A || !kecId || !isFn(A.byId)) return null;
+    if (CHIPN.src !== A) {
+      var by = {}, map = {};
+      (A.kecamatan || []).forEach(function (r) { if (r && r.name) (by[r.name] = by[r.name] || []).push(r); });
+      Object.keys(by).forEach(function (n) {
+        if (by[n].length < 2) return;
+        by[n].slice().sort(function (a, b) {
+          return (isNum(a.distKm) ? a.distKm : 1e9) - (isNum(b.distKm) ? b.distKm : 1e9) || (a.id < b.id ? -1 : 1);
+        }).forEach(function (r, i) {
+          var ks = i ? kotaShort(A.byId(r.kota)) : '';
+          if (ks) map[r.id] = r.name + ' (' + ks + ')';
+        });
+      });
+      CHIPN = { src: A, map: map };
+    }
+    if (CHIPN.map[kecId]) return CHIPN.map[kecId];
+    var r = A.byId(kecId);
+    return r && r.name ? r.name : null;
+  }
   function norm(s) {
     return String(s == null ? '' : s).toLowerCase()
       .replace(/^\s*(kec(amatan)?\.?|kab(upaten)?\.?|kota( administrasi)?|kel(urahan)?\.?)\s+/, '')
@@ -264,7 +300,7 @@
     var kec = [], kecById = {};
     H.kecamatan.forEach(function (r) {
       var rec = A.byId(r.id), kota = A.byId(r.kota);
-      var o = { id: r.id, name: r.name, kota: r.kota, kotaName: kotaLabel(kota), label: r.label,
+      var o = { id: r.id, name: r.name, chipName: chipName(r.id) || r.name, kota: r.kota, kotaName: kotaLabel(kota), label: r.label,
         potential: r.merchants, tiles: r.tiles, in15: r.in15, distKm: rec ? rec.distKm : null };
       kec.push(o); kecById[r.id] = o;
     });
@@ -564,7 +600,7 @@
     if (ZK[kecId]) return ZK[kecId];
     var A = admin(), r = A && A.byId(kecId);
     if (!r || !/^\d\d\.\d\d\.\d\d$/.test(String(kecId))) return null;
-    ZK[kecId] = { id: r.id, name: r.name, kota: r.kota, kotaName: kotaLabel(A.byId(r.kota)), label: r.label, potential: 0, in15: r.in15 || 0, distKm: r.distKm };
+    ZK[kecId] = { id: r.id, name: r.name, chipName: chipName(r.id) || r.name, kota: r.kota, kotaName: kotaLabel(A.byId(r.kota)), label: r.label, potential: 0, in15: r.in15 || 0, distKm: r.distKm };
     return ZK[kecId];
   }
   /** A kecamatan of the index (the 50 that reach 15 km) or of the zones in effect (Z, else the map's), in the index
@@ -899,7 +935,7 @@
     var labels = ix.kec.filter(function (k) { return !isR(k.id); }).map(function (k) { return { position: k.label, kec: k.id, name: k.name, potential: k.potential, distKm: k.distKm }; });
     var ringLabels = Z ? Z.ring.map(function (id) {
       var r = A.byId(id);
-      return r && Array.isArray(r.label) ? { position: r.label, kec: id, name: r.name, potential: 0, distKm: r.distKm, ring: true } : null;
+      return r && Array.isArray(r.label) ? { position: r.label, kec: id, name: chipName(id) || r.name, potential: 0, distKm: r.distKm, ring: true } : null;
     }).filter(Boolean) : [];
     return { kel: kel, sides: sides, seps: seps, ringSeps: ringSeps, sepsBoth: seps.filter(function (o) { return o.both; }), fills: fills, labels: labels, ringLabels: ringLabels, outlines: {} };
   }
@@ -932,7 +968,7 @@
       var r = A.byId(id), k = ix.kecById[id];
       if (!r || !Array.isArray(r.label)) return null;
       var inner = !ring && (r.in15 || 0) >= 0.5;
-      var o = { position: r.label, kec: id, name: r.name, potential: k ? k.potential : 0, distKm: r.distKm, outer: !inner };
+      var o = { position: r.label, kec: id, name: ring ? chipName(id) || r.name : r.name, potential: k ? k.potential : 0, distKm: r.distKm, outer: !inner };
       if (ring) o.ring = true;
       return o;
     };
@@ -971,8 +1007,9 @@
     if (opts && isFn(opts.labelText)) {
       try { var t = opts.labelText(k, ks, zoom); if (t != null) return String(t); } catch (e) { /* default */ }
     }
-    if (!ks || !(ks.potential > 0)) return k.name;
-    return k.name + ' · ' + fmtInt(ks.potential) + (zoom >= 11 ? ' merchant' : '');
+    var nm = k.chipName || k.name;
+    if (!ks || !(ks.potential > 0)) return nm;
+    return nm + ' · ' + fmtInt(ks.potential) + (zoom >= 11 ? ' merchant' : '');
   }
 
   /* Width of a label line in px (canvas metrics in the browser; an estimate elsewhere). */
@@ -2338,6 +2375,8 @@
     KIND: KIND, CATEGORIES: CATS.slice(), CATEGORY_LABELS: Object.assign({}, CAT_LABEL), BAND_MODES: ['relative', 'absolute'], BRANCH_KECAMATAN: BRANCH_KEC,
     ready: ready, ensureData: ensureData,
     kecamatan: kecamatan, kecamatanIdOf: kecamatanIdOf, boundsOf: boundsOf, gmapsQuery: gmapsQuery,
+    /* fix round 22 Oct 2026: "Cipayung (Depok)", "Setu (Tangsel)" for the repeated names; the plain name otherwise */
+    chipName: chipName,
     /* item 30: focus / outer ring / beyond, computed from data/admin-areas.js */
     zones: zones, zoneOf: function (id, km) { var z = zones(km); return z ? z.zoneOf(id) : null; },
     /* v6 (V6_SPEC §3.3): the zone set in effect on the map, 15 | 30 (30 while MCD.map.zones() is {mode: 'kecamatan', km: 30}) */

@@ -158,8 +158,13 @@
   function seg(label, opts, onPick, extra, kind) {
     var asChips = kind === 'chips';
     var wrap = E('div', { class: asChips ? ['cp-rchips', extra] : ['seg', 'cp-seg', extra], role: 'radiogroup', aria: { label: label } });
+    /* an option may carry a mark after its words (o.icon); its words then live in their own span, so label() never
+       drops the mark */
+    var words = [];
     var btns = opts.map(function (o) {
-      var b = E('button', { type: 'button', class: asChips ? 'chip cp-rchip' : 'seg__opt', role: 'radio', aria: { checked: 'false' }, title: o.title || o.label, attrs: { tabindex: '-1' } }, o.label);
+      var t = o.icon ? E('span', { class: 'cp-rchip__t', text: o.label }) : null;
+      var b = E('button', { type: 'button', class: (asChips ? 'chip cp-rchip' : 'seg__opt') + (o.icon ? ' has-mark' : ''), role: 'radio', aria: { checked: 'false' }, title: o.title || o.label, attrs: { tabindex: '-1' } }, t || o.label, o.icon || null);
+      words.push(t || b);
       b.addEventListener('click', function () { onPick(o.v); });
       wrap.appendChild(b);
       return b;
@@ -181,7 +186,7 @@
         if (!any && btns[0]) btns[0].tabIndex = 0;
       },
       label: function (v, text) {
-        for (var i = 0; i < opts.length; i++) if (String(opts[i].v) === String(v)) { if (btns[i].textContent !== text) btns[i].textContent = text; return; }
+        for (var i = 0; i < opts.length; i++) if (String(opts[i].v) === String(v)) { if (words[i].textContent !== text) words[i].textContent = text; return; }
       }
     };
   }
@@ -226,6 +231,8 @@
     var L = LOGO[k];
     return E('span', { class: ['cp-logo', 'cp-logo--' + k, cls] }, E('img', { src: L.src, alt: L.alt, width: L.w, height: L.h, decoding: 'async', loading: 'lazy' }));
   }
+  /** A mark placed right beside the words that already name it ("QRIS kantin"): hidden from screen readers there. */
+  function markBesideWords(n) { if (n) n.setAttribute('aria-hidden', 'true'); return n; }
   function kv(k, v, title) { return E('div', { class: 'dd-kv', title: title || null }, E('span', { class: 'dd-kv__k', text: k }), E('span', { class: 'dd-kv__v' }, v)); }
   function note(text, cls) { return E('p', { class: ['cp-note', cls], text: text }); }
   /** A card fold: .dd-blk with data-fold, data-preview and data-open (MCD.windows reads them). */
@@ -319,7 +326,7 @@
     applyZones();
     if (!(o && o.camera === false)) cameraForKm();
     if (!(o && o.quiet)) announce(scopeWords(v));     /* the shared switch says it itself */
-    if (v === 30) preloadOuter(1000);
+    /* the outer road preload has one owner, the shell (app.js probeOuter: afterPaint, 1 s, idle, once per session) */
   }
   function cameraForKm() { var M = MCD.map; if (M && isFn(M.preset)) { try { M.preset(st.km === 5 ? 'cp5' : st.km === 15 ? 'cp15' : 'ring30'); } catch (e) { /* the map keeps its view */ } } }
   /**
@@ -333,13 +340,6 @@
     var M = MCD.map;
     if (!M || !isFn(M.setZones)) return;
     try { M.setZones(Object.assign({ section: ID }, zoneSpec())); } catch (e) { /* the map keeps its zones */ }
-  }
-  function preloadOuter(ms) {
-    later(function () {
-      if (!ctx || !st || st.km !== 30) return;
-      var D = MCD.distance;
-      if (D && isFn(D.preload)) { try { D.preload({ outer: true }); } catch (e) { /* the table values stay */ } }
-    }, ms || 1200);
   }
 
   /* ============================================================ state */
@@ -777,13 +777,19 @@
   function goTab(id) {
     st.tab = TABS.some(function (t) { return t.id === id; }) ? id : 'list';
     if (!isDeep()) { st.openOnMount = true; ctx.setView('deep'); return; }
-    openWork(true);
+    openWork(true, st.tab === 'list' ? 'list' : null);
     renderWork(true);
   }
-  function openWork(on) {
+  /** "Lihat daftar kampus" opens the drawer to full height on short screens (≤ 900 px), else to half (final fix round). */
+  function listDrawer() {
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.listDrawerState)) { try { var s0 = I0.listDrawerState(); if (s0 === 'full' || s0 === 'half') return s0; } catch (e) { /* own rule below */ } }
+    return (window.innerHeight || 0) > 0 && window.innerHeight <= 900 ? 'full' : 'half';
+  }
+  function openWork(on, how) {
     st.workOpen = !!on;
     syncWork();
-    if (on && adopted()) { var W0 = WS(); try { if (W0 && isFn(W0.drawer) && isFn(W0.setDrawer) && W0.drawer() === 'peek') W0.setDrawer('half'); } catch (e) { /* the drawer keeps its height */ } }
+    if (on && adopted()) { var W0 = WS(); try { if (W0 && isFn(W0.drawer) && isFn(W0.setDrawer) && W0.drawer() === 'peek') W0.setDrawer(how === 'list' ? listDrawer() : 'half'); } catch (e) { /* the drawer keeps its height */ } }
     if (on && ui.work) later(function () {
       if (!ui || !ui.work) return;
       /* phones: the drawer flows under the panel, so the page scrolls to it */
@@ -996,11 +1002,11 @@
     k.by.set(by); k.top.set(st.kecAll ? 'all' : 'top');
     var list = V.kecList.slice().sort(function (a, b) { return by === 'dosen' ? (b.dosen - a.dosen) || (b.students - a.students) : (b.students - a.students) || (b.dosen - a.dosen); });
     var lead = list[0];
-    k.ex.set(lead ? 'Kec. ' + lead.name + ' memiliki ' + (by === 'dosen' ? 'dosen tetap' : 'mahasiswa') + ' terbanyak dari ' + count(list.length, 'kecamatan') + ' (' + f.int(by === 'dosen' ? lead.dosen : lead.students) + ')' : EMPTY_FILTER,
+    k.ex.set(lead ? 'Kec. ' + kecShown(lead.id, lead.name) + ' memiliki ' + (by === 'dosen' ? 'dosen tetap' : 'mahasiswa') + ' terbanyak dari ' + count(list.length, 'kecamatan') + ' (' + f.int(by === 'dosen' ? lead.dosen : lead.students) + ')' : EMPTY_FILTER,
       (by === 'dosen' ? 'Dosen tetap' : 'Mahasiswa') + ' per kecamatan, kampus dalam ' + st.km + ' km. Kampus jarak jauh dan kampus utama di luar 30 km tidak dihitung.',
       SRC_LINE + ' · ' + SRC_AREAS);
     var items = (st.kecAll ? list : list.slice(0, TOP_KEC)).map(function (a) {
-      return { id: a.id, label: a.name, value: by === 'dosen' ? a.dosen : a.students, sub: [nkWords(a), a.kota].filter(Boolean) };
+      return { id: a.id, label: kecShown(a.id, a.name), value: by === 'dosen' ? a.dosen : a.students, sub: [nkWords(a), a.kota].filter(Boolean) };
     });
     var data = { items: items, onSelect: function (it) { showKec(it.id); }, max: items.length, label: 'Kecamatan menurut ' + (by === 'dosen' ? 'dosen tetap' : 'mahasiswa'), actionHint: 'Buka kecamatan di peta', emptyText: EMPTY_FILTER };
     if (k.chart && isFn(k.chart.update)) k.chart.update(data);
@@ -1121,10 +1127,12 @@
     p.ex.body.appendChild(note('Catatan kerja tanpa angka bank. Tambahkan kampus dari kartunya.\nTahap “Aktif” hanya tanda kerja staf.'));
     /* the product filter and the stage list are built once and updated in place, so keyboard focus stays on the
        option that was picked (§10; rebuilding them on every change dropped focus to the page) */
-    p.prod = seg('Produk sasaran', [{ v: '', label: 'Semua produk', title: 'Tampilkan semua entri' }].concat(C.PRODUCTS.map(function (q) { return { v: q.id, label: q.short, title: 'Tampilkan entri dengan produk sasaran ' + q.short }; })),
-      function (v) { st.pipeProd = v; renderPipe(true); }, 'cp-rchips--prod', 'chips');
-    p.prodLogo = logo('qris', 'cp-logo--sm');
-    p.prodHost.appendChild(E('div', { class: 'cp-fg cp-fg--prod' }, E('span', { class: 'cp-fg__l', text: 'Produk sasaran' }), E('div', { class: 'cp-prodrow' }, p.prod.el, p.prodLogo)));
+    /* D22 / item 47: the QRIS mark sits on the "QRIS kantin" chip itself (always, as in Sekolah), beside its words, so
+       it is hidden from screen readers there (the name is not read twice) */
+    p.prod = seg('Produk sasaran', [{ v: '', label: 'Semua produk', title: 'Tampilkan semua entri' }].concat(C.PRODUCTS.map(function (q) {
+      return { v: q.id, label: q.short, title: 'Tampilkan entri dengan produk sasaran ' + q.short, icon: q.id === 'LVM' ? markBesideWords(logo('qris', 'cp-logo--chip')) : null };
+    })), function (v) { st.pipeProd = v; renderPipe(true); }, 'cp-rchips--prod', 'chips');
+    p.prodHost.appendChild(E('div', { class: 'cp-fg cp-fg--prod' }, E('span', { class: 'cp-fg__l', text: 'Produk sasaran' }), E('div', { class: 'cp-prodrow' }, p.prod.el)));
     buildSteps(p);
     body.appendChild(p.ex.el);
     ui.work.pipe = p;
@@ -1185,7 +1193,6 @@
     p.prodHost.hidden = !keys.length;
     C.PRODUCTS.forEach(function (q) { p.prod.label(q.id, q.short + ' · ' + f.int(keys.filter(function (k) { return hasProd(k, q.id); }).length)); });
     p.prod.set(st.pipeProd || '');
-    p.prodLogo.hidden = st.pipeProd !== 'LVM';
     var shown = keys.filter(function (k) { return (!st.pipeStage || all[k].stage === st.pipeStage) && (!st.pipeProd || hasProd(k, st.pipeProd)); });
     if (!shown.length) { p.list.appendChild(E('p', { class: 'cp-empty-line', text: keys.length ? (st.pipeProd ? 'Tidak ada entri dengan produk sasaran ini.' : 'Tidak ada entri pada tahap ini.') : 'Daftar tindak lanjut masih kosong. Buka kartu kampus, lalu pilih “+ Tindak lanjut”.' })); return; }
     var known = C.ready() ? new Set(C.index().rows.map(function (r) { return r.id; })) : null;
@@ -1243,6 +1250,18 @@
     ];
     ctx.openDrawer({ eyebrow: 'KAMPUS', title: 'Sumber data dan cakupan', body: body, prov: SRC_LINE });
   }
+  /**
+   * "Perkiraan untuk kampus paling tinggi Menengah. Kampus dengan biaya tinggi yang tidak mempublikasikan biaya dapat
+   * tampil lebih rendah." (final fix round, 23 Oct 2026): MCD.inst.capLine, else the same from meta.perkiraanRule.
+   */
+  function capLine() {
+    var I0 = MCD.inst;
+    if (I0 && isFn(I0.capLine)) { try { var l0 = I0.capLine('kampus'); if (typeof l0 === 'string') return l0; } catch (e) { /* own below */ } }
+    var T = window.MCD_INSTITUTION_TIERS, M0 = T && T.meta, row = M0 && M0.perkiraanRule && M0.perkiraanRule.table && M0.perkiraanRule.table.kampus, best = null;
+    if (!row) return '';
+    Object.keys(row).forEach(function (a) { ((M0 && M0.tiers) || []).forEach(function (m) { if (m && m.label === row[a] && (!best || m.level > best.level)) best = m; }); });
+    return best ? 'Perkiraan untuk kampus paling tinggi ' + best.label + '. Kampus dengan biaya tinggi yang tidak mempublikasikan biaya dapat tampil lebih rendah.' : '';
+  }
   function openTierHelp() {
     if (!ctx) return;
     drawerSel = null;
@@ -1253,6 +1272,7 @@
       'Batang berisi = dari biaya resmi atau jenis kampus.',
       'Batang kosong = perkiraan.',
       'Perkiraan berarti kelas biaya dihitung dari jenis kampus dan daya beli area karena biaya resmi tidak dipublikasikan.',
+      capLine() || null,
       V && tierState() === 'ready' ? 'Biaya resmi ditemukan untuk ' + count(V.feeN, 'kampus') + '. Selebihnya dari jenis kampus atau perkiraan.' : null
     ].filter(Boolean).map(function (t) { return E('li', { text: t }); }))]));
     body.push(note(ENTRY_LINE));
@@ -1314,6 +1334,7 @@
       kids.push(note('Sumber: ' + (t.source || 'situs resmi kampus') + (t.fetched ? ', dibaca ' + fm().date(t.fetched) : '')));
       if (sp && !veil()) kids.push(E('p', { class: 'cp-line' }, extLink(sp.url, 'Buka sumber biaya', 'Buka halaman biaya resmi di tab baru. Perlu internet.'), E('span', { class: 'cp-host', text: ' · ' + sp.host })));
     } else if (t.checkWords) kids.push(note(t.checkWords));
+    if (t.basis === 'perkiraan') { var cl = capLine(); if (cl) kids.push(note(cl)); }
     if (t.note) kids.push(note(t.note));
     kids.push(note(ENTRY_LINE));
     var bw = t.basisWords ? t.basisWords.charAt(0).toLowerCase() + t.basisWords.slice(1) : '';
@@ -1368,7 +1389,7 @@
           var extra = w.checked === 'dialihkan' ? '\nSitus ini terbuka di alamat lain milik lembaga yang sama.' : w.checked === 'belum' ? '\nAlamat dari daftar resmi, belum diperiksa.' : '';
           wv = E('span', { class: 'cp-webv' }, extLink(w.url, w.host, 'Buka situs resmi di tab baru. Perlu internet.' + extra, 'cp-web'), w.https ? null : E('span', { class: 'cp-note', text: 'Situs ini tidak menggunakan HTTPS.' }));
         } else if (w && w.checked === 'gagal') wv = E('span', { class: 'cp-webv' }, E('span', { class: 'cp-mono', text: w.host }), E('span', { class: 'cp-note', text: 'Situs resmi tidak dapat dibuka saat diperiksa.' }));
-        else if (c.websiteDropped) wv = E('span', { class: 'cp-muted', text: 'Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.' });
+        else if (c.websiteDropped) wv = E('span', { class: 'cp-muted', text: c.websiteDroppedText || 'Alamat situs di daftar resmi tidak ditampilkan karena tidak aktif atau tidak aman.' });
         else wv = E('span', { class: 'cp-muted', text: 'Situs resmi belum tercatat.' });
         kids.push(crow(w && w.social ? 'Halaman resmi' : 'Situs resmi', wv, w ? C.srcWords(w.src) : null));
       }
@@ -1603,7 +1624,9 @@
   function afterPipe() { if (ui && ui.work && ui.work.pipe) renderPipe(true); }
   function doneOf(key, entry) {
     var s = pipeState();
-    return { label: '✓ Di tindak lanjut', text: s.ok ? 'Tersimpan di komputer ini · ' + C.stageLabel(entry && entry.stage) : s.text, editLabel: 'Ubah', edit: function () { return editPipe(key); } };
+    /* §7.6: the words stay; the title adds the storage line (the shell's paintDone shows it on the kept row) */
+    return { label: '✓ Di tindak lanjut', text: s.ok ? 'Tersimpan di komputer ini · ' + C.stageLabel(entry && entry.stage) : s.text, title: s.ok ? SEALED_TITLE : null,
+      editLabel: 'Ubah', edit: function () { return editPipe(key); } };
   }
   function pipeQuick(r) {
     var key = r && C.validKey(r.id) ? r.id : null;
@@ -1672,7 +1695,7 @@
       title: r.name + (r.short ? ' (' + r.short + ')' : ''),
       tags: b.chips.map(function (n) { return n.cloneNode(true); }), body: body,
       gmaps: veil() ? null : { lat: pt.lat, lon: pt.lon },
-      prov: SRC_LINE, brief: b, quick: [pipeQuick(r)],
+      prov: SRC_LINE, provBadge: { src: LOGO.pddikti.src, alt: LOGO.pddikti.alt, width: 56, height: 24 }, brief: b, quick: [pipeQuick(r)],
       crumb: o.trail ? trailCrumb(o.trail) : null,
       anchor: [pt.lon, pt.lat], hints: []
     };
@@ -1826,10 +1849,17 @@
   }
   /** The kecamatan chip: "Beji · 3 kampus" counts PDDikti campuses only (D13); a kecamatan with design schools alone says so. */
   function kecLabel(k) {
-    var a = V && V.kec[k.id];
-    if (!a) return k.name;
-    if (a.n) return k.name + ' · ' + count(a.n, 'kampus');
-    return a.k ? k.name + ' · ' + count(a.k, 'sekolah desain') : k.name;
+    var a = V && V.kec[k.id], nm = kecShown(k.id, k.chipName || k.name);
+    if (!a) return nm;
+    if (a.n) return nm + ' · ' + count(a.n, 'kampus');
+    return a.k ? nm + ' · ' + count(a.k, 'sekolah desain') : nm;
+  }
+  /** integration 22 Oct 2026: the kecamatan name on a chip or a ranking row, qualified for the two repeated names
+      ("Cipayung (Depok)", "Setu (Tangsel)") through MCD.territory.chipName; the plain name otherwise. */
+  function kecShown(id, fallback) {
+    var T = MCD.territory, nm = null;
+    if (T && isFn(T.chipName)) { try { nm = T.chipName(String(id)); } catch (e) { nm = null; } }
+    return nm || fallback || (C ? C.kecName(String(id)) : String(id));
   }
   function terrLayers(out, ms) {
     var T = territory(), stats = terrStats();
@@ -1940,16 +1970,25 @@
     var I = MCD.inst, badges = MCD.map && isFn(MCD.map.tierSprite) && tierState() === 'ready' && (tierFilterOn() || ms.zoom >= 14);
     if (badges) {
       var rows = null;
-      if (I && isFn(I.tierLegendRows)) { try { rows = I.tierLegendRows(theme); } catch (e) { rows = null; } }
+      if (I && isFn(I.tierLegendRows)) { try { rows = I.tierLegendRows(theme, { kind: 'kampus' }); } catch (e) { rows = null; } }
       groups.push({ id: 'campus-tier', title: 'Kelas biaya', rows: rows && rows.length ? rows : [
         { glyph: 'none', label: 'Reguler · Menengah · Atas · Premium (1 sampai 4 batang)' },
-        { glyph: 'none', label: 'Batang berisi = dari biaya resmi atau jenis sekolah. Batang kosong = perkiraan. Tanpa tanda = belum diketahui.' }
+        { glyph: 'none', label: 'Batang berisi = dari biaya kuliah resmi atau jenis kampus. Batang kosong = perkiraan. Tanpa tanda = belum diketahui.' }
       ] });
     }
-    groups.push({ id: 'campus-kec', title: 'Label kecamatan', rows: [{ glyph: 'chip', label: 'Nama kecamatan · jumlah kampus' }] });
-    var T = MCD.territory, lines = T && isFn(T.legendGroups) ? (T.legendGroups({ ms: ms, stats: terrStats() }) || []).filter(function (g) { return g.id === 'territory-lines'; })[0] : null;
+    var T = MCD.territory, tg = T && isFn(T.legendGroups) ? (T.legendGroups({ ms: ms, stats: terrStats() }) || []) : [];
+    var tkec = tg.filter(function (g) { return g.id === 'territory-kec'; })[0], lines = tg.filter(function (g) { return g.id === 'territory-lines'; })[0];
+    /* integration 22 Oct 2026: the muted ring chip and the zoom rule of MCD.territory ("Label kecamatan di luar 15 km
+       tampil saat peta diperbesar.") join the section's own chip row */
+    groups.push({ id: 'campus-kec', title: 'Label kecamatan', rows: [{ glyph: 'chip', label: 'Nama kecamatan · jumlah kampus' }]
+      .concat(tkec && tkec.rows ? tkec.rows.filter(function (r) { return r && r.muted; }) : []), note: kecNote(tkec) });
     if (lines) groups.push(lines);
     return groups;
+  }
+  /** The territory note without its merchant line (the LVM dot does not exist on the Kampus map). */
+  function kecNote(g) {
+    var t = g && g.note ? String(g.note).split('\n').filter(function (x) { return x && !/file LVM/.test(x); }).join('\n') : '';
+    return t || null;
   }
   function telemetry() {
     if (!V) return C && C.state('campuses') === 'loading' ? 'MEMUAT DAFTAR KAMPUS' : '';
@@ -2181,18 +2220,20 @@
   /* ============================================================ section contract (v5 workspace, §7.4; v6 scope) */
 
   /** summary() → the slim rail: "Kampus 30 km" · "Mahasiswa" · "Dosen tetap", the filter count and the scope pair (§3.6). */
+  /* "Kampus 30 km" with a no-break space before "km": the 76 px slim rail wraps it as "Kampus / 30 km", never "km" alone */
+  function railLabel() { return 'Kampus ' + st.km + '\u00a0km'; }
   function summary() {
     if (!st) return { items: [], filters: 0 };
     var scope = { label: 'Cakupan', value: st.km, options: [5, 15, 30].map(function (v) { return { v: v, label: v + ' km' }; }), set: function (v) { setKm(+v); }, title: 'Kampus dalam radius 5 km, 15 km atau 30 km dari Mabes TNI.' };
     var nf = filterCount();
     if (!C || !computeView()) {
       var busy = C && C.state('campuses') === 'loading' ? 'Memuat daftar kampus…' : 'Daftar kampus belum dimuat.';
-      return { items: [{ value: '—', label: 'Kampus ' + st.km + ' km', title: busy }, { value: '—', label: 'Mahasiswa', title: busy }, { value: '—', label: 'Dosen tetap', title: busy }], filters: nf, scope: scope };
+      return { items: [{ value: '—', label: railLabel(), title: busy }, { value: '—', label: 'Mahasiswa', title: busy }, { value: '—', label: 'Dosen tetap', title: busy }], filters: nf, scope: scope };
     }
     var f = fm();
     return {
       items: [
-        { value: f.int(V.n), label: 'Kampus ' + st.km + ' km', title: count(V.n, 'kampus') + ' dalam ' + st.km + ' km dari Mabes TNI' + (V.k ? ' · ' + count(V.k, 'sekolah desain dan kursus') : '') + '\n' + count(V.unplaced.length, 'perguruan tinggi') + ' belum di peta' },
+        { value: f.int(V.n), label: railLabel(), title: count(V.n, 'kampus') + ' dalam ' + st.km + ' km dari Mabes TNI' + (V.k ? ' · ' + count(V.k, 'sekolah desain dan kursus') : '') + '\n' + count(V.unplaced.length, 'perguruan tinggi') + ' belum di peta' },
         { value: V.stuN ? f.int(V.students) : '—', label: 'Mahasiswa', title: C.TOTAL_TITLE },
         { value: V.dosenN ? f.int(V.dosen) : '—', label: 'Dosen tetap', title: 'Dosen dengan homebase di perguruan tinggi (NIDN dan NIDK), dari PDDikti.\n' + C.TENDIK_LINE }
       ],
@@ -2280,7 +2321,7 @@
         buildWork(host);
         syncWork();
         /* "Lihat daftar kampus" from Sederhana: once the shell adopted the drawer, open it to half height (§3.7) */
-        if (st.workOpen) later(function () { if (ctx && isDeep()) { openWork(true); renderWork(true); } }, 420);
+        if (st.workOpen) later(function () { if (ctx && isDeep()) { openWork(true, st.tab === 'list' ? 'list' : null); renderWork(true); } }, 420);
       }
       registerMap();
       registerSearch();
@@ -2290,7 +2331,7 @@
       if (P0 && isFn(P0.ready)) { try { P0.ready().then(function () { if (ctx) { if (ui && ui.work && ui.work.pipe) renderPipe(true); refreshOpenCard(); } }, function () {}); } catch (e) { /* memory list */ } }
       if (MCD.state && isFn(MCD.state.on)) { var offR = MCD.state.on('reset', function (e) { if (e && e.scope === 'filters') resetFilters(); }); if (isFn(offR)) offs.push(offR); }
       var I = MCD.inst;
-      if (I && I.scope && isFn(I.scope.on)) { try { var offS = I.scope.on(function () { var v = scopeGet(); if (st && v !== st.km) setKm(v); }); if (isFn(offS)) offs.push(offS); } catch (e) { /* ignore */ } }
+      if (I && I.scope && isFn(I.scope.on)) { try { var offS = I.scope.on(function () { var v = scopeGet(); if (st && v !== st.km) setKm(v, { quiet: true }); }); if (isFn(offS)) offs.push(offS); } catch (e) { /* ignore */ } }
       var onDistEvt = function () { onDistance(); };
       window.addEventListener('mcd:distance', onDistEvt);
       offs.push(function () { window.removeEventListener('mcd:distance', onDistEvt); });
@@ -2312,7 +2353,6 @@
       if (C.ready()) refresh(['*']);
       else startData();
       loadTiers(false);
-      if (st.km === 30) preloadOuter(1200);
       if (pendingFocus != null) requestFocus(pendingFocus);
     },
     update: function (derived, keys) {
@@ -2417,6 +2457,7 @@
       tipKec: function (id) { computeView(); return tipKec(String(id)); },
       contactBlock: function (id) { C = C || MCD.campus; var r = C.row(id); return contactBlock(r, []); },
       tierBlock: function (id) { C = C || MCD.campus; return tierBlock(C.row(id)); },
+      capLine: function () { return capLine(); },
       kantinBlock: function (id) { C = C || MCD.campus; var site = /#\d+$/.test(String(id)) ? C.site(id) : null; return kantinBlock(site ? site.row : C.row(id), site); },
       quickAdd: function (key, label) { C = C || MCD.campus; return quickAdd(key, label); },
       listRows: function () { computeView(); return listRows(); },

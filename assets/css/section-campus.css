@@ -79,6 +79,10 @@ body[data-section="campus"] .guide .cp-rchips .chip { min-height: 40px; }
 .cp-logo--lvm img { height: 20px; }
 .cp-logo--lvm.cp-logo--sm img { height: 18px; }
 .cp-logo[hidden] { display: none; }
+/* item 47: the QRIS mark on the "QRIS kantin" follow-up filter chip, about 18 px tall with its tile */
+.cp-logo--chip { padding: 1px 4px; border-radius: 4px; }
+.cp-logo--chip img { height: 16px; }
+.cp-rchip.has-mark { display: inline-flex; align-items: center; gap: 6px; }
 .cp-prodlogos { display: inline-flex; align-items: center; gap: 6px; }
 
 /* map symbol chip (the picture of MCD.campus.sym; a CSS stand-in without a canvas) */
@@ -442,3 +446,10 @@ body[data-section="campus"] .btn--bar { min-height: 36px; }
   .cp-load__bar::after { animation: none; }
   .cp-morebtn .icon { transition: none; }
 }
+
+/* final fix round (23 Oct 2026): a tighter top for the drawer list, as Sekolah, so the first rows show at half height */
+.cp-work.ws-drawer .cp-work__body { padding-top: 8px; }
+.cp-work.ws-drawer .cp-ex--fill { padding-top: 12px; }
+.cp-work.ws-drawer .cp-ex--fill .cp-tools--list { margin-bottom: 2px; }
+/* "Lihat daftar kampus" on a short screen opens the drawer to full height: the list then fills it */
+.cp-work.ws-drawer.is-full .cp-ex--fill .cp-table { height: max(260px, calc(var(--ws-drawer-vis, 0px) - 342px)); }

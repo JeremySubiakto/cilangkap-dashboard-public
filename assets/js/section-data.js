@@ -96,7 +96,10 @@
   ];
   // Datasets the importer also reads that are not tabs of the template. primary: counted in "x of n".
   var EXTRA = {
-    situs: { label: 'Lokasi tambahan di peta', what: 'Lokasi milik cabang yang ditambahkan ke peta.', primary: false }
+    situs: { label: 'Lokasi tambahan di peta', what: 'Lokasi milik cabang yang ditambahkan ke peta.', primary: false },
+    /* merge of the public prototype (23 Oct 2026): the merchant balance report (assets/js/merchant-saldo.js), an
+       optional daily file, so it is not one of the main files whose age colours the status */
+    saldo: { label: 'Saldo merchant', what: 'Saldo merchant nasabah cabang per tanggal, dengan perubahan YtD, MoM, MtD dan DtD.\nCIF, nomor rekening, nama resmi dan alamat dihapus saat file dibaca. Hanya merchant KCP Jakarta Cilangkap (12903).', primary: false }
   };
   var KPI_ENTRY = { code: 'lvm_kpi', type: 'lvm_kpi', key: 'lvm_kpi', label: 'KPI cabang (UREG dan USAK)',
     what: 'Pengguna Livin’ Merchant terdaftar (UREG) dan aktif (USAK) per cabang, terhadap target.\nDari sheet UREG dan USAK laporan Rev LVM.' };
@@ -110,7 +113,10 @@
     tgl_pasang: 'Tanggal pemasangan', volume_bulan: 'Volume bulanan', frekuensi_bulan: 'Transaksi bulanan',
     npsn: 'NPSN', nama_sekolah: 'Nama sekolah', yayasan: 'Yayasan', jenjang: 'Jenjang', matra: 'Matra', produk: 'Produk', status_nasabah: 'Status nasabah',
     saldo: 'Saldo', jumlah_rekening: 'Rekening', jumlah_siswa: 'Siswa', jumlah_guru: 'Guru', tgl_mulai: 'Nasabah sejak', bank_pesaing: 'Bank pesaing',
-    nama: 'Nama', jenis: 'Jenis', keyakinan: 'Ketepatan lokasi', tier: 'Tingkat (1–3)'
+    nama: 'Nama', jenis: 'Jenis', keyakinan: 'Ketepatan lokasi', tier: 'Tingkat (1–3)',
+    /* Saldo merchant (merge of 23 Oct 2026) */
+    nama_dba: 'Nama usaha (DBA)', jumlah_edc: 'Jumlah EDC', segmen: 'Segmen', ytd: 'Perubahan YtD', mom: 'Perubahan MoM', mtd: 'Perubahan MtD',
+    dtd: 'Perubahan DtD', flag_mom: 'Tanda MoM (Drop / Growth)', flag_mtd: 'Tanda MtD (Drop / Growth)', ada_edc: 'Ada EDC'
   };
   var TYPE_LABEL = { string: 'Teks', number: 'Angka', int: 'Bilangan bulat', rp: 'Rupiah', pct: 'Persen', date: 'Tanggal', bool: 'Ya / tidak', enum: 'Kode', kol: 'Kol 1–5' };
   var GEO_LABEL = { EXACT: 'Koordinat tepat', KELURAHAN_APPROX: 'Perkiraan dari kelurahan', NONE: 'Tanpa lokasi' };
@@ -2992,6 +2998,16 @@
     return spec;
   }
 
+  /** integration 22 Oct 2026: a v6 file that lands while this page is open (V6_SPEC §8.1) fills its dates and the gap
+      lines under the sources table in place ("Dimuat saat diperlukan" until then). */
+  function onLazyData(e) {
+    var n = e && e.detail && e.detail.name;
+    if (!ui || !/^(school-students|campuses|school-contacts|institution-tiers)$/.test(String(n || ''))) return;
+    var old = DOC.getElementById('dp-sources');
+    if (!old || !old.parentNode) return;
+    try { old.parentNode.replaceChild(sourcesBlock(), old); } catch (x) { /* the next visit shows them */ }
+  }
+
   /* ------------------------------------------------------- registrations */
 
   MCD.sections = MCD.sections || {};
@@ -3008,6 +3024,7 @@
       if (Sl && isFn(Sl.on)) { var off = call(Sl.on, Sl, [onSeal]); offSeal = isFn(off) ? off : null; }
       if (!offSeal && isFn(DOC.addEventListener)) { DOC.addEventListener('mcd:seal', onSeal); offSeal = function () { DOC.removeEventListener('mcd:seal', onSeal); }; }
       if (isFn(DOC.addEventListener)) DOC.addEventListener('mcd:gate-locking', onLocking);
+      if (isFn(DOC.addEventListener)) DOC.addEventListener('mcd:lazy', onLazyData);
       c.registerCommands(function () {
         return [
           { label: 'Impor file data', kw: 'upload csv xlsx import rev lvm', run: function () { pickFiles(); } },
@@ -3025,6 +3042,7 @@
       closeOldDialog();
       if (offSeal) { call(offSeal, null); offSeal = null; }
       if (isFn(DOC.removeEventListener)) DOC.removeEventListener('mcd:gate-locking', onLocking);
+      if (isFn(DOC.removeEventListener)) DOC.removeEventListener('mcd:lazy', onLazyData);
       page = null; ui = null; ctx = null;
     },
     onFiles: function (files) { if (ctx) stageFiles(Array.prototype.slice.call(files || [])); },

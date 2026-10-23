@@ -673,6 +673,11 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
 .sk-chip--jenis { min-width: 56px; justify-content: center; }
 .sk-chip--tier .sk-bars { margin-right: -1px; }
 .sk-chip[disabled] { opacity: .5; cursor: progress; }
+/* integration 22 Oct 2026: the quiet pressed style of the v6 filter groups, as Kampus and the kelas biaya chips
+   (a soft signal tint with a teal edge instead of the filled primary chip; COPY_STYLE_EN item 50) */
+body[data-section="schools"] .chip.sk-chip--jenis, body[data-section="schools"] .chip.sk-chip--tier { border-color: var(--rule); color: var(--text-3); background: transparent; }
+body[data-section="schools"] .chip.sk-chip--jenis[aria-pressed="true"], body[data-section="schools"] .chip.sk-chip--tier[aria-pressed="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); }
+body[data-section="schools"] .chip.sk-chip--tier[aria-pressed="true"] .chip__count { color: var(--text-2); opacity: 1; }
 
 /* "Filter lain (n)": a quiet fold, open by default in the Detail rail, folded in the guide and on phones (§2) */
 .sk-more { display: grid; gap: 10px; border-top: 1px solid var(--rule); padding-top: 10px; }
@@ -737,6 +742,11 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
    recoloured or stretched (the wordmark has too little contrast on the dark theme) */
 .sk-srcbadge { display: inline-flex; align-items: center; padding: 3px 6px; border-radius: 6px; background: var(--logo-tile, white); box-shadow: inset 0 0 0 1px var(--rule); flex: none; }
 .sk-srcbadge img { display: block; width: auto; height: 24px; max-width: none; object-fit: contain; }
+/* item 47: the QRIS mark beside the kantin line and on the "QRIS kantin" follow-up filter (about 18 px tall) */
+.sk-srcbadge--qris img { height: 18px; }
+.sk-kv__logo { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.sk-fg .sk-seg--prod .seg__opt { gap: 6px; }
+.sk-seg--prod .inst-logo, .sk-seg--prod .sk-srcbadge { padding: 2px 4px; }
 .sk-srcline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
 
 /* the perkiraan "?" beside a count (the row note in its title) */
@@ -754,3 +764,21 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
   .sk-scope .seg__opt, .sk-ctl .scope .seg__opt, .sk-ctl .scope-field .scope:not(.scope--v) .seg__opt, .sk-ctl .chip, .sk-more__btn { min-height: 44px; }
   .sk-ctl .chip { height: auto; padding: 0 14px; }
 }
+
+/* final fix round (23 Oct 2026): the "Daftar sekolah" tools in one calm row, as Kampus (search · Urutkan · Waktu tempuh ·
+   ekspor), so the first rows show in the half drawer; inside the drawer the tab already names the list: no eyebrow, no
+   sub-line, a small title */
+.sk-tools--list { gap: 8px 12px; }
+.sk-tools--list > .sk-search { flex: 1 1 160px; }
+.sk-sortf { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.sk-sortf .sk-fg__l { white-space: nowrap; }
+.sk-sortf .sk-sortsel { width: auto; height: 40px; min-width: 196px; }
+.sk-tools--list .sk-distsw { align-items: center; }
+.sk-work.ws-drawer .sk-ex--list { padding-top: 12px; }
+.sk-work.ws-drawer .sk-ex--list .sk-ex__eyebrow, .sk-work.ws-drawer .sk-ex--list .sk-ex__sub { display: none; }
+.sk-work.ws-drawer .sk-ex--list .sk-ex__title { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); }
+.sk-work.ws-drawer .sk-ex--list .sk-tools { margin-bottom: 8px; }
+.sk-work.ws-drawer .sk-work__body { padding-top: 8px; }
+/* "Lihat daftar SMA" on a short screen opens the drawer to full height: the list then fills it (the half and peek
+   drawers keep the 280 px list, which scrolls) */
+.sk-work.ws-drawer.is-full .sk-ex--list .sk-table { height: max(280px, calc(var(--ws-drawer-vis, 0px) - 286px)); }

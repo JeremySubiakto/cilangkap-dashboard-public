@@ -1,5 +1,5 @@
 /* ==========================================================================
- * MCD.wealth: the engine of section 7 "Calon Prioritas" (docs/V7_SPEC.md §1.7.5 and §5, D11; COPY_STYLE_EN item 48 b).
+ * MCD.wealth: the engine of the section "Calon Prioritas" (docs/V7_SPEC.md §1.7.5 and §5, D11, D39; COPY_STYLE_EN item 48 b).
  *
  * Places where affluent people can be met, from PUBLIC data only. Four kinds of place, each with the way in:
  *   sekolah    schools of kelas biaya Premium or Atas (data/school-students.js + data/institution-tiers.js through
@@ -7,13 +7,14 @@
  *   kampus     campuses of kelas biaya Premium or Atas (data/campuses.js, main point, same tier rule)
  *   perumahan  housing projects of segment premium or menengah-atas (data/property-projects.js, eager)
  *   merchant   large-ticket merchants that are Sasaran EDC (MCD.sme: nilai belanja besar, tier 'edc' or 'naik-edc',
- *              never a national chain); public listings within 15 km only (data/sme-pois.js)
+ *              never a national chain); public merchant listings within 15 km only (data/sme-pois.js, D39)
  * plus the daya beli area of each kecamatan (data/area-wealth.js: rendah 1, sedang 2, tinggi 3 bars on the kecamatan
  * chips, never a fill). No lead, no customer value and no income claim: a tier is about the fee, not the parents
  * (INSTITUTION_TIERS §1), and the area level is an aggregate estimate (AREA_WEALTH).
  *
  *   places({km, kinds})  → [{kind, id, name, lon, lat, km, kecamatanId, kelurahanId, tier?, tierLabel?, tierLevel?,
- *                          basis?, basisWords?, segment?, segmentLabel?, ticketWhy?, area: {level, score, why, of, name},
+ *                          basis?, basisWords?, segment?, segmentLabel?, ticketWhy?, area: {level, score, why, of, name}
+ *                          (always the kecamatan's daya beli, of = 'kecamatan', as on the kecamatan chips),
  *                          wayIn, key: {label, value, title}, rank, sub}] nearest to Mabes TNI first. id = the home id of
  *                          V7_SPEC §1.7.3: 'npsn:…' / 'app:…' (sekolah), 'pt:…' / 'osm:…' / 'ovt:…' (kampus),
  *                          'project:<id>' (perumahan), 'poi:<row>' (merchant)
@@ -149,7 +150,8 @@
     return Array.isArray(c) && isNum(c[0]) && isNum(c[1]) ? c : CENTER;
   }
   function kmOf(lon, lat) { var c = center(); return Math.round(hav(c[0], c[1], lon, lat) * 100) / 100; }
-  function normKm(km) { km = +km; return km === 15 ? 15 : 30; }
+  /* 5 km since the public-prototype merge (23 Oct 2026): places within 5 km; the kecamatan set stays the 15 km one */
+  function normKm(km) { km = +km; return km === 15 || km === 5 ? km : 30; }
   function normKinds(kinds) {
     if (kinds == null) return KIND_IDS.slice();
     var out = [];
@@ -175,7 +177,8 @@
     if (isFn(W.at)) return safe(W.at, W, [id]) || null;
     return (W.kelurahan && W.kelurahan[id]) || W.kecamatan[id] || null;
   }
-  /** areaOf(kelurahanId, kecamatanId) → {level, score, why, of, name} | null: the kelurahan when the file has it, else the kecamatan. */
+  /** areaOf(kelurahanId, kecamatanId) → {level, score, why, of, name} | null: the kelurahan when one is given and the file has
+      it, else the kecamatan. The section passes no kelurahan (areaOf(null, kecId)): its places carry the kecamatan level. */
   function areaOf(kelId, kecId) {
     var r = kelId ? areaRow(kelId) : null, of = 'kelurahan', id = kelId;
     if (!r || !own(LEVEL_BARS, r.level)) { r = kecId ? areaRow(kecId) : null; of = 'kecamatan'; id = kecId; }
@@ -316,8 +319,11 @@
     var A = g('MCD_ADMIN_AREAS');
     return A && isFn(A.locate) ? safe(A.locate, A, [lon, lat]) || null : null;
   }
+  /** A place's daya beli area is its KECAMATAN level (§5.1: MCD_AREA_WEALTH.kecamatan[id].level), the one the kecamatan
+      chips, bars, callouts and the Kecamatan tab show under the same words. The kelurahan levels stay for the merchant
+      factor of MCD.sme (§1.6) and are never shown here (COPY_DECK rule 13: one meaning per term). */
   function areaFields(p) {
-    p.area = areaOf(p.kelurahanId, p.kecamatanId);
+    p.area = areaOf(null, p.kecamatanId);
     return p;
   }
   function schoolPlaces(out) {
@@ -487,7 +493,7 @@
     c.byTier = byTier;
     return c;
   }
-  /** The kecamatan in scope: at least half of the area inside 15 km (or 30 km), as the territory zones count them. */
+  /** The kecamatan in scope: at least half of the area inside 15 km (5 and 15 km) or 30 km, as the territory zones count them. */
   function kecList(km) {
     var A = g('MCD_ADMIN_AREAS');
     if (!A || !Array.isArray(A.kecamatan)) return [];
@@ -602,6 +608,9 @@
   function homeAction(p) {
     if (!p || !own(KIND_BY, p.kind)) return null;
     var K = KIND_BY[p.kind], id;
+    /* a home tab the config hides (`hidden: true`: KPR since 22 Oct 2026, merge of 23 Oct 2026) gets no link */
+    var L = mcd().config && mcd().config.sections;
+    if (Array.isArray(L) && !L.some(function (s) { return s && s.id === K.section; })) return null;
     if (p.kind === 'sekolah') id = p.npsn || p.id;
     else if (p.kind === 'kampus') id = p.kode || p.id;
     else if (p.kind === 'perumahan') id = p.projectId;
