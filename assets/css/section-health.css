@@ -21,7 +21,7 @@ body[data-section="health"] { --hf-work-w: clamp(460px, 37vw, 620px); }
 /* ── shared bits ─────────────────────────────────────────────────────────── */
 .hf-link { display: inline; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-weight: 600; color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; }
-.hf-link:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .hf-link:hover { text-decoration-color: var(--text-1); } }
 .hf-link:focus-visible, .hf-ext:focus-visible, .hf-copy:focus-visible, .hf-morebtn:focus-visible, .hf-mini__row:focus-visible,
 .hf-plist__row:focus-visible, .hf-step:focus-visible, .hf-chainrow:focus-visible, .hf-kl__row:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .hf-note { margin: 6px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); white-space: pre-line; }
@@ -43,7 +43,7 @@ body[data-section="health"] { --hf-work-w: clamp(460px, 37vw, 620px); }
 .hf-rchips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 body[data-section="health"] .hf-rchips .chip { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: left;
   border-color: var(--rule); background: transparent; color: var(--text-2); font: 500 12.5px/16px var(--font-sans); cursor: pointer; }
-body[data-section="health"] .hf-rchips .chip:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { body[data-section="health"] .hf-rchips .chip:hover { background: var(--surface-hover); color: var(--text-1); } }
 body[data-section="health"] .hf-rchips .chip[aria-checked="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); font-weight: 600; cursor: default; }
 .hf-rchips .chip:focus-visible, .hf-seg .seg__opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .hf-fg { display: grid; gap: 6px; }
@@ -56,7 +56,7 @@ body[data-section="health"] .hf-rchips .chip[aria-checked="true"] { background: 
 
 .hf-ext { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; color: var(--text-1); font: 600 13px/18px var(--font-sans);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; overflow-wrap: anywhere; }
-.hf-ext:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .hf-ext:hover { text-decoration-color: var(--text-1); } }
 .hf-ext .icon { flex: none; width: 12px; height: 12px; color: var(--text-3); }
 
 /* the white tile of a product mark (items 46–47): never recoloured or stretched */
@@ -124,7 +124,7 @@ body[data-section="health"] .guide .hf-chips .chip { min-height: 40px; }
 .hf-chip__t { font: 500 12.5px/16px var(--font-sans); }
 .hf-morebtn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--rule);
   border-radius: var(--r-ctl); background: transparent; cursor: pointer; font: 600 13px/18px var(--font-sans); color: var(--text-1); }
-.hf-morebtn:hover { background: var(--surface-hover); }
+@media (hover: hover) { .hf-morebtn:hover { background: var(--surface-hover); } }
 .hf-morebtn .icon { transition: transform var(--dur-fast) var(--ease-out); }
 .hf-morebtn[aria-expanded="true"] .icon { transform: rotate(180deg); }
 .guide .hf-morebtn { min-height: 40px; }
@@ -166,7 +166,7 @@ body[data-section="health"] .guide .hf-chips .chip { min-height: 40px; }
 .hf-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .hf-mini__row { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; padding: 7px 6px; border: 0;
   border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.hf-mini__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .hf-mini__row:hover { background: var(--surface-hover); } }
 .hf-mini__row .hf-sym { margin-top: 1px; }
 .hf-mini__txt { display: grid; gap: 1px; min-width: 0; }
 .hf-mini__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -237,7 +237,7 @@ body[data-section="health"] .btn--bar { min-height: 36px; }
 .hf-chains { display: grid; gap: 4px; }
 .hf-chainrow { display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--r-ctl); background: transparent; cursor: pointer;
   text-align: left; font: 500 13px/18px var(--font-sans); color: var(--text-1); }
-.hf-chainrow:hover { background: var(--surface-hover); }
+@media (hover: hover) { .hf-chainrow:hover { background: var(--surface-hover); } }
 .hf-chainrow.is-on { border-color: var(--rule-signal); background: var(--signal-a20); }
 .hf-chainrow--none { cursor: default; color: var(--text-2); border-style: dashed; margin: 6px 0 0; }
 
@@ -251,7 +251,7 @@ body[data-section="health"] .btn--bar { min-height: 36px; }
 .hf-step__li { display: block; min-width: 0; }
 .hf-step { width: 100%; min-height: 32px; display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) 36px; align-items: center; gap: 8px; padding: 4px 6px;
   border: 1px solid transparent; border-radius: var(--r-ctl); background: none; cursor: pointer; text-align: left; color: var(--text-1); }
-.hf-step:hover { background: var(--surface-hover); }
+@media (hover: hover) { .hf-step:hover { background: var(--surface-hover); } }
 .hf-step.is-on { border-color: var(--rule-signal); background: var(--signal-a20); }
 .hf-step__l { font: 500 12.5px/18px var(--font-sans); }
 .hf-step__bar { height: 8px; border-radius: 4px; background: var(--rule); overflow: hidden; }
@@ -264,7 +264,7 @@ body[data-section="health"] .btn--bar { min-height: 36px; }
 .hf-plist__g { margin: 10px 0 2px; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .hf-plist__row { display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-left-width: 3px; border-radius: var(--r-ctl);
   background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.hf-plist__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .hf-plist__row:hover { background: var(--surface-hover); } }
 .hf-plist__row--ok { border-left-color: var(--status-ok); }
 .hf-plist__row--mid { border-left-color: var(--status-mid); }
 .hf-plist__row--bad { border-left-color: var(--status-bad); }
@@ -290,7 +290,7 @@ body[data-section="health"] .btn--bar { min-height: 36px; }
 .hf-mail { overflow-wrap: anywhere; }
 .hf-copy { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--rule); border-radius: var(--r-ctl);
   background: transparent; cursor: pointer; font: 500 12px/1 var(--font-sans); color: var(--text-2); }
-.hf-copy:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .hf-copy:hover { background: var(--surface-hover); color: var(--text-1); } }
 .hf-copy .icon { width: 12px; height: 12px; }
 .hf-rslink { margin-top: 6px; }
 .hf-rt__on { align-self: center; font: 600 12px/16px var(--font-sans); color: var(--text-3); }
@@ -343,6 +343,9 @@ body[data-section="health"] .btn--bar { min-height: 36px; }
   .hf-seg .seg__opt, .guide .hf-seg .seg__opt, .hf-scope .seg__opt, .guide .hf-scope .seg__opt, .hf-row .scope .seg__opt, .guide .hf-row .scope .seg__opt,
   body[data-section="health"] .hf-chips .chip, body[data-section="health"] .hf-rchips .chip, body[data-section="health"] .guide .hf-chips .chip,
   body[data-section="health"] .guide .hf-rchips .chip, .hf-morebtn, .guide .hf-morebtn, .hf-step, .hf-chainrow, body[data-section="health"] .btn--bar { min-height: 44px; }
+  /* M7 (MOBILE_UX_PLAN): every control of the section 44 px on phones */
+  .hf-tab, .hf-mini__row, .hf-plist__row { min-height: 44px; }
+  .hf-copy { height: auto; min-height: 44px; }
   .hf-work:not(.ws-drawer) { position: relative; inset: auto; width: auto; transform: none; z-index: auto; border-radius: var(--r-panel); }
   .hf-work__close, .hf-openwork { display: none; }
   .hf-work__body { overflow: visible; }

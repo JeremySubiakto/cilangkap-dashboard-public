@@ -61,7 +61,7 @@
     'signal': '#38D6E8', 'signal-a20': 'rgba(56, 214, 232, 0.20)',
     'pos': '#4CC38A', 'neg': '#F26D5B', 'warn': '#E8A13A', 'info': '#6CC4E0',
     'kol-1': '#4CC38A', 'kol-2': '#E8A13A', 'kol-3': '#F2925B', 'kol-4': '#F26D5B', 'kol-5': '#C8475E',
-    'p-ksm': '#5AA9FF', 'p-kpr': '#3FC1A5', 'p-kkb': '#E8875B', 'p-cc': '#B58CFF', 'p-mg': '#EF7A9A', 'p-pen': '#B8D35A', 'p-oth': '#8F99AB',
+    'p-azure': '#5AA9FF', 'p-kpr': '#3FC1A5', 'p-copper': '#E8875B', 'p-cc': '#B58CFF', 'p-mg': '#EF7A9A', 'p-pen': '#B8D35A', 'p-oth': '#8F99AB',
     'st-whitespace': '#F2B705', 'st-prospect': '#8F99AB',
     'heat-0': '#2A1B3D', 'heat-1': '#5A2A4E', 'heat-2': '#8E3B47', 'heat-3': '#C2573A', 'heat-4': '#E68A2E', 'heat-5': '#F2B705', 'heat-6': '#FFE7A1',
     'div-neg-2': '#F26D5B', 'div-neg-1': '#9C4A42', 'div-mid': '#2B3445', 'div-pos-1': '#2E6E8E', 'div-pos-2': '#6CC4E0',
@@ -138,11 +138,10 @@
     return 'rgba(' + p.r + ', ' + p.g + ', ' + p.b + ', ' + (+(p.a * a).toFixed(3)) + ')';
   }
 
-  /* Product and status glyph table (§B.5). */
+  /* Product and status glyph table (§B.5). V8 D54: the two products removed by D41 left this table; their palette
+     slots stay as colours only (--p-azure, --p-copper). */
   var PRODUCTS = {
-    KSM: { label: 'KSM', token: 'p-ksm', shape: 'circle' },
     KPR: { label: 'KPR', token: 'p-kpr', shape: 'square' },
-    KKB: { label: 'KKB', token: 'p-kkb', shape: 'diamond' },
     CC: { label: 'Kartu kredit', token: 'p-cc', shape: 'triangle' },
     MG: { label: 'Multiguna', token: 'p-mg', shape: 'hexagon' },
     PEN: { label: 'Pensiun', token: 'p-pen', shape: 'star' },
@@ -154,7 +153,7 @@
     GIRO: { label: 'Giro', token: 'b-giro', shape: 'diamond' },
     PAYROLL: { label: 'Payroll', token: 'b-payroll', shape: 'ring' }
   };
-  var PRODUCT_ORDER = ['KSM', 'KPR', 'KKB', 'CC', 'MG', 'PEN', 'OTH'];
+  var PRODUCT_ORDER = ['KPR', 'CC', 'MG', 'PEN', 'OTH'];
   /* Payroll share bars: Mandiri first, then other banks in slate (§C.5.3). */
   var KEY_TOKENS = {
     MANDIRI: 'plat-4', MDR: 'plat-4', BSI: 'bank-bsi', BNI: 'bank-bni', BRI: 'bank-bri', BTN: 'bank-btn',
@@ -1319,7 +1318,7 @@
   /* ──────────────────────────────────────────────────────────────────────
    * 11. Shared normalisers and pointer plumbing
    * ────────────────────────────────────────────────────────────────────── */
-  var CYCLE = ['plat-3', 'p-ksm', 'p-kpr', 'p-kkb', 'p-cc', 'p-mg', 'p-pen', 'plat-2'];
+  var CYCLE = ['plat-3', 'p-azure', 'p-kpr', 'p-copper', 'p-cc', 'p-mg', 'p-pen', 'plat-2'];
 
   function seriesColor(s, i, node) {
     if (s.color) return color(s.color, node);
@@ -1776,7 +1775,7 @@
 
   /* ──────────────────────────────────────────────────────────────────────
    * 14. stackedColumns(el, data, cfg)  (§C.4 block 5, §B.7)
-   * data: [{key|month, label?, values|byProduct: {KSM: n, …}, target?, ghost?}]
+   * data: [{key|month, label?, values|byProduct: {KPR: n, …}, target?, ghost?}]
    * cfg: series [{key,label,color}], valueKey, format, axisFormat, targetLabel
    * ────────────────────────────────────────────────────────────────────── */
   function normColumns(data, cfg) {

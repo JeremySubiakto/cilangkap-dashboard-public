@@ -1,13 +1,14 @@
 /* ==========================================================================
- * MCD.policy: bank policy numbers entered by the branch (v7, docs/V7_SPEC.md §1.7.1 as trimmed by D39;
- * D18, D19, D27, D31; COPY_STYLE_EN item 48 "rates, caps and the Prioritas threshold are entered by the
+ * MCD.policy: bank policy numbers entered by the branch (v7, docs/V7_SPEC.md §1.7.1 as trimmed by D39 and
+ * D41; D18, D19, D27, D31; COPY_STYLE_EN item 48 "rates, caps and the Prioritas threshold are entered by the
  * branch and kept in the vault, never in the repo").
  *
- * D39 (22 Oct 2026, the user removed the KSM & KKB section): the store keeps only what the remaining
- * screens read, the KPR cap (the KPR simulator, D19) and the lead thresholds (the masked lead list, §8.2).
- * The calculator keys, their three groups and their feeds are gone. An encrypted copy saved earlier that
- * still holds them loads without error: vaultLoad ignores every key it does not know (and lists it in
- * `dropped`), and an old Riwayat entry keeps only the key names this module still knows.
+ * D39, D41 (22 and 23 Oct 2026, the user removed the former TNI credit section, then its two products everywhere;
+ * docs/V8_SPEC.md §3.5): the store keeps only what the remaining screens read, the KPR cap (the KPR simulator,
+ * D19) and the thresholds of the two remaining lead rules (Calon KPR, Mendekati Prioritas; §8.2). The calculator
+ * keys, their groups and feeds, the vehicle-loan income minimum and the top-up tenor are gone. An encrypted copy
+ * saved earlier that still holds them loads without error: vaultLoad ignores every key it does not know (and
+ * lists it in `dropped`), and an old Riwayat entry keeps only the key names this module still knows.
  *
  * EVERY KEY STARTS EMPTY. This file holds no default, fallback or example number for any policy key:
  * the branch types the numbers in Data & Privasi › Kebijakan & leads, they live in this module's memory
@@ -24,15 +25,13 @@
  * the spec table §1.7.1. No line of this file puts a number next to a key name (a test checks it).
  *   kpr.capPct: percent within the range of config.dsrCap, a fraction is refused; empty = the Asumsi of
  *     Pengaturan & sumber
- *   leads.prioritasThreshold, leads.kkbMinIncome, leads.kprMinIncome: whole rupiah above zero, up to a
- *     typing guard (RULES.rpPositive.hi, far above any threshold and below Number.MAX_SAFE_INTEGER, so
- *     every stored value is exact and prints in full)
- *   leads.topUpMaxTenor: whole months; required by its rule, empty = Calon top up KSM off
+ *   leads.prioritasThreshold, leads.kprMinIncome: whole rupiah above zero, up to a typing guard
+ *     (RULES.rpPositive.hi, far above any threshold and below Number.MAX_SAFE_INTEGER, so every stored
+ *     value is exact and prints in full)
  *   leads.k: whole, never below the lead floor nor the current value ("Hanya dapat dinaikkan."), and
  *     never above the group ceiling (RULES.groupSize.hi), so a typo cannot hide every group
  * Optional (OPTIONAL): kpr.capPct, leads.k (empty = the lead floor). Required (REQUIRED.leads): the rest.
- * Decisions behind these rules: D18 (fractions, no example numbers), D19 (KPR Asumsi), D31 (top-up
- * tenor). The lead floor is the item-48 rule "groups under 5 hidden" (GROUP_FLOOR, the same as
+ * Decisions behind these rules: D18 (fractions, no example numbers), D19 (KPR Asumsi). The lead floor is the item-48 rule "groups under 5 hidden" (GROUP_FLOOR, the same as
  * MCD.leads.MIN_K); the floor, the group ceiling and the rupiah guard are product rules, not bank policy.
  *
  * Input: Indonesian format only. Decimal comma, dot grouping, optional "%" (percent keys), "Rp" (rupiah
@@ -68,9 +67,8 @@
  *   on(fn) → off                     fn({keys, source, dirty}); also document event 'mcd:policy' (same
  *       detail, key names only, never values). source: 'user' | 'vault' | 'reset' | 'log' | 'saved'.
  *   filledDate(keys?) → ISO | null   newest fill date among the keys ("Kebijakan bank · diisi {tanggal}")
- *   forLeads() → {prioritasThreshold, kkbMinIncome, kprMinIncome, topUpMaxTenor, k}   null thresholds
- *       while empty; topUpMaxTenor null while empty (the rule is shown off, D31); k = the stored value or
- *       the item-48 floor
+ *   forLeads() → {prioritasThreshold, kprMinIncome, k}   null thresholds while empty (the rule is shown
+ *       off); k = the stored value or the item-48 floor (V8 §3.5)
  *   forKpr() → {dsr: fraction, pct: percent, source: 'kebijakan' | 'asumsi'}   THE ONLY PLACE THAT
  *       CONVERTS percent ↔ fraction. 'asumsi' reads MCD.config.dsrCap (null pair when it is absent).
  *   actor() → initials | null · setActor(initials) → {ok, pesan?}   2–4 letters, upper-cased, memory only
@@ -115,15 +113,13 @@
 
   var KEYS = [
     'kpr.capPct',
-    'leads.prioritasThreshold', 'leads.kkbMinIncome', 'leads.kprMinIncome', 'leads.topUpMaxTenor', 'leads.k'
+    'leads.prioritasThreshold', 'leads.kprMinIncome', 'leads.k'
   ];
 
   var LABELS = {
     'kpr.capPct': 'Batas angsuran KPR (% dari penghasilan bersih)',
     'leads.prioritasThreshold': 'Ambang saldo Mandiri Prioritas (Rp)',
-    'leads.kkbMinIncome': 'Penghasilan minimal Calon KKB (Rp per bulan)',
     'leads.kprMinIncome': 'Penghasilan minimal Calon KPR (Rp per bulan)',
-    'leads.topUpMaxTenor': 'Sisa tenor untuk top up KSM (bulan)',
     'leads.k': 'Kelompok terkecil yang ditampilkan'
   };
 
@@ -131,16 +127,13 @@
   var NAMES = {
     'kpr.capPct': 'batas angsuran KPR',
     'leads.prioritasThreshold': 'ambang saldo Mandiri Prioritas',
-    'leads.kkbMinIncome': 'penghasilan minimal Calon KKB',
     'leads.kprMinIncome': 'penghasilan minimal Calon KPR',
-    'leads.topUpMaxTenor': 'sisa tenor untuk top up KSM',
     'leads.k': 'kelompok terkecil'
   };
 
   var UNITS = {
     'kpr.capPct': 'pct',
-    'leads.prioritasThreshold': 'rp', 'leads.kkbMinIncome': 'rpMonth', 'leads.kprMinIncome': 'rpMonth',
-    'leads.topUpMaxTenor': 'months',
+    'leads.prioritasThreshold': 'rp', 'leads.kprMinIncome': 'rpMonth',
     'leads.k': 'int'
   };
 
@@ -148,8 +141,7 @@
   // number ever sits next to a key in this file (a test checks every line that names a key).
   var KEY_RULE = {
     'kpr.capPct': 'kprCap',
-    'leads.prioritasThreshold': 'rpPositive', 'leads.kkbMinIncome': 'rpPositive', 'leads.kprMinIncome': 'rpPositive',
-    'leads.topUpMaxTenor': 'months',
+    'leads.prioritasThreshold': 'rpPositive', 'leads.kprMinIncome': 'rpPositive',
     'leads.k': 'groupSize'
   };
 
@@ -173,13 +165,13 @@
   var OPTIONAL = ['kpr.capPct', 'leads.k'];
 
   var REQUIRED = {
-    leads: ['leads.prioritasThreshold', 'leads.kkbMinIncome', 'leads.kprMinIncome', 'leads.topUpMaxTenor']
+    leads: ['leads.prioritasThreshold', 'leads.kprMinIncome']
   };
 
   var GROUPS = [
     { id: 'kpr', label: 'KPR (opsional)', optional: true, keys: ['kpr.capPct'] },
     { id: 'leads', label: 'Ambang daftar leads', optional: false,
-      keys: ['leads.prioritasThreshold', 'leads.kkbMinIncome', 'leads.kprMinIncome', 'leads.topUpMaxTenor', 'leads.k'] }
+      keys: ['leads.prioritasThreshold', 'leads.kprMinIncome', 'leads.k'] }
   ];
   var LEAD_KEYS = GROUPS[GROUPS.length - 1].keys;
   var CARD_KEYS = KEYS.filter(function (k) { return LEAD_KEYS.indexOf(k) < 0; });
@@ -418,7 +410,7 @@
     var r = check(key, v, { source: 'vault' });
     return r.ok ? r.value : null;
   }
-  // Unknown key names (such as the keys withdrawn by D39 in an older copy) are dropped here.
+  // Unknown key names (such as the keys withdrawn by D39 and D41 in an older copy) are dropped here.
   function cleanKeys(a) { return Array.isArray(a) ? inKeyOrder(a.filter(isKey)) : []; }
   function cleanChanges(a) {
     if (!Array.isArray(a)) return [];
@@ -493,7 +485,7 @@
     } else if (e.act === 'leads-off') t = 'Daftar leads dimatikan dan dihapus' + by;
     else if (e.act === 'leads-k') t = 'Kelompok terkecil diubah dari ' + fmtNum(d.from) + ' menjadi ' + fmtNum(d.to) + by;
     else if (e.act === 'policy-set') {
-      // An entry from an older copy whose keys were all withdrawn (D39) keeps its date and initials only.
+      // An entry from an older copy whose keys were all withdrawn (D39, D41) keeps its date and initials only.
       var named = Array.isArray(d.keys) ? d.keys.filter(isKey) : [];
       t = 'Angka kebijakan diubah' + (named.length ? ': ' + listText(named) : '') + by;
     } else if (e.act === 'policy-clear') t = 'Angka kebijakan dikosongkan' + by;
@@ -539,9 +531,7 @@
   function forLeads() {
     return {
       prioritasThreshold: val('leads.prioritasThreshold'),
-      kkbMinIncome: val('leads.kkbMinIncome'),
       kprMinIncome: val('leads.kprMinIncome'),
-      topUpMaxTenor: val('leads.topUpMaxTenor'),
       k: kNow()
     };
   }
@@ -667,7 +657,7 @@
     return out;
   }
 
-  /** Unknown keys (such as those withdrawn by D39) are ignored and listed in `dropped`; never an error. */
+  /** Unknown keys (such as those withdrawn by D39 and D41) are ignored and listed in `dropped`; never an error. */
   function vaultLoad(obj) {
     var before = filledKeys(), loaded = [], dropped = [];
     S = fresh();

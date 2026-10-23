@@ -8,7 +8,9 @@
  * per-section derived blocks that sections register. Kampus (id 'campus', #s=campus)
  * adds no bank dataset and no state key: its list sort lives in mcd.campus.ui.v1 and
  * the 15 km / 30 km scope of Sekolah and Kampus in sessionStorage (MCD.inst.scope),
- * never in the hash (V6_SPEC D4: a view setting, not a filter).
+ * never in the hash (V6_SPEC D4: a view setting, not a filter). V8 (docs/V8_SPEC.md §2.1): the shown sections come
+ * from MCD.config.sections (nine on keys 1–9; KPR hidden, so s=property is refused like an unknown id); popstate
+ * events of MCD.back layer entries are ignored and a push over a layer entry replaces it (M2).
  *
  * Load order: config → util → data-reference → state. Nothing runs at load time
  * except declarations: no hash read, no storage access, no data generation.
@@ -313,6 +315,13 @@
 
   function lastViewKey() { return (MCD.config && MCD.config.storageKeys && MCD.config.storageKeys.lastView) || 'mcd.lastView'; }
 
+  /** V8 M2 (MCD.back, assets/js/backstack.js): the history entry of an open layer keeps its marker when the hash is
+      replaced (a camera write while a phone sheet is open); markers carry an id only, never a name or a record. */
+  function layerState(hist) {
+    var s0 = null;
+    try { s0 = hist.state; } catch (e) { s0 = null; }
+    return s0 && typeof s0 === 'object' && (s0.mcdLayer || s0.mcdBase || s0.mcdHome) ? s0 : null;
+  }
   function writeHash(mode) {
     if (!hashCtl.enabled) return;
     if (hashCtl.suspended) { hashCtl.pending = hashCtl.pending === 'push' ? 'push' : mode; return; }
@@ -320,10 +329,17 @@
     if (!loc || !hist) return;
     var url = loc.pathname + loc.search + h;
     if ((loc.hash || '') === h) return;
+    /* V8 M2: a section or view change while a phone layer sits on top of the history replaces that layer's entry
+       (MCD.back.release), so Back never returns to a layer that is closed */
+    var B = MCD.back;
+    if (mode === 'push' && B && typeof B.release === 'function') {
+      try { if (B.release()) mode = 'replace-layer'; } catch (e) { /* push as before */ }
+    }
     try {
       hashCtl.lastWritten = h;
       if (mode === 'push' && hist.pushState) hist.pushState(null, '', url);
-      else if (hist.replaceState) hist.replaceState(null, '', url);
+      else if (mode === 'replace-layer' && hist.replaceState) hist.replaceState(null, '', url);
+      else if (hist.replaceState) hist.replaceState(layerState(hist), '', url);
     } catch (e) { warn('hash write', e); }
     try { if (MCD.util && MCD.util.storage) MCD.util.storage.set(lastViewKey(), h); } catch (e) { /* storage blocked: in-memory only */ }
   }
@@ -358,7 +374,9 @@
     hashCtl.enabled = true;
     if (!hashCtl.listening && W.addEventListener) {
       hashCtl.listening = true;
-      var onNav = function () {
+      var onNav = function (e) {
+        /* V8 M2: a layer entry of MCD.back (a phone sheet, Cari, Bantuan, Lainnya, a menu) is not a page */
+        if (e && e.type === 'popstate' && e.state && typeof e.state === 'object' && e.state.mcdLayer) return;
         var cur2 = W.location ? W.location.hash : '';
         if (cur2 === hashCtl.lastWritten) return;
         applyHash(cur2, { source: 'hash' });

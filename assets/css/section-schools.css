@@ -20,7 +20,7 @@ body[data-section="schools"] {
   font: inherit; font-weight: 600; color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
 }
-.sk-link:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .sk-link:hover { text-decoration-color: var(--text-1); } }
 .sk-link:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
 .sk-note { margin: 8px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
 .sk-warn { margin: 8px 0 0; font: 500 12px/17px var(--font-sans); color: var(--warn); }
@@ -145,7 +145,7 @@ body[data-section="schools"] {
   background: var(--surface-well); cursor: pointer; text-align: left; color: var(--text-1);
   transition: border-color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
 }
-.sk-mini__row:hover { border-color: var(--rule-strong); background: var(--surface-hover); }
+@media (hover: hover) { .sk-mini__row:hover { border-color: var(--rule-strong); background: var(--surface-hover); } }
 .sk-mini__row:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
 .sk-mini__row.is-far { opacity: .62; }
 .sk-mini__badge {
@@ -192,7 +192,7 @@ body[data-section="schools"] .pg-rail .pg-cards { display: none; }
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left; cursor: pointer;
   border: 1px solid var(--rule); border-left: 3px solid var(--status-ok); border-radius: var(--r-ctl); background: var(--surface-well); color: var(--text-1);
 }
-.sk-dl__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .sk-dl__row:hover { background: var(--surface-hover); } }
 .sk-dl__row.is-soon { border-left-color: var(--status-mid); }
 .sk-dl__row.is-ended { border-left-color: var(--status-bad); }
 .sk-dl__name { font: 600 13px/18px var(--font-sans); }
@@ -225,7 +225,7 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
   position: relative; flex: none; height: 40px; padding: 0 10px; border: 0; background: none; cursor: pointer;
   font: 600 13px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
 }
-.sk-tab:hover { color: var(--text-1); }
+@media (hover: hover) { .sk-tab:hover { color: var(--text-1); } }
 .sk-tab[aria-selected="true"] { color: var(--text-1); }
 .sk-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--grad-accent); }
 .sk-tab:focus-visible { outline: 1px solid var(--signal); outline-offset: -4px; }
@@ -320,7 +320,7 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
 .sk-step--ok { --sk-c: var(--status-ok); }
 .sk-step--mid { --sk-c: var(--status-mid); }
 .sk-step--bad { --sk-c: var(--status-bad); }
-.sk-step:hover { background: var(--surface-hover); }
+@media (hover: hover) { .sk-step:hover { background: var(--surface-hover); } }
 .sk-step.is-on { border-color: var(--rule-platinum); border-left-color: var(--sk-c); background: var(--platinum-a10); }
 .sk-step__l { font: 500 12.5px/16.5px var(--font-sans); color: var(--text-1); }
 .sk-step.is-side .sk-step__l { color: var(--text-3); }
@@ -344,7 +344,7 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
 .sk-plist__row--ok { --sk-c: var(--status-ok); }
 .sk-plist__row--mid { --sk-c: var(--status-mid); }
 .sk-plist__row--bad { --sk-c: var(--status-bad); }
-.sk-plist__row:hover { background: var(--surface-hover); border-color: var(--rule-strong); border-left-color: var(--sk-c); }
+@media (hover: hover) { .sk-plist__row:hover { background: var(--surface-hover); border-color: var(--rule-strong); border-left-color: var(--sk-c); } }
 .sk-plist__name { font: 600 13px/18px var(--font-sans); color: var(--text-1); }
 .sk-plist__meta, .sk-plist__next { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
 .sk-plist__next:empty { display: none; }
@@ -407,6 +407,11 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
 /* sm: keep the Deep dive rail in view (the shared rule folds it into a drawer) */
 @media (min-width: 600px) and (max-width: 1023px) {
   body[data-section="schools"] .rail--l.pg-rail { transform: none; top: var(--stage-t); width: min(360px, 60vw); }
+}
+/* V8 integration (M13, T10): a phone turned sideways keeps the rail in the guide's left column (360 px left 47,7 % of
+   844 × 390 as free map) */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body[data-section="schools"] .rail--l.pg-rail { top: calc(var(--banner-h) + var(--topbar-h)); bottom: 0; width: min(300px, 36vw); }
 }
 /* xs (390): the page flows under the map; the workbench follows the rail */
 @media (max-width: 599px) {
@@ -579,7 +584,7 @@ body.rail-r-collapsed .sk-work { transform: translateX(calc(100% + var(--inset))
   transition: text-decoration-color var(--dur-hover) var(--ease-standard);
 }
 .sk-route .icon { flex: none; width: 13px; height: 13px; color: var(--text-2); }
-.sk-route:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .sk-route:hover { text-decoration-color: var(--text-1); } }
 .sk-route:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
 @media (pointer: coarse) { .sk-route { min-height: 40px; } }
 
@@ -720,7 +725,7 @@ body[data-section="schools"] .chip.sk-chip--tier[aria-pressed="true"] .chip__cou
 /* "Kontak & identitas" (fallback without MCD.inst): links open only on a click, in a new tab */
 .sk-ext { display: inline-flex; align-items: center; gap: 4px; font: 600 12.5px/18px var(--font-sans); color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; overflow-wrap: anywhere; }
-.sk-ext:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .sk-ext:hover { text-decoration-color: var(--text-1); } }
 .sk-ext:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
 .sk-ext .icon { width: 12px; height: 12px; flex: none; }
 .sk-kvv { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
@@ -782,3 +787,16 @@ body[data-section="schools"] .chip.sk-chip--tier[aria-pressed="true"] .chip__cou
 /* "Lihat daftar SMA" on a short screen opens the drawer to full height: the list then fills it (the half and peek
    drawers keep the 280 px list, which scrolls) */
 .sk-work.ws-drawer.is-full .sk-ex--list .sk-table { height: max(280px, calc(var(--ws-drawer-vis, 0px) - 286px)); }
+
+/* ── V8 phones (MOBILE_UX_PLAN M3, M7, M15; docs/V8_SPEC.md §5.7) ─────────────────────────────── */
+@media (pointer: coarse) {
+  .sk-calc__in, .sk-shares__in { min-height: 44px; }              /* M3: 16 px text from shell.css, 44 px tall */
+  .sk-route { min-height: 44px; }                                  /* M7 */
+}
+@media (max-width: 767px) {
+  .sk-fg .seg__opt, .sk-route { min-height: 44px; }                /* M7: the filter switches and the route link */
+}
+@media (max-width: 599px) {
+  /* M15: no fixed-height scroller inside the flowing phone page */
+  .sk-ex--fill .sk-table { height: auto; max-height: 440px; max-height: min(440px, 60svh); overscroll-behavior: contain; }
+}

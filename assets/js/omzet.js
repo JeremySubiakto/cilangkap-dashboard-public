@@ -25,11 +25,13 @@
  *   kecSummary(kecId) → {kecamatanId, n, estimated, none, counts: {b1..b5}, bands, total, totalLabel, totalYearLabel,
  *                  bySize, observed, tax: {id, area, year, lines} | null, note, caption, legal}
  *   taxCheck(areaId) · categoryOf(i) · bandOf(rpPerMonth) · sizeOf(rpPerYear) · setFunding(model, matchResult)
+ *   V8 (docs/V8_SPEC.md §3.4, D49): warm({sliceMs: 40, onProgress(done, total)}) → Promise<{n, ms}> (every listing in idle
+ *   slices; at once when warm; starts over after a data change) · isWarm() · bandFor(i) → 'b1'…'b5' | null (= estimate(i).band)
  *   rp(v[, {long}]) 'Rp30 jt' | 'Rp30 juta' · rpRange(lo, hi[, {long}]) 'Rp10–40 jt' · num(n) '1.234'
  *   BANDS · ADJ · CAPTION · LEGAL · TIP · TIER_TEXT · create(deps) · clearCache()
  *   deps: {bench, exists(i), factors(i), category(i), group(i), chain(i), notMerchant(i), area(i) → {kecamatanId}, lvmCat(i),
  *          listings() → [{i, kecamatanId}], links(i) → {lvmId, edcId}, record(id) → {kind: 'lvm'|'edc', rec, known?: {trx, vol}},
- *          funding() → {model, match}, version() → [refs]}
+ *          funding() → {model, match}, version() → [refs], now() → ms, schedule(fn) (warm's idle slices; tests use a fake clock)}
  * UMD: MCD.omzet in the browser (classic script), module.exports in Node.
  * ========================================================================== */
 (function (root, factory) {
@@ -70,6 +72,8 @@
   var CAPTION_OBS = 'Transaksi tercatat dari file bank yang diimpor';
   var LEGAL = 'Omzet di sini adalah perkiraan dari data publik, karena data pajak setiap usaha bersifat rahasia (UU KUP Pasal 34, UU 1/2022 Pasal 103).';
   var NONE_LABEL = 'Belum ada perkiraan omzet';
+  /* V8 final fix: a Funding Merchant tier 'nihil' says the EDC was not used, not that the shop has no turnover */
+  var IDLE_LINE = 'EDC tidak digunakan bulan ini';
   /* Funding Merchant report tiers: the labels of MCD.funding.TIERS (one term per object, COPY_DECK_ID rule 13), read live
      when that module is loaded; this copy is used before it loads. docs/OMZET_ESTIMATE.md §6. */
   var TIER_LABEL = {
@@ -165,7 +169,8 @@
   function create(deps) {
     deps = deps || {};
     var FUND = { model: null, match: null };
-    var C = { ver: null, list: null, byKec: null, tax: {}, est: {} };
+    /* gen counts every reset, so a warm-up in progress (warm) notices a data change and starts over */
+    var C = { ver: null, list: null, byKec: null, tax: {}, est: {}, band: {}, warm: false, gen: 0 };
 
     /* ---------- live inputs (each replaced by deps.<name> when given) */
 
@@ -181,7 +186,12 @@
     function extra() {
       var E = root && root.MCD_SME_EXTRA, P = root && root.MCD_SME_POIS;
       if (!E || !P || !P.rows || typeof E.catOf !== 'function') return null;
-      if (XA.E !== E || XA.P !== P) { XA.E = E; XA.P = P; XA.ok = typeof E.alignedWith === 'function' ? !!safe(function () { return E.alignedWith(P); }, false) : true; }
+      if (XA.E !== E || XA.P !== P) {
+        XA.E = E; XA.P = P;
+        /* V8 fix round (D49 ≤ 50 ms tasks): MCD.lvm checked this pair for its match and keeps the answer (about 55 ms saved) */
+        var L = M() && M().lvm, viaL = L && typeof L.extraFor === 'function' ? safe(function () { return L.extraFor(P); }) : null;
+        XA.ok = viaL === E ? true : (typeof E.alignedWith === 'function' ? !!safe(function () { return E.alignedWith(P); }, false) : true);
+      }
       return XA.ok ? E : null;
     }
     var D = {
@@ -225,6 +235,12 @@
         return null;
       },
       funding: deps.funding || function () { return FUND.model ? FUND : null; },
+      /* V8 fix round: prime(ms, now) → true when the factor provider is ready, else it worked for about ms (MCD.sme's
+         first build of its candidate list takes about 0,2 s at once; warm() spreads it over idle slices) */
+      prime: deps.prime || (deps.factors ? function () { return true; } : function (ms, now) {
+        var S = M() && M().sme;
+        return S && typeof S.warmFactors === 'function' ? safe(function () { return S.warmFactors(ms, now); }, true) !== false : true;
+      }),
       version: deps.version || function () { return [lvmResult(), bench(), root && root.MCD_AREA_WEALTH, root && root.MCD_SME_EXTRA, root && root.MCD_SME_POIS, FUND.model, FUND.match]; }
     };
     function liveListings() {
@@ -242,12 +258,13 @@
 
     /* ---------- caches, dropped when an input changes */
 
+    function reset(ver) { C.ver = ver; C.list = null; C.byKec = null; C.tax = {}; C.est = {}; C.band = {}; C.warm = false; C.gen++; }
     function fresh() {
       var v = safe(D.version, []) || [];
       var same = C.ver && C.ver.length === v.length && v.every(function (x, k) { return x === C.ver[k]; });
-      if (!same) { C.ver = v; C.list = null; C.byKec = null; C.tax = {}; C.est = {}; }
+      if (!same) reset(v);
     }
-    function clearCache() { C.ver = null; C.list = null; C.byKec = null; C.tax = {}; C.est = {}; }
+    function clearCache() { reset(null); }
     function listings() {
       fresh();
       if (!C.list) {
@@ -600,16 +617,23 @@
     function display(ref) {
       var obs = observed(ref), p = obs && obs.ids && obs.ids.poi != null ? obs.ids.poi : poiOf(ref);
       var est = p != null ? estimate(p) : null;
-      if (obs) {
-        var lines = obs.recorded ? [obs.recorded.note].concat(obs.lines) : obs.lines.slice(1);
-        return { kind: 'observed', primary: obs.recorded ? obs.recorded.label : obs.lines[0], lines: lines, observed: obs, estimate: est, showEstimate: false,
-          caption: obs.caption, legal: obs.legal };
+      /* V8 final fix (critic, 24 Oct 2026): a Funding Merchant tier 'nihil' (no EDC transaction this month) is never shown
+         as the omzet. Its two tier lines become one IDLE_LINE; when nothing else of the bank's files measures turnover,
+         the public estimate (or "Belum ada perkiraan omzet") stays, with that line. */
+      var idle = !!(obs && obs.funding && obs.funding.tierFreq === 'nihil');
+      var ol = obs ? (idle ? obs.lines.filter(function (l) { return l !== obs.funding.freqText && l !== obs.funding.svText; }) : obs.lines) : [];
+      if (obs && (obs.recorded || ol.length)) {
+        if (idle) ol = ol.concat([IDLE_LINE]);
+        var lines = obs.recorded ? [obs.recorded.note].concat(ol) : ol.slice(1);
+        return { kind: 'observed', primary: obs.recorded ? obs.recorded.label : ol[0], lines: lines, observed: obs, estimate: est, showEstimate: false,
+          caption: obs.caption, legal: obs.legal, idle: idle };
       }
+      var pre = idle ? [IDLE_LINE] : [];
       if (est && est.kind === 'estimate') {
-        return { kind: 'estimate', primary: est.label, lines: ['Cocok: ' + est.fitText, est.sizeLabel + ' (PP 7/2021)'], observed: null, estimate: est, showEstimate: true,
-          caption: est.caption, legal: est.legal };
+        return { kind: 'estimate', primary: est.label, lines: pre.concat(['Cocok: ' + est.fitText, est.sizeLabel + ' (PP 7/2021)']), observed: obs || null, estimate: est, showEstimate: true,
+          caption: est.caption, legal: est.legal, idle: idle };
       }
-      return { kind: 'none', primary: NONE_LABEL, lines: est ? est.basis.slice(0, 2) : [], observed: null, estimate: est, showEstimate: false, caption: caption(), legal: legal() };
+      return { kind: 'none', primary: NONE_LABEL, lines: pre.concat(est ? est.basis.slice(0, 2) : []), observed: obs || null, estimate: est, showEstimate: false, caption: caption(), legal: legal(), idle: idle };
     }
 
     /** kecSummary(kecId): listings per band and the estimated total for the kecamatan card, with the area's restaurant tax as context. */
@@ -642,12 +666,96 @@
     function setFunding(model, match) { FUND.model = model || null; FUND.match = match || (model && model.match) || null; clearCache(); return !!FUND.model; }
     if (deps.fundingModel) setFunding(deps.fundingModel, deps.fundingMatch);
 
+    /* ---------- V8 (docs/V8_SPEC.md §3.4, D49): the band of every listing, warmed in idle slices */
+
+    /** bandFor(i) → 'b1'…'b5' | null: the band of listing i's estimate (equal to estimate(i).band), cached per data version. */
+    function bandFor(i) {
+      if (i == null || i === '' || typeof i === 'boolean') return null;
+      i = +i;
+      if (!isNum(i)) return null;
+      fresh();
+      if (has(C.band, i)) return C.band[i];
+      var x = core(i), b = null;
+      if (x && x.kind === 'estimate') { var bo = bandOf(Math.round(x.clipped / 1e5) * 1e5); b = bo ? bo.id : null; }   // the rounding of estimate()
+      C.band[i] = b;
+      return b;
+    }
+    /** isWarm() → true once warm() has estimated every listing of the current data (false again after a data change). */
+    function isWarm() { fresh(); return C.warm === true; }
+    function clock() {
+      if (typeof deps.now === 'function') return deps.now();
+      var p = root && root.performance;
+      return p && typeof p.now === 'function' ? p.now() : Date.now();
+    }
+    function later(fn) {
+      if (typeof deps.schedule === 'function') return deps.schedule(fn);
+      if (root && typeof root.requestIdleCallback === 'function') return root.requestIdleCallback(fn, { timeout: 1000 });
+      return setTimeout(fn, 0);
+    }
+    var WARM = null;     // the warm-up in progress: {promise, prog: [fn], slice, ms}
+    /**
+     * warm({sliceMs: 40, onProgress(done, total)}) → Promise<{n, ms}>: estimates every listing in idle slices of at most
+     * sliceMs (≤ 45; each estimate ≤ 2 ms, so no task passes 50 ms). Resolves at once when warm; a second call while one
+     * runs shares it; a data change (or clearCache, setFunding) during the run starts the pass over. ms: busy time.
+     * V8 fix round: the cold work is split too: the list of listings in a task of its own, then the factor provider's
+     * first build (D.prime: MCD.sme's crowd pass and candidate list) in slices, then the estimates.
+     */
+    function warm(o) {
+      o = o || {};
+      var slice = isNum(o.sliceMs) && o.sliceMs > 0 ? Math.min(o.sliceMs, 45) : 40;
+      var prog = typeof o.onProgress === 'function' ? o.onProgress : null;
+      if (isWarm()) {
+        var n0 = (C.list || listings()).length;
+        if (prog) safe(function () { prog(n0, n0); });
+        return Promise.resolve({ n: n0, ms: 0 });
+      }
+      if (WARM) { if (prog) WARM.prog.push(prog); WARM.slice = Math.min(WARM.slice, slice); return WARM.promise; }
+      var run = WARM = { prog: prog ? [prog] : [], slice: slice, ms: 0, promise: null };
+      run.promise = new Promise(function (resolve) {
+        var gen = -1, list = null, k = 0, primed = -1;
+        function step() {
+          var t0 = clock();
+          var cur = listings();
+          if (gen !== C.gen || list !== cur) {
+            gen = C.gen; list = cur; k = 0;
+            /* the list of listings was built in this task: the estimates start in the next one */
+            if (primed !== gen) { run.ms += clock() - t0; later(step); return; }
+          }
+          var total = list.length;
+          /* the factor provider's first build, in slices (each task stops at sliceMs) */
+          if (primed !== gen) {
+            var ready = safe(function () { return D.prime(run.slice, clock); }, true) !== false;
+            if (ready) primed = gen;
+            run.ms += clock() - t0;
+            run.prog.forEach(function (p) { safe(function () { p(0, total); }); });
+            later(step);
+            return;
+          }
+          while (k < total) {
+            bandFor(list[k].i);
+            k++;
+            if (clock() - t0 >= run.slice) break;
+          }
+          run.ms += clock() - t0;
+          var done = k;
+          run.prog.forEach(function (p) { safe(function () { p(done, total); }); });
+          if (k < total || gen !== C.gen) { later(step); return; }
+          C.warm = true;
+          WARM = null;
+          resolve({ n: total, ms: Math.round(run.ms) });
+        }
+        later(step);
+      });
+      return run.promise;
+    }
+
     return {
       estimate: estimate, observed: observed, display: display, kecSummary: kecSummary, taxCheck: taxCheck, categoryOf: categoryOf,
       bandOf: bandOf, sizeOf: sizeOf, setFunding: setFunding, clearCache: clearCache,
+      warm: warm, isWarm: isWarm, bandFor: bandFor,
       rp: rp, rpRange: rpRange, num: num, tierLine: tierLine,
       BANDS: BANDS, ADJ: ADJ, EDC_FROM: EDC_FROM, EDC_ALL_FROM: EDC_ALL_FROM, FIT_TEXT: FIT_TEXT, TIER_TEXT: TIER_TEXT,
-      CAPTION: CAPTION, CAPTION_OBS: CAPTION_OBS, LEGAL: LEGAL, NONE_LABEL: NONE_LABEL, TIP: TIP,
+      CAPTION: CAPTION, CAPTION_OBS: CAPTION_OBS, LEGAL: LEGAL, NONE_LABEL: NONE_LABEL, IDLE_LINE: IDLE_LINE, TIP: TIP,
       create: create
     };
   }

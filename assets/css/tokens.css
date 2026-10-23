@@ -60,9 +60,9 @@
   --kol-1: #4CC38A;  --kol-2: #E8A13A;  --kol-3: #F2925B;  --kol-4: #F26D5B;  --kol-5: #C8475E;
 
   /* ── Product categorical (each also has a glyph, §B.5) ── */
-  --p-ksm:   #5AA9FF;   /* azure     ● circle            */
+  --p-azure: #5AA9FF;   /* azure     ● circle            */
   --p-kpr:   #3FC1A5;   /* jade      ■ square            */
-  --p-kkb:   #E8875B;   /* copper    ◆ diamond           */
+  --p-copper: #E8875B;   /* copper    ◆ diamond           */
   --p-cc:    #B58CFF;   /* amethyst  ▲ triangle          */
   --p-mg:    #EF7A9A;   /* rose      ⬢ hexagon           */
   --p-pen:   #B8D35A;   /* lime      ✦ four-point star   */
@@ -300,7 +300,7 @@ body[data-section="merchants"], body[data-section="schools"], body[data-section=
  * 7.9:1, text-3 5.5:1, gold 5.9:1, gold-soft 7.2:1, pos 5.2:1, neg 5.2:1,
  * warn 5.0:1, signal 5.0:1 (lowest values, on --canvas).                    */
 :root[data-theme="day"] {
-  color-scheme: light;
+  color-scheme: only light;   /* V8 M12: the browser's own dark mode leaves Terang as it is */
 
   --canvas:            #F4F1EA;
   --surface-glass:     rgba(252, 250, 245, 0.86);
@@ -339,9 +339,9 @@ body[data-section="merchants"], body[data-section="schools"], body[data-section=
   --info:              #1C6580;
   --kol-1: #17734A;  --kol-2: #985700;  --kol-3: #B4561C;  --kol-4: #B5372A;  --kol-5: #8E2240;
 
-  --p-ksm:   #2F7FD8;
+  --p-azure: #2F7FD8;
   --p-kpr:   #168F78;
-  --p-kkb:   #C4602D;
+  --p-copper: #C4602D;
   --p-cc:    #8457DB;
   --p-mg:    #CC4C77;
   --p-pen:   #6F8C14;

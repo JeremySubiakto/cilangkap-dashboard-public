@@ -176,6 +176,8 @@ body[data-section="wealth"] .guide .wl-chips .chip { min-height: 40px; }
   .wl-seg .seg__opt, .guide .wl-seg .seg__opt, .wl-scope .seg__opt, .guide .wl-scope .seg__opt, .wl-row .scope .seg__opt, .guide .wl-row .scope .seg__opt,
   body[data-section="wealth"] .wl-chips .chip, body[data-section="wealth"] .guide .wl-chips .chip,
   .wl-mini__row, .wl-row-btn, .wl-kec__row, body[data-section="wealth"] .btn--bar { min-height: 44px; }
+  /* M7 (MOBILE_UX_PLAN): the drawer tabs and chip buttons too */
+  .wl-tab, .wl-chip-btn { min-height: 44px; }
   body[data-section="wealth"] .wl-chips .chip { white-space: normal; }
   .wl-work:not(.ws-drawer) { position: relative; inset: auto; width: auto; transform: none; z-index: auto; border-radius: var(--r-panel); }
   .wl-work:not(.ws-drawer):not(.is-open) { display: none; }

@@ -7,10 +7,13 @@
  * only when app.js calls MCD.config.loadSettings() inside boot(), i.e.
  * after the password gate has unlocked.
  *
- * Scope (branch decisions 15 and 16 Oct 2026, docs/COPY_STYLE_EN.md items 10–22; v6, item 45 and V6_SPEC D10):
- *   - Six sections on keys 1–6: Ringkasan · Merchant (LVM & EDC) · Sekolah (SMA, SMK, MA) · Kampus · KPR ·
- *     Data & Privasi. Kampus (id 'campus', hash s=campus) sits between Sekolah and KPR (18 Oct 2026).
- *     Ringkasan and Data & Privasi are full-width pages without a map (layout 'page', UX fix plan A-03).
+ * Scope (branch decisions 15 and 16 Oct 2026, docs/COPY_STYLE_EN.md items 10–22; v6, item 45 and V6_SPEC D10;
+ * V8, docs/V8_SPEC.md D42, D43, D53):
+ *   - Nine sections on keys 1–9; KPR hidden on key 5: Ringkasan · Merchant (LVM & EDC) · Sekolah (SMA, SMK, MA) ·
+ *     Kampus · (KPR, hidden, key reserved) · Kesehatan · Calon Prioritas ┊ Posisi cabang · Data & Privasi.
+ *     Two groups: 'pasar' (1–7) and 'cabang' (8–9). Kampus (id 'campus', hash s=campus) sits between Sekolah and KPR
+ *     (18 Oct 2026). Ringkasan, Posisi cabang and Data & Privasi are full-width pages without a map (layout 'page',
+ *     UX fix plan A-03). The phone bar has six fixed slots: the first five shown ids of PHONE_ORDER and "Lainnya".
  *   - UI words in Bahasa Indonesia (item 19); internal ids stay English (overview, merchants, …).
  *   - Every map is flat and north-up: no 2D/3D toggle, no tilt, no orbit, no 3D buildings.
  *   - statusScale + coverageBands: the shared green / amber / red / grey colour code.
@@ -32,8 +35,10 @@
 
   /* ------------------------------------------------------------ sections */
 
-  // Registry: six sections on keys 1–6 (branch decision 15 Oct 2026, COPY_STYLE_EN item 14; Kampus added by item 45,
-  // V6_SPEC D10: KPR moved to key 5, Data & Privasi to key 6).
+  // Registry: nine sections on keys 1–9 (branch decision 15 Oct 2026, COPY_STYLE_EN item 14; Kampus added by item 45,
+  // V6_SPEC D10; V8 D42: Kesehatan 6, Calon Prioritas 7, Posisi cabang 8, Data & Privasi 9; KPR keeps key 5, hidden).
+  // group: 'pasar' (the market sections, 1–7) | 'cabang' (the branch's own pages, 8–9); the desktop row draws a hairline
+  // between the two groups.
   // layout: 'rails' (§C.3) | 'sheet' (§C.4) | 'sheet-wide' | 'page' (no map: Ringkasan, Data & Privasi)
   // posture.imagery: key of map.postures · posture.camera: key of map.presets or null (keep camera)
   // posture.rings: key of rings.sets · posture.layerSet: the section's layer family · posture.deck: deck layers on
@@ -43,20 +48,20 @@
       help: 'Semua angka utama cabang dalam satu halaman.\nBerapa merchant dalam 15 km yang telah terdaftar di Livin’ Merchant.\nKecamatan yang perlu dikunjungi lebih dulu.\nPencapaian target UREG (pengguna terdaftar) dan USAK (pengguna aktif).',
       sheets: ['1_lvm', '2_edc'],
       file: 'assets/js/section-overview.js', css: 'assets/css/section-overview.css',
-      layout: 'page',
+      layout: 'page', group: 'pasar',
       posture: { imagery: 'full', camera: null, rings: null, layerSet: null, deck: false } },
     { id: 'merchants', key: '2', label: 'Merchant', short: 'Merchant', title: 'Merchant (LVM & EDC)', titleFull: 'Akuisisi merchant di sekitar Mabes TNI: Livin’ Merchant dan EDC Mandiri',
       help: 'Semua toko kelontong, restoran dan UMKM dalam 5 km dari Mabes TNI, atau 15 km.\nSetiap merchant berstatus “Sudah diakuisisi” atau “Belum ada di LVM”.\nLihat juga status EDC Mandiri dan sisa potensi per kecamatan.',
       sheets: ['1_lvm', '2_edc'],
       file: 'assets/js/section-merchants.js', css: 'assets/css/section-merchants.css',
-      layout: 'sheet',
+      layout: 'sheet', group: 'pasar',
       posture: { imagery: 'merchants', camera: 'sme15', rings: 'merchants', layerSet: 'merchants', deck: true } },
     /* v6 (V6_SPEC §3.2): SMK and MA join SMA; the 5 / 15 / 30 km scope lives in the section (MCD.inst.scope), not here */
     { id: 'schools', key: '3', label: 'Sekolah', short: 'Sekolah', title: 'Sekolah (SMA, SMK, MA)', titleFull: 'SMA, SMK dan MA di sekitar Mabes TNI',
       help: 'SMA di sekitar Mabes TNI dan KCP Cilangkap.\nLihat SMA yang telah menjadi nasabah Mandiri dan yang masih dapat didekati.\nLihat juga perkiraan siswa berusia 17 tahun ke atas, yang dapat memiliki KTP.',
       sheets: ['3_sekolah'],
       file: 'assets/js/section-schools.js', css: 'assets/css/section-schools.css',
-      layout: 'rails',
+      layout: 'rails', group: 'pasar',
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'schools', deck: true } },
     /* v6 (V6_SPEC §6.1, D10): universities, institutes, sekolah tinggi, politeknik, akademi, design and course schools
        within 30 km; engine assets/js/campus-core.js (MCD.campus), data/campuses.js through MCD.app.lazy('campuses') */
@@ -64,7 +69,7 @@
       help: 'Universitas, institut, sekolah tinggi, politeknik, akademi, serta sekolah desain dan kursus dalam 5, 15 atau 30 km dari Mabes TNI.\nLihat jumlah mahasiswa dan dosen tetap dari PDDikti.\nPayroll melalui kerja sama dengan kampus, Livin’ Merchant untuk kantin dan koperasi, Tabungan untuk mahasiswa.',
       sheets: [],
       file: 'assets/js/section-campus.js', css: 'assets/css/section-campus.css',
-      layout: 'rails',
+      layout: 'rails', group: 'pasar',
       posture: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true } },
     /* hidden: true (22 Oct 2026) takes KPR out of the section row, the keys, search and the Ringkasan doors; the code
        and data stay. Set it to false to show KPR again. */
@@ -72,13 +77,35 @@
       help: 'Proyek perumahan baru dalam 5, 15 atau 30 km dari Mabes TNI.\nIsi penghasilan bersih untuk melihat rumah yang terjangkau.\nHitung angsuran KPR di kalkulator.',
       sheets: [],
       file: 'assets/js/section-property.js', css: 'assets/css/section-property.css',
-      layout: 'rails',
+      layout: 'rails', group: 'pasar',
       posture: { imagery: 'full', camera: 'ring30', rings: 'property', layerSet: 'property', deck: true } },
-    { id: 'data', key: '6', label: 'Data & Privasi', short: 'Data', title: 'Data & Privasi', titleFull: 'Data & Privasi',
+    /* V8 (docs/V8_SPEC.md §2.1, D42; docs/HEALTH_SPEC.md H9, H12 amended to 5 km): hospitals, clinics and beauty clinics;
+       engine assets/js/health-core.js (MCD.health), data/health-facilities.js through MCD.app.lazy('health-facilities') */
+    { id: 'health', key: '6', label: 'Kesehatan', short: 'Kesehatan', title: 'Kesehatan (rumah sakit dan klinik)', titleFull: 'Rumah sakit, klinik dan klinik kecantikan di sekitar Mabes TNI',
+      help: 'Rumah sakit, klinik kesehatan dan klinik kecantikan dalam 5, 15 atau 30 km dari Mabes TNI.\nRumah sakit tampil lebih besar dari klinik, menurut jumlah tempat tidur.\nRumah sakit: payroll, giro dan Virtual Account. Klinik: EDC, QRIS dan Livin’ Merchant.\nData dari Kemenkes, Dinas Kesehatan DKI Jakarta dan peta terbuka.',
+      sheets: [],
+      file: 'assets/js/section-health.js', css: 'assets/css/section-health.css',
+      layout: 'rails', group: 'pasar',
+      posture: { imagery: 'full', camera: '5', rings: 'schools', layerSet: 'health', deck: true } },
+    /* v7 (docs/V7_SPEC.md §5, D2; V8 D42): public places that point at Mandiri Prioritas customers; assets/js/wealth-core.js */
+    { id: 'wealth', key: '7', label: 'Calon Prioritas', short: 'Prioritas', title: 'Calon Prioritas', titleFull: 'Calon nasabah Prioritas dari sekolah, kampus, perumahan dan usaha belanja besar',
+      help: 'Tempat dengan biaya sekolah tinggi, perumahan atas dan usaha belanja besar.\nSemua angka perkiraan dari data publik dan tidak memuat data penghasilan perorangan.',
+      sheets: [],
+      file: 'assets/js/section-wealth.js', css: 'assets/css/section-wealth.css',
+      layout: 'rails', group: 'pasar',
+      posture: { imagery: 'full', camera: '5', rings: 'schools', layerSet: 'wealth', deck: true } },
+    /* v7 (docs/V7_SPEC.md §6, as trimmed by D39 and D41; V8 D42, D50): the branch's KPI against target and the area */
+    { id: 'position', key: '8', label: 'Posisi cabang', short: 'Posisi', title: 'Posisi cabang', titleFull: 'Posisi KPI cabang terhadap target dan area',
+      help: 'Capaian cabang dari file KPI bulanan area.\nSetiap kekurangan terhubung ke bagian yang membantu menutupnya.',
+      sheets: [],
+      file: 'assets/js/section-position.js', css: 'assets/css/section-position.css',
+      layout: 'page', group: 'cabang',
+      posture: { imagery: 'dimmed', camera: null, rings: null, layerSet: null, deck: false } },
+    { id: 'data', key: '9', label: 'Data & Privasi', short: 'Data', title: 'Data & Privasi', titleFull: 'Data & Privasi',
       help: 'Impor laporan bulanan Rev LVM apa adanya.\nImpor juga file EDC dan SMA dari template permintaan data.\nSimpan salinan terenkripsi agar data terbuka lagi saat masuk.\nFile hanya dibaca di komputer ini.',
       sheets: ['1_lvm', '2_edc', '3_sekolah'],
       file: 'assets/js/section-data.js', css: 'assets/css/section-data.css',
-      layout: 'page',
+      layout: 'page', group: 'cabang',
       posture: { imagery: 'dimmed', camera: null, rings: null, layerSet: null, deck: false } }
   ];
 
@@ -117,6 +144,8 @@
     { key: 't', scope: 'global', action: 'windows:tidy', label: 'Rapikan kartu dan panel' },
     { key: 'f6', scope: 'global', action: 'windows:next', label: 'Pindah ke panel berikutnya' },
     { key: 'shift+f6', scope: 'global', action: 'windows:prev', label: 'Pindah ke panel sebelumnya' },
+    /* V8 (docs/V8_SPEC.md §2.6, V7 §2.5): the visit plan in every section; no key opens the lead list */
+    { key: 'r', scope: 'global', action: 'plan:open', label: 'Buka rencana kunjungan' },
     { key: 'i', scope: 'property', action: 'property:income', label: 'Isi penghasilan bersih' },
     { key: 'k', scope: 'property', action: 'property:calculator', label: 'Buka kalkulator KPR' },
     { key: ',', scope: 'property', action: 'property:tenor-', label: 'Kurangi tenor 1 tahun' },
@@ -133,15 +162,12 @@
 
   /* ---------------------------------------------------------- programs */
 
-  // §F.4 verbatim, + AM-5 (SME) + property addendum (§3.4, §16). `end` inclusive.
+  // §F.4 verbatim, + AM-5 (SME) + property addendum (§3.4, §16). `end` inclusive. V8 D53: the programmes of the two
+  // removed consumer-credit products left this list (user decision 23 Oct 2026); mergePrograms refuses them.
   var PROGRAMS = [
-    { id: 'ksm-tni', label: 'KSM untuk TNI (AL, AU, Mabes TNI)', short: 'KSM TNI', product: 'KSM', end: '2026-10-31', terms: 'hingga Rp1 miliar · 15 tahun · bunga 8,25% tetap', src: 'bankmandiri.co.id/ksm-tni', origin: 'F.4' },
-    { id: 'ksm-hut28', label: 'KSM HUT Mandiri ke-28 (Livin’)', product: 'KSM', start: '2026-10-02', end: '2026-10-31', terms: 'bunga 8,25% · gaji melalui Mandiri', src: 'bankmandiri.co.id/ksm-hut-mandiri-28', origin: 'F.4' },
-    { id: 'ksm-tni-ad', label: 'KSM TNI AD Payroll', short: 'KSM TNI AD', product: 'KSM', end: '2026-12-31', terms: 'hingga Rp1,5 miliar · tanpa biaya provisi · potongan biaya admin Rp100.000', src: 'bankmandiri.co.id/ksm-tni-ad-payroll', origin: 'F.4' },
     { id: 'kpr-spesial', label: 'KPR bunga spesial, take over dan top up 7,77%', product: 'KPR', end: '2026-11-30', terms: 'Take over atau top up: bunga 7,77% tetap 10 tahun', src: 'bankmandiri.co.id/kpr-bunga-spesial', origin: 'F.4' },
     { id: 'kpr-apply', label: 'Pengajuan KPR dan KPR subsidi (FLPP)', product: 'KPR', end: '2026-12-31', terms: 'FLPP bunga 5% tetap · DP 1%', src: 'bankmandiri.co.id/kredit-pemilikan-rumah-bersubsidi', origin: 'F.4' },
-    { id: 'bi-ltv', label: 'DP 0% untuk KPR dan KKB (PADG 30/2025)', product: 'KPR', end: '2026-12-31', terms: 'Pinjaman hingga 100% harga (LTV 100%)', src: 'bi.go.id PADG 30/2025', origin: 'F.4' },
-    { id: 'livin-kkb', label: 'Bunga KKB mobil baru di Livin’', product: 'KKB', end: '2026-12-31', terms: 'Bunga flat mulai 1,45%, angsuran pertama dibayar di muka (ADDM)', src: 'bankmandiri.co.id/livin/auto', origin: 'F.4' },
+    { id: 'bi-ltv', label: 'DP 0% untuk KPR (PADG 30/2025)', product: 'KPR', end: '2026-12-31', terms: 'Pinjaman hingga 100% harga (LTV 100%)', src: 'bi.go.id PADG 30/2025', origin: 'F.4' },
     { id: 'lvm-mdr', label: 'MDR spesial Livin’ Merchant 0,3%', product: 'BIZ', end: '2026-12-31', terms: '0% untuk transaksi sampai Rp100.000 (aturan BI, mulai 1 Okt 2026)', src: 'bankmandiri.co.id/livin-merchant-special', origin: 'F.4' },
     { id: 'lvm-melaju', label: 'MELAJU Merchant Hoki', product: 'BIZ', start: '2026-08-01', end: '2026-12-31', terms: 'Rp200.000 untuk 100 merchant setiap bulan', src: 'bankmandiri.co.id/lvm-melaju', origin: 'F.4' },
     { id: 'kur-2026', label: 'Program KUR Mandiri 2026', product: 'BIZ', end: '2026-12-31', terms: 'KUR Super Mikro 3% · KUR Mikro dan Kecil 6% (Permenko 1/2026)', src: 'bankmandiri.co.id/kredit-usaha-rakyat-kur', origin: 'AM-5' },
@@ -270,6 +296,8 @@
     gate: { idleMinutes: 15, map: true },
 
     sections: VISIBLE,
+    /* V8 D43 (docs/V8_SPEC.md §2.3): one fixed order for the phone bar; slots = the first five shown ids, Lainnya = the rest */
+    PHONE_ORDER: ['overview', 'merchants', 'schools', 'health', 'campus', 'property', 'wealth', 'position', 'data'],
     layouts: LAYOUTS,
     keymap: KEYMAP,
     map: MAP,
@@ -292,8 +320,10 @@
     // distance: the shared travel-time switches of MCD.distance ("Jam sibuk", "Motor (tanpa tol)"), JSON {peak, noToll}
     // v6 (V6_SPEC §8.3): scope = sessionStorage {v: 1, schools: 5 | 15 | 30, campus: 5 | 15 | 30, merchants: 5 | 15} (numbers only, MCD.inst.scope);
     // campusUi = the Kampus list sort and the jenis shown (no names); seal = prefix of the encrypted follow-up stores (MCD.seal)
+    // V8 (§5.1 S1): healthUi, wealthUi and planUi are layout-only keys of Kesehatan, Calon Prioritas and Rencana kunjungan
     storageKeys: { settings: 'mcd.settings', lastView: 'mcd.lastView', theme: 'mcd.ui.theme', lastDownload: 'mcd.data.lastDownload', distance: 'mcd.distance.v1', windows: 'mcd.ui.windows.v1',
-      scope: 'mcd.scope.v1', campusUi: 'mcd.campus.ui.v1', seal: 'mcd.seal.v1.' },
+      scope: 'mcd.scope.v1', campusUi: 'mcd.campus.ui.v1', seal: 'mcd.seal.v1.',
+      healthUi: 'mcd.health.ui.v1', wealthUi: 'mcd.wealth.ui.v1', planUi: 'mcd.plan.ui.v1' },
 
     // Global view modes (U6). Stored in state.view and the URL hash (view=deep); default overview.
     views: [
@@ -334,6 +364,18 @@
   SECTIONS.forEach(function (s, i) { s.index = i; cfg.sectionById[s.id] = s; });
   cfg.sectionByKey = {};
   VISIBLE.forEach(function (s) { cfg.sectionByKey[s.key] = s; });
+  /**
+   * phoneBar() → {slots: [id × 5], more: [id]} (V8 D43, §2.3): the phone tab bar of six fixed slots. Slots = the first
+   * five SHOWN ids of PHONE_ORDER; Lainnya = the other shown ids in that order ("Rencana kunjungan" is added by the
+   * shell). A hidden section takes no slot; when KPR is shown again it is the first Lainnya row and no slot moves.
+   */
+  cfg.phoneBar = function () {
+    var shown = {};
+    (cfg.sections || []).forEach(function (s) { if (s && !s.hidden) shown[s.id] = true; });
+    var order = cfg.PHONE_ORDER.filter(function (id) { return shown[id]; });
+    (cfg.sections || []).forEach(function (s) { if (s && shown[s.id] && order.indexOf(s.id) < 0) order.push(s.id); });
+    return { slots: order.slice(0, 5), more: order.slice(5) };
+  };
   cfg.programById = {};
   PROGRAMS.forEach(function (p) { cfg.programById[p.id] = p; });
 
@@ -379,7 +421,7 @@
 
   /**
    * Program status on asOf: {live, upcoming, ended, daysLeft, level}.
-   * daysLeft = ceil((end − asOf) / day) with `end` inclusive (ksm-tni on 12 Okt → 19).
+   * daysLeft = ceil((end − asOf) / day) with `end` inclusive (kpr-spesial on 12 Okt → 49).
    * level: 'ended' | 'upcoming' | 'urgent' (≤ 30 days) | 'soon' (≤ 90) | 'normal'.
    */
   cfg.programStatus = function (p, asOf) {
@@ -400,11 +442,19 @@
       return s && s.live && (!product || p.product === product);
     }).sort(function (x, y) { return x.end < y.end ? -1 : (x.end > y.end ? 1 : (x.label < y.label ? -1 : 1)); });
   };
-  /** Appends programs (e.g. MCD_SME_PLAYS.meta.newPrograms) without duplicating ids. Returns added ids. */
+  /* V8 D53: a programme of a removed product never reaches the screen, whatever a later data file adds */
+  var REMOVED_PRODUCT = /\b(KSM|KKB)\b/i;   // D41: the two products the user removed (23 Oct 2026); checked, never shown
+  function removedProgram(p) {
+    return REMOVED_PRODUCT.test(String(p.product || '')) || REMOVED_PRODUCT.test(String(p.label || '')) ||
+      REMOVED_PRODUCT.test(String(p.short || '')) || REMOVED_PRODUCT.test(String(p.terms || '')) || REMOVED_PRODUCT.test(String(p.id || '').replace(/-/g, ' '));
+  }
+  cfg.isRemovedProgram = function (p) { return !!(p && removedProgram(p)); };
+  /** Appends programs (e.g. MCD_SME_PLAYS.meta.newPrograms) without duplicating ids. Returns added ids. Refuses a
+      programme of a removed product (D53). */
   cfg.mergePrograms = function (list) {
     var added = [];
     (list || []).forEach(function (p) {
-      if (!p || !p.id || cfg.programById[p.id]) return;
+      if (!p || !p.id || cfg.programById[p.id] || removedProgram(p)) return;
       var c = clone(p); c.origin = c.origin || 'merged';
       PROGRAMS.push(c); cfg.programById[c.id] = c; added.push(c.id);
     });

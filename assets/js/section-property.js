@@ -59,6 +59,8 @@
  *           Everything MCD.windows is feature-detected; the older drawer ignores the new fields.
  * Privacy   Income, instalments, cash and birth month live in memory only;
  *           nothing is written to storage or the URL hash.
+ * V8 (D41, §3.5; KPR stays hidden and nothing new is wired to it): the "Angsuran lain" hint says "kredit kendaraan"; phones: whole
+ *           numbers keep the numeric keypad, the calculator's decimal DP field is text with the decimal keypad (M16).
  * ========================================================================== */
 (function (MCD) {
   'use strict';
@@ -1716,7 +1718,7 @@
     var income = grp('Penghasilan', [
       field('Penghasilan bersih', r.income.el, { forId: incId, sub: 'per bulan' }),
       r.jointSw.el, r.joint.el,
-      field('Angsuran lain', r.existing.el, { forId: exId, sub: 'per bulan', hint: hint('Masukkan semua angsuran: kredit bank lain, KKB, kartu kredit, paylater, koperasi dan potongan gaji TWP.') })
+      field('Angsuran lain', r.existing.el, { forId: exId, sub: 'per bulan', hint: hint('Masukkan semua angsuran: kredit bank lain, kredit kendaraan, kartu kredit, paylater, koperasi dan potongan gaji TWP.') })
     ]);
 
     r.dsrSeg = seg([{ v: 0.3, label: '30%' }, { v: 0.4, label: '40%' }, { v: 0.7, label: '70%*', title: 'Hanya untuk program dengan gaji melalui Mandiri. Konfirmasikan dengan kebijakan kredit' }],
@@ -1724,7 +1726,8 @@
     r.dsrRange = rangeIn({ min: 30, max: 70, step: 1, value: Math.round(dsrNow() * 100), label: 'Persen DSR', onInput: function (v) { setInput({ dsr: v / 100 }); } });
     r.dsrOut = h('span', { class: 'pp-out' });
     r.ageMode = seg([{ v: false, label: 'Usia' }, { v: true, label: 'Bulan lahir' }], !!i.useBirth, function (v) { setInput({ useBirth: v }); syncControls(); }, { label: 'Usia atau bulan lahir' });
-    r.ageInp = h('input', { type: 'number', class: 'input input--num pp-age', min: '18', max: '70', step: '1', value: String(i.age), 'aria-label': 'Usia dalam tahun' });
+    /* M16: whole numbers keep the number field with the numeric keypad */
+    r.ageInp = h('input', { type: 'number', class: 'input input--num pp-age', min: '18', max: '70', step: '1', inputMode: 'numeric', value: String(i.age), 'aria-label': 'Usia dalam tahun' });
     r.ageInp.addEventListener('change', function () { var v = parseInt(r.ageInp.value, 10); if (isNum(v)) setInput({ age: clamp(v, 18, 70), tenorTouched: false }, { edited: true }); });
     r.birthInp = h('input', { type: 'month', class: 'input pp-birth', value: i.birthYm || '', 'aria-label': 'Bulan lahir (TTTT-BB)', placeholder: 'TTTT-BB', max: asOf().slice(0, 7) });
     r.birthInp.addEventListener('change', function () { setInput({ birthYm: r.birthInp.value, tenorTouched: false }, { edited: true }); });
@@ -1742,7 +1745,7 @@
     r.tenor = tenorPicker({ label: 'Tenor dalam tahun', onPick: function (y) { pickTenor(y); } });
     r.tenorOut = h('span', { class: 'pp-out' });
     r.dpSeg = seg(DP_OPTS.map(function (v) { return { v: v, label: v + '%' }; }), i.dpPct, function (v) { setInput({ dpPct: v }); syncControls(); }, { label: 'Uang muka (DP)' });
-    r.dpInp = h('input', { type: 'number', class: 'input input--num pp-dpin', min: '0', max: '90', step: '1', value: String(i.dpPct), 'aria-label': 'Persen uang muka' });
+    r.dpInp = h('input', { type: 'number', class: 'input input--num pp-dpin', min: '0', max: '90', step: '1', inputMode: 'numeric', value: String(i.dpPct), 'aria-label': 'Persen uang muka' });
     r.dpInp.addEventListener('change', function () { var v = parseFloat(r.dpInp.value); if (isNum(v)) { setInput({ dpPct: clamp(Math.round(v), 0, 90) }); syncControls(); } });
     r.dpNote = hint('');
     r.scheme = selectEl(schemeOptions(), i.schemeId, function (v) { setInput({ schemeId: v }); }, 'Skema KPR', 'pp-scheme');
@@ -1977,7 +1980,9 @@
     r.mapColor = seg([{ v: 'class', label: 'Kelas' }, { v: 'segment', label: 'Segmen' }, { v: 'price', label: 'Harga' }], st.map.colorBy,
       function (v) { setMapOpt({ colorBy: v }); }, { label: 'Warna peta (C)' });
     var mapRow = h('div', { class: 'pp-maprows' }, h('div', { class: 'pp-maprow' }, h('span', { class: 'pp-field__label', text: 'Warna peta' }), r.mapColor.el));
-    r.search = h('input', { type: 'search', class: 'input pp-search__in', placeholder: 'Cari proyek', 'aria-label': 'Cari nama proyek, developer atau kecamatan', value: st.filters.q || '' });
+    /* M3 (MOBILE_UX_PLAN): no capitals or "corrections" on project names; the keyboard's Enter key reads "Cari" */
+    r.search = h('input', { type: 'search', class: 'input pp-search__in', placeholder: 'Cari proyek', 'aria-label': 'Cari nama proyek, developer atau kecamatan', value: st.filters.q || '',
+      attrs: { enterkeyhint: 'search', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false' } });
     var deb = U().debounce(function () { setFilter({ q: r.search.value.trim() }); }, 150);
     r.search.addEventListener('input', deb);
     r.sort = selectEl([{ v: 'distance', label: DST() ? 'Urut: terdekat dari KCP' : 'Urut: jarak' }, { v: 'instalment', label: 'Urut: angsuran' }, { v: 'price', label: 'Urut: harga' },
@@ -2844,8 +2849,9 @@
       setCalc({ price: v, listPrice: v, loanTouched: false, priceTouched: true, fromSim: false, sourceProjectId: c.sourceProjectId && v !== S().calc.price ? null : S().calc.sourceProjectId });
     } });
     r.cDpSeg = seg(DP_OPTS.map(function (v) { return { v: v, label: v + '%' }; }), c.dpPct, function (v) { setCalc({ dpPct: v, loanTouched: false }); syncCalcInputs(); }, { label: 'Uang muka (DP)', cls: 'pp-seg--fill' });
-    r.cDpInp = h('input', { type: 'number', class: 'input input--num pp-dpin', min: '0', max: '90', step: '0.1', 'aria-label': 'Persen uang muka' });
-    r.cDpInp.addEventListener('change', function () { var v = parseFloat(r.cDpInp.value); if (isNum(v)) { setCalc({ dpPct: clamp(v, 0, 90), loanTouched: false }); syncCalcInputs(); } });
+    /* M16: one decimal ("12,5"): a text field with the decimal keypad that accepts "," or "." */
+    r.cDpInp = h('input', { type: 'text', class: 'input input--num pp-dpin', inputMode: 'decimal', autocomplete: 'off', 'aria-label': 'Persen uang muka' });
+    r.cDpInp.addEventListener('change', function () { var v = parseFloat(String(r.cDpInp.value || '').trim().replace(',', '.')); if (isNum(v)) { setCalc({ dpPct: clamp(v, 0, 90), loanTouched: false }); syncCalcInputs(); } });
     r.cDpRp = h('span', { class: 'pp-out' });
     var lid = uid('cloan');
     r.cLoan = moneyField({ id: lid, value: null, onChange: function (v) { if (isNum(v)) setCalc({ loan: v, loanTouched: true }); } });
@@ -2995,7 +3001,7 @@
     r.cRev.hidden = c.mode !== 'reverse';
     r.cPrice.set(c.price);
     r.cDpSeg.set(DP_OPTS.indexOf(Math.round(m.dpPct * 10) / 10) >= 0 ? Math.round(m.dpPct * 10) / 10 : null);
-    if (DOC.activeElement !== r.cDpInp) r.cDpInp.value = String(Math.round(m.dpPct * 10) / 10);
+    if (DOC.activeElement !== r.cDpInp) r.cDpInp.value = String(Math.round(m.dpPct * 10) / 10).replace('.', ',');
     r.cLoan.set(Math.round(m.loan));
     r.cScheme.fill(calcSchemeOptions(m), c.schemeId || (m.scheme && m.scheme.id));
     r.cStress.set(c.stressBps);

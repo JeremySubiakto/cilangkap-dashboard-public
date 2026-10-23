@@ -19,8 +19,11 @@
  * kind (MCD.plan.quick answers null until plan.js knows it), the 'sec-health' icon. Shared pieces as Kampus: MCD.inst
  * (scope), MCD.seal (through MCD.health.pipeline), MCD.windows, MCD.distance, MCD.territory, MCD.lvm.
  * Storage: mcd.health.ui.v1 {v, sortRs, sortKl, show, tab} (no name, id, number or place); the scope in sessionStorage
- * mcd.scope.v1 (through MCD.inst.scope when present). Safe DOM only (MCD.util.el, textContent). Nothing for KSM, KKB,
- * TNI loans or satker (D39).
+ * mcd.scope.v1 (through MCD.inst.scope when present). Safe DOM only (MCD.util.el, textContent). Nothing for the removed
+ * TNI credit products or satker (D39, D41).
+ * V8 (docs/V8_SPEC.md §4.4): the landing grammar health:tab:<rs|klinik|kec|jaringan|pipe>[:half[:<sort>]] (an unknown
+ * part is ignored), the chip "Merchant KCP Cilangkap" in Merchant terkait (MCD.funding, no band or amount), the search
+ * field's phone keyboard attributes (M3) and 44 px controls on phones (M7).
  * ========================================================================== */
 (function (MCD) {
   'use strict';
@@ -34,7 +37,7 @@
   var T = {
     title: 'Kesehatan',
     lede: 'Rumah sakit dan klinik dalam 5, 15 atau 30 km, dari data Kemenkes dan Dinkes DKI.',
-    shows: ['Rumah sakit tanda tambah, klinik lingkaran, klinik kecantikan bintang empat sudut.', 'Rumah sakit selalu lebih besar dari klinik.',
+    shows: ['Rumah sakit tanda tambah, klinik lingkaran, klinik kecantikan bintang empat sudut.', 'Rumah sakit lebih besar dari klinik dan dari lingkaran jumlah klinik.',
       'Rumah sakit: payroll, giro dan Virtual Account. Klinik: EDC, QRIS dan Livin’ Merchant.', 'Data dari Kemenkes, Dinas Kesehatan DKI Jakarta dan peta terbuka.'],
     scope: 'Cakupan', scopeLabel: 'Cakupan jarak dari Mabes TNI',
     scopeTip: 'Fasilitas kesehatan dalam radius 5 km, 15 km atau 30 km dari Mabes TNI. 15 km adalah cakupan pilot.',
@@ -103,7 +106,8 @@
       edcOn: 'EDC Mandiri: ada, aktif', edcOff: 'EDC Mandiri: ada, tidak aktif', edcNone: 'EDC Mandiri: belum ada di file EDC', go: 'Lihat di Merchant'
     },
     mWord: { 'bukan-merchant': 'Tanpa prioritas merchant', 'luar-15': 'Hanya dalam 15 km', potensi: 'Potensi', acquired: 'Sudah diakuisisi', not_yet: 'Belum ada di LVM',
-      'tanpa-peta': 'Tidak tercantum di peta publik', 'tidak-dihitung': 'Tidak dihitung', guess: 'Perlu diperiksa' },
+      'tanpa-peta': 'Tidak tercantum di peta publik', 'tidak-dihitung': 'Tidak dihitung', guess: 'Perlu diperiksa', ours: 'Merchant KCP Cilangkap' },
+    oursTip: 'Usaha ini ada di file funding merchant cabang.',
     notYetTip: 'Belum ada di LVM: usaha ini tidak ditemukan di file Livin’ Merchant yang diimpor.',
     notePh: 'Tulis langkah kerja. Jangan tulis nomor pribadi atau data pasien.',
     sealed: 'Terenkripsi dengan kata sandi dashboard.', memLine: 'Tindak lanjut hanya tersimpan selama halaman terbuka. Penyimpanan terenkripsi belum aktif.',
@@ -718,12 +722,27 @@
     ui.work = w;
   }
   function setTab(id) { if (st.tab === id && ui.work && ui.work.current === id) return; st.tab = id; saveUi(); renderWork(true); }
-  function goTab(id) {
+  /** goTab(id, how?): how 'half' opens the drawer at half height (a landing state, V8 §2.5); else the list rule. */
+  function goTab(id, how) {
     st.tab = TABS.some(function (t) { return t.id === id; }) ? id : 'rs';
+    st.openHow = how === 'half' ? 'half' : null;
     saveUi();
     if (!isDeep()) { st.openOnMount = true; ctx.setView('deep'); return; }
-    openWork(true, st.tab === 'rs' || st.tab === 'klinik' ? 'list' : null);
+    openWork(true, st.openHow || (st.tab === 'rs' || st.tab === 'klinik' ? 'list' : null));
+    st.openHow = null;
     renderWork(true);
+  }
+  /**
+   * The landing grammar of MCD.nav (V8 §2.5): health:tab:<tab>[:half[:<sort>]]. An unknown tab opens Rumah sakit, an
+   * unknown drawer part or sort is ignored (the remembered sort stays).
+   */
+  function land(tab, drawer, sort) {
+    var t = TABS.some(function (x) { return x.id === tab; }) ? tab : 'rs';
+    if (sort && (t === 'rs' || t === 'klinik') && H && H.SORTS) {
+      var ok = (H.SORTS[t] || []).some(function (x) { return x.v === sort; });
+      if (ok) { if (t === 'rs') st.sortRs = sort; else st.sortKl = sort; }
+    }
+    goTab(t, drawer === 'half' ? 'half' : null);
   }
   function listDrawer() {
     var I0 = MCD.inst;
@@ -788,7 +807,9 @@
     s.sortSel = E('select', { class: 'select hf-sortsel', aria: { label: 'Urutkan daftar' }, title: sorts[0].title || 'Urutkan daftar' }, sorts.map(function (o) { return E('option', { value: o.v, text: o.label, title: o.title || null }); }));
     s.sortSel.addEventListener('change', function () { if (tab === 'rs') st.sortRs = s.sortSel.value; else st.sortKl = s.sortSel.value; saveUi(); renderList(); });
     s.sw = distToggles();
-    s.q = E('input', { class: 'input hf-search__in', type: 'search', placeholder: 'Cari fasilitas', title: 'Cari menurut nama, jaringan atau kode RS', aria: { label: 'Cari fasilitas menurut nama, jaringan atau kode RS' }, value: st.q || '' });
+    /* M3 (MOBILE_UX_PLAN): no capitals or "corrections" of place names on phone keyboards, a Cari key */
+    s.q = E('input', { class: 'input hf-search__in', type: 'search', placeholder: 'Cari fasilitas', title: 'Cari menurut nama, jaringan atau kode RS', aria: { label: 'Cari fasilitas menurut nama, jaringan atau kode RS' }, value: st.q || '',
+      attrs: { enterkeyhint: 'search', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', autocomplete: 'off' } });
     s.q.addEventListener('input', debounce(function () { st.q = s.q.value; renderList(); }, 150));
     s.exportB = guard(btn(T.csv, 'download', function () { exportCsv(); }, 'btn--secondary btn--bar', T.csvTip));
     s.ex.el.insertBefore(E('div', { class: 'hf-tools hf-tools--list' }, E('label', { class: 'search hf-search' }, icon('search'), s.q),
@@ -871,7 +892,7 @@
         } },
         V.hasLvm ? { key: 'lvm', label: 'Status LVM', width: 128, sortable: false, render: function (td, r) {
           if (r._div || !r.in15 || !r.play) return;
-          var m = H.merchantLink(r), w = T.mWord[m.state];
+          var m = H.merchantLink(r, { ours: false }), w = T.mWord[m.state];
           if (m.state === 'acquired' || m.state === 'not_yet' || m.state === 'tanpa-peta') td.appendChild(tag(w, m.state === 'acquired' ? 'ok' : m.state === 'not_yet' ? 'bad' : null));
         } } : null,
         { key: 'dist', label: mode ? 'Dari KCP (' + mode + ')' : 'Dari KCP', width: 112, sortable: false, align: 'right', headerTitle: T.distTip, render: function (td, r) { if (!r._div) distCell(td, r); } }
@@ -1213,9 +1234,13 @@
     var m = H.merchantLink(r), kids = [], R = null, demo = m.demo || demoOn();
     try { R = MCD.lvm && isFn(MCD.lvm.result) ? MCD.lvm.result() : null; } catch (e) { R = null; }
     var head = [];
-    if (m.state === 'potensi') head.push(tag(T.mWord.potensi, 'potential'));
+    /* V8 final fix: a merchant the branch already serves is never labelled "Potensi" (no LVM file: the chip
+       "Merchant KCP Cilangkap" alone, in the status colour of an acquired merchant) */
+    var oursOnly = !!(m.ours && m.state === 'potensi');
+    if (m.state === 'potensi' && !oursOnly) head.push(tag(T.mWord.potensi, 'potential'));
     if (m.state === 'acquired') head.push(tag(T.mWord.acquired, 'ok'));
     if (m.state === 'not_yet') head.push(tag(T.mWord.not_yet, 'bad', T.notYetTip));
+    if (m.ours) head.push(tag(T.mWord.ours, oursOnly ? 'ok' : null, T.oursTip));
     if (head.length && demo && (m.state === 'acquired' || m.state === 'not_yet')) head.push(tag('CONTOH', 'demo', 'Data contoh, bukan data cabang.'));
     if (head.length) kids.push(E('p', { class: 'hf-tags' }, head));
     if (T.m[m.state]) kids.push(note(T.m[m.state]));
@@ -1230,7 +1255,7 @@
     }
     if (m.guess) kids.push(E('div', { class: 'hf-guess' }, E('p', { class: 'hf-tags' }, tag(T.mWord.guess, 'mid')), note(T.m.guess), veil() ? null : E('p', { class: 'hf-line', text: m.guess.name })));
     if (m.poi != null && m.poi >= 0) kids.push(E('div', { class: 'hf-actions' }, link(T.m.go, function () { if (MCD.app && isFn(MCD.app.focus)) MCD.app.focus({ section: 'merchants', kind: 'poi', id: String(m.poi), lon: r.lon, lat: r.lat }); }, 'hf-go', 'Buka usaha ini di bagian Merchant')));
-    return blk(T.folds.merchant, kids, 'hf-dd--merchant', { id: 'merchant', preview: T.mWord[m.state] || '—', open: false });
+    return blk(T.folds.merchant, kids, 'hf-dd--merchant', { id: 'merchant', preview: oursOnly ? T.mWord.ours : (T.mWord[m.state] || '—'), open: false });
   }
   function sumberBlock(r) {
     var W = H.words, kids = [], srcs = W.sources(r);
@@ -1605,7 +1630,8 @@
     var metaR = { kind: 'health', id: function (r) { return r.id; }, tooltip: function (r) { return tipRow(r); } };
     /* bubbles (below zoom 13): a glass disc, a 1,5 px ring in the kind's colour, the count (11 px, outlined in the glass
        colour); kecantikan adds a small sparkle. Sized by H.bubbleDiameter (zoom and pointer as the symbols), so every
-       bubble stays smaller than RS sedang and a bubble of two smaller than RS kecil ("rs lebih besar", H6) */
+       bubble stays smaller than RS kecil ("rs lebih besar", H6; V8 final fix). The counts sit with the bubbles, under
+       the hospitals and under the kecamatan pills (they printed over both) */
     if (low) {
       var BB = H.BUBBLE || {}, bTrig = [zq, co ? 1 : 0], glass = rgba(col.bubble, 255);
       var w = 512 * Math.pow(2, zc);
@@ -1627,7 +1653,7 @@
         updateTriggers: { getPosition: [zc], getSize: bTrig, getPixelOffset: bTrig }, pickable: false, beforeId: K.beforeId
       }));
       var counts = m.bubbles.klinik.map(function (c) { return { c: c, p: [c.lon, c.lat] }; }).concat(m.bubbles.kecantikan.map(function (c) { return { c: c, p: kcPos(c) }; }));
-      if (counts.length && ms.fontsReady !== false) out.top.push(new D.TextLayer({
+      if (counts.length && ms.fontsReady !== false) out.base.push(new D.TextLayer({
         id: 'health-cluster-n', data: counts, getPosition: function (o) { return o.p; }, getText: function (o) { return o.c.n > 999 ? fm().num(o.c.n / 1000, 1) + ' rb' : String(o.c.n); },
         getSize: BB.text || 11, sizeUnits: 'pixels', fontFamily: K.fonts && K.fonts.sans, fontWeight: 600, characterSet: 'auto', getColor: rgba(col.count, 255),
         fontSettings: { sdf: true }, outlineWidth: 2, outlineColor: glass,
@@ -2003,7 +2029,7 @@
       if (isDeep()) {
         buildWork(host);
         syncWork();
-        if (st.workOpen) later(function () { if (ctx && isDeep()) { openWork(true, 'list'); renderWork(true); } }, 420);
+        if (st.workOpen) later(function () { if (ctx && isDeep()) { openWork(true, st.openHow || 'list'); st.openHow = null; renderWork(true); } }, 420);
       }
       registerMap();
       registerSearch();
@@ -2105,8 +2131,8 @@
       if (k) { H.load().then(function (ok) { if (ok && ctx) { computeView(); showKec(k[1]); } }); return true; }
       var sc = /^health:scope:(5|15|30)$/.exec(a);
       if (sc) { setKm(+sc[1]); return true; }
-      var tb = /^health:tab:(rs|klinik|kec|jaringan|pipe)$/.exec(a);
-      if (tb) { goTab(tb[1]); return true; }
+      var tb = /^health:tab:([A-Za-z]{1,20})(?::([A-Za-z]{1,10}))?(?::([A-Za-z]{1,20}))?$/.exec(a);
+      if (tb) { land(tb[1], tb[2], tb[3]); return true; }
       var ch = /^health:chain:(.{1,80})$/.exec(a);
       if (ch) { H.load().then(function (ok) { if (!ok || !ctx) return; var c = H.index().chains.filter(function (x) { return x.name === ch[1]; })[0]; if (c) { setChain(c.name); goTab(c.kinds.indexOf('rs') >= 0 ? 'rs' : 'klinik'); } }); return true; }
       var kd = /^health:kind:(rs|klinik|kecantikan)$/.exec(a);

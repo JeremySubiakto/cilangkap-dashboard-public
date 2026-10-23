@@ -29,7 +29,7 @@
  *                this month (not ranked per KPI, warning NO_DATA)
  *       kpi / target / capaian / gap / kurang / rank share one shape (null where the file has no value):
  *       {dpk, tabungan, giro, deposito, casa, casaRatio, cof, dpkRetail,
- *        kredit:{consumer, ksm, kpr, autoloan, kartu}, booking:{consumer, ksm, kpr, autoloan},
+ *        kredit:{consumer, kpr, kartu, …}, booking:{consumer, kpr, …} (two more products per group: HIDDEN, D41),
  *        nplRetail, nplConsumer, newCifTabungan, rekeningBersaldo, ureg, usak, fbi, skorKpi}
  *       capaian  from the file's "Pencapaian" column (not when actual and target are both 0 or empty); when absent:
  *                actual / target ("higher is better") or 2 − actual / target ("lower is better": CoF, NPL), the rule
@@ -43,8 +43,10 @@
  *                current-period ranking sheet (cross-check only)
  *       rows     {sheet name: spreadsheet row number} where this branch was read
  *   FIELDS · LEAF · HOME · DATASET · UNITS              field catalogue (key, label, unit, better, tabs), labels, constants
- *   get(obj, key) · keys()                              nested access by key ('kredit.ksm'), the field keys in order
- *   homeRows(model, code?) → [{key, label, unit, better, actual, target, capaian, gap, kurang, met, rank, of, tabs}]
+ *   get(obj, key) · keys()                              nested access by key ('kredit.kpr'), the field keys in order
+ *   homeRows(model, code?, {all}?) → [{key, label, unit, better, actual, target, capaian, gap, kurang, met, rank, of, tabs}]
+ *                                                        without the HIDDEN keys ({all: true}: tests only)
+ *   HIDDEN · visibleWarnings(model) → warnings without those about a HIDDEN key (V8 §3.5, D41, D50)
  *   rankValues(list, better) → ranks                     competition ranking ("1, 2, 2, 4"), nulls stay null
  *   detect(sheetNames) → {ok, use, score}               by sheet names (cheap; the Data & Privasi file picker)
  *   detectSheets(sheets) → {ok, score, found}           by header labels (the whole check)
@@ -57,6 +59,10 @@
  *
  * Units: as in the workbook. Amounts in Rp juta, ratios as fractions (0.0123 = 1,23%), counts as counts,
  * the KPI score in points. User-facing text (labels, warnings) is plain Indonesian for branch staff.
+ * D41 (23 Oct 2026; docs/V8_SPEC.md §3.5, D50): the outstanding and booking of the two credit products the user
+ * removed are still READ, so the file check (columns that add up, totals) stays the same, but never shown: HIDDEN
+ * lists their keys, homeRows() and visibleWarnings() leave them out, and no tab token points at them. The tab token
+ * 'tni' is gone with the section (D39); giro and FBI gaps also point at hospitals ('health', D57).
  * Privacy: the workbook holds branch totals only. Only the columns listed in FIELDS are read, only for the
  * rows of the area; pivot tables and helper columns are never read. Nothing leaves the browser.
  * ========================================================================== */
@@ -476,7 +482,7 @@
 
   /* ----------------------------------------------------------------- fields */
 
-  // Sheet-name hints (folded names). Layouts shared by several sheets (KSM · KPR · … in both the outstanding and
+  // Sheet-name hints (folded names). Layouts shared by several sheets (KPR · consumer · … in both the outstanding and
   // the booking sheet) need the sheet name; labels that occur once in the file are looked for in every sheet.
   var S_DPK = /(avg|average|rata).*(bal|saldo).*dpk|^dpk\b/;
   var S_DPK_RETAIL = /dpk.*retail|retail.*dpk/;
@@ -503,13 +509,13 @@
 
   /**
    * The KPI catalogue in display order. unit: 'rp' (Rp juta) · 'rasio' (fraction) · 'jumlah' · 'poin'.
-   * better: 'up' | 'down'. tabs: dashboard tabs that help close the gap (a proposal for the v7 view; 'tni' and
-   * 'wealth' are the planned tabs of item 48a and 48b).
+   * better: 'up' | 'down'. tabs: dashboard tabs that help close the gap (MCD.nav tokens, V8 §2.5: 'wealth', 'schools',
+   * 'campus', 'merchants', 'health', 'property'; no 'tni' since D39).
    */
   var FIELDS = [
-    F('dpk', 'DPK (rata-rata saldo)', 'rp', 'up', dpkSrc(/^(total )?dpk$/), { derive: 'sum', from: ['tabungan', 'giro', 'deposito'], tabs: ['wealth', 'tni'] }),
-    F('tabungan', 'Tabungan (rata-rata saldo)', 'rp', 'up', dpkSrc(/^tabungan$/, /^(average balance|avg ?bal) tabungan$/), { tabs: ['schools', 'tni', 'campus'] }),
-    F('giro', 'Giro (rata-rata saldo)', 'rp', 'up', dpkSrc(/^giro$/, /^(average balance|avg ?bal) giro$/), { tabs: ['merchants'] }),
+    F('dpk', 'DPK (rata-rata saldo)', 'rp', 'up', dpkSrc(/^(total )?dpk$/), { derive: 'sum', from: ['tabungan', 'giro', 'deposito'], tabs: ['wealth'] }),
+    F('tabungan', 'Tabungan (rata-rata saldo)', 'rp', 'up', dpkSrc(/^tabungan$/, /^(average balance|avg ?bal) tabungan$/), { tabs: ['schools', 'campus'] }),
+    F('giro', 'Giro (rata-rata saldo)', 'rp', 'up', dpkSrc(/^giro$/, /^(average balance|avg ?bal) giro$/), { tabs: ['merchants', 'health'] }),
     F('deposito', 'Deposito (rata-rata saldo)', 'rp', 'up', dpkSrc(/^deposito$/, /^(average balance|avg ?bal) deposito$/), { tabs: ['wealth'] }),
     F('casa', 'CASA (Tabungan + Giro)', 'rp', 'up', dpkSrc(/^casa$/), { derive: 'sum', from: ['tabungan', 'giro'], tabs: ['schools', 'merchants', 'campus'] }),
     F('casaRatio', 'Rasio CASA', 'rasio', 'up', dpkSrc(/^(rasio casa|casa ratio|% ?casa)$/, /^(rasio casa|casa ratio)$/),
@@ -517,31 +523,34 @@
     F('cof', 'Biaya dana (CoF) retail', 'rasio', 'down', [{ path: [/cost of fund/] }, { sheet: S_COF, path: [/^% ?cof$/] }], { tabs: ['schools', 'merchants'] }),
     F('dpkRetail', 'DPK retail (rata-rata saldo)', 'rp', 'up', [{ sheet: S_DPK_RETAIL, path: [/^(total )?dpk$/] }, { path: [/^avg ?bal(ance)? dpk retail$/] }], { tabs: ['wealth', 'schools'] }),
     F('kredit.consumer', 'Kredit consumer (rata-rata saldo)', 'rp', 'up',
-      kreditSrc(/^consumer$/).concat([{ path: [/^(average balance|avg ?bal) kredit consumer$/] }]), { tabs: ['tni', 'property'] }),
-    F('kredit.ksm', 'Kredit KSM (rata-rata saldo)', 'rp', 'up', kreditSrc(/^ksm$/), { tabs: ['tni'] }),
+      kreditSrc(/^consumer$/).concat([{ path: [/^(average balance|avg ?bal) kredit consumer$/] }]), { tabs: ['property'] }),
+    F('kredit.ksm', 'Kredit KSM (rata-rata saldo)', 'rp', 'up', kreditSrc(/^ksm$/), { tabs: [] }),                         // D41: read to check the file, never shown
     F('kredit.kpr', 'Kredit KPR (rata-rata saldo)', 'rp', 'up', kreditSrc(/^kpr$/), { tabs: ['property'] }),
-    F('kredit.autoloan', 'Kredit KKB (rata-rata saldo)', 'rp', 'up', kreditSrc(/^(auto ?loan|kkb)$/), { tabs: ['tni'] }),
+    F('kredit.autoloan', 'Kredit KKB (rata-rata saldo)', 'rp', 'up', kreditSrc(/^(auto ?loan|kkb)$/), { tabs: [] }),      // D41: read to check the file, never shown
     F('kredit.kartu', 'Kartu Kredit (rata-rata saldo)', 'rp', 'up', kreditSrc(/^(cc|kartu kredit|credit card)$/), { tabs: ['wealth'] }),
-    F('booking.consumer', 'Booking kredit consumer', 'rp', 'up', bookingSrc(/^consumer$/).concat([{ path: [/^booking kredit consumer/] }]), { tabs: ['tni', 'property'] }),
-    F('booking.ksm', 'Booking KSM', 'rp', 'up', bookingSrc(/^ksm$/), { tabs: ['tni'] }),
+    F('booking.consumer', 'Booking kredit consumer', 'rp', 'up', bookingSrc(/^consumer$/).concat([{ path: [/^booking kredit consumer/] }]), { tabs: ['property'] }),
+    F('booking.ksm', 'Booking KSM', 'rp', 'up', bookingSrc(/^ksm$/), { tabs: [] }),                                        // D41: read to check the file, never shown
     F('booking.kpr', 'Booking KPR', 'rp', 'up', bookingSrc(/^kpr$/), { tabs: ['property'] }),
-    F('booking.autoloan', 'Booking KKB (Autoloan)', 'rp', 'up', bookingSrc(/^(auto ?loan|kkb)$/), { tabs: ['tni'] }),
+    F('booking.autoloan', 'Booking KKB (Autoloan)', 'rp', 'up', bookingSrc(/^(auto ?loan|kkb)$/), { tabs: [] }),           // D41: read to check the file, never shown
     F('nplRetail', 'NPL retail (rasio)', 'rasio', 'down',
       [{ sheet: S_KUALITAS, path: [/^retail$/], cols: { actual: /^(%|% npl|npl %)$/, npl: /^npl$/, total: /^total$/ } }], { target: false, tabs: [] }),
     F('nplConsumer', 'NPL consumer (nominal, batas atas)', 'rp', 'down',
       [{ scorecard: true, path: [/^npl$/] }, { sheet: S_NPL, path: [/^npl$/, /^consumer$/] }], { tabs: [] }),
-    F('newCifTabungan', 'CIF baru Tabungan retail', 'jumlah', 'up', [{ path: [/^new cif tabungan/] }], { tabs: ['schools', 'tni', 'campus'] }),
+    F('newCifTabungan', 'CIF baru Tabungan retail', 'jumlah', 'up', [{ path: [/^new cif tabungan/] }], { tabs: ['schools', 'campus'] }),
     F('rekeningBersaldo', 'Rekening baru berbiaya yang bersaldo', 'jumlah', 'up',
       [{ path: [/rekening berbiaya.*(saldo|bersaldo)|^(new )?rekening bersaldo/] }], { tabs: ['schools', 'merchants', 'campus'] }),
     F('ureg', 'UREG (pengguna terdaftar)', 'jumlah', 'up', [{ path: [/^ureg\b|^user regist/] }], { tabs: ['merchants'] }),
     F('usak', 'USAK FIN Livin’', 'jumlah', 'up', [{ path: [/^usak fin livin|^usak livin/] }], { tabs: ['schools', 'merchants', 'campus'] }),
-    F('fbi', 'Fee based income', 'rp', 'up', [{ path: [/^fee based income/] }], { tabs: ['merchants'] }),
+    F('fbi', 'Fee based income', 'rp', 'up', [{ path: [/^fee based income/] }], { tabs: ['merchants', 'health'] }),
     F('skorKpi', 'Skor KPI', 'poin', 'up',
       [{ scorecard: true, path: [/^(total|total nilai|skor kpi|nilai kpi)$/], single: true }, { periodSheet: true, path: [PERIOD], single: true }],
       { target: false, rankAll: true })
   ];
   var BY_KEY = {};
   FIELDS.forEach(function (f) { BY_KEY[f.key] = f; });
+  /* D41: the four keys above that are read to check the file and never shown (homeRows, visibleWarnings, Posisi cabang) */
+  var HIDDEN = ['kredit.ksm', 'kredit.autoloan', 'booking.ksm', 'booking.autoloan'];   // D41: read to check the file, never shown
+  function hidden(key) { return HIDDEN.indexOf(key) >= 0; }
   var RANK_FILE = { periodSheet: true, path: [/^rank(ing)?$/], single: true };
 
   function keys() { return FIELDS.map(function (f) { return f.key; }); }
@@ -952,7 +961,7 @@
       rejected.forEach(function (x) {
         var tail = hit ? '; ' + short + ' diambil dari sheet ' + q(hit.table.name) : derived[f.key] ? '; ' + short + ' dihitung dari ' + derived[f.key] : '';
         ctx.warn('warn', 'COLUMN_MISMATCH', 'Kolom ' + q(x.header) + ' di sheet ' + q(x.sheet) + ' tidak cocok (' + mismatchText(x.reason, x.kind, f) +
-          ') dan tidak dipakai' + tail + '. Periksa judul kolomnya.', f.key, x.sheet);
+          ') dan tidak digunakan' + tail + '. Periksa judul kolomnya.', f.key, x.sheet);
       });
       if (!hit) {
         if (!derived[f.key]) {
@@ -964,11 +973,11 @@
       var sheet = hit.table.name;
       if (hit.shifted) {
         ctx.warn('info', 'COLUMN_SHIFTED', 'Judul ' + q(hit.header) + ' di sheet ' + q(sheet) + ' tidak tepat di atas kolom Realisasi-nya. ' +
-          'Kolom Realisasi, Target dan Pencapaian di dekatnya dipakai karena angkanya saling cocok.', f.key, sheet);
+          'Kolom Realisasi, Target dan Pencapaian di dekatnya digunakan karena angkanya saling cocok.', f.key, sheet);
       }
       if (hit.check && hit.check.bad) {
         ctx.warn('info', 'CAPAIAN_ODD', fmtInt(hit.check.bad) + ' baris ' + short + ' di sheet ' + q(sheet) + ' tidak cocok (' + mismatchText('cek', hit.check.kind, f) +
-          '). Angka ' + (hit.check.kind === 'ratio' ? '%' : 'Pencapaian') + ' dari file tetap dipakai.', f.key, sheet);
+          '). Angka ' + (hit.check.kind === 'ratio' ? '%' : 'Pencapaian') + ' dari file tetap digunakan.', f.key, sheet);
       }
       if (f.target !== false && !has(hit.cols, 'target')) ctx.warn('warn', 'TARGET_MISSING', 'Target ' + f.label + ' tidak ditemukan, sehingga selisih tidak dihitung.', f.key, sheet);
       if (homeB && !isNum(get(homeB.kpi, f.key))) ctx.warn('warn', 'HOME_VALUE_MISSING', 'Nilai ' + f.label + ' ' + homeName + ' kosong di sheet ' + q(sheet) + '.', f.key, sheet);
@@ -1045,12 +1054,17 @@
 
   /* --------------------------------------------------------- views of a model */
 
-  /** The KPI rows of one branch (default: the home branch) for a "Posisi cabang" list. met: capaian ≥ 100%. */
-  function homeRows(model, code) {
+  /**
+   * The KPI rows of one branch (default: the home branch) for a "Posisi cabang" list. met: capaian ≥ 100%.
+   * The HIDDEN keys are left out (D41, D50); opts {all: true} keeps them (tests only). homeRows(model, {all}) works too.
+   */
+  function homeRows(model, code, opts) {
+    if (code && typeof code === 'object') { opts = code; code = null; }
+    var all = !!(opts && opts.all);
     var c = code || (model && model.home) || HOME;
     var b = model && (model.branches || []).filter(function (x) { return x.code === c; })[0];
     if (!b) return [];
-    return FIELDS.map(function (f) {
+    return FIELDS.filter(function (f) { return all || !hidden(f.key); }).map(function (f) {
       var cap = get(b.capaian, f.key);
       return { key: f.key, label: f.label, unit: f.unit, better: f.better, actual: get(b.kpi, f.key), target: get(b.target, f.key),
         capaian: cap, gap: get(b.gap, f.key), kurang: get(b.kurang, f.key), met: isNum(cap) ? cap >= 1 : null,
@@ -1168,9 +1182,14 @@
     return M.data.registerDataset(DATASET, { types: ['kpi', 'kpi_cabang', 'kpi_area'], label: 'KPI cabang (laporan KPI area bulanan)', bank: true });
   }
 
+  /** visibleWarnings(model) → the model's warnings without those about a HIDDEN key (D41: never shown). */
+  function visibleWarnings(model) {
+    return ((model && model.warnings) || []).filter(function (w) { return !(w && w.field && hidden(w.field)); });
+  }
+
   return {
-    VERSION: VERSION, HOME: HOME, DATASET: DATASET, UNITS: UNITS, FIELDS: FIELDS, LEAF: LEAF,
-    parseWorkbook: parseWorkbook, homeRows: homeRows, rankValues: rankValues, get: get, keys: keys,
+    VERSION: VERSION, HOME: HOME, DATASET: DATASET, UNITS: UNITS, FIELDS: FIELDS, LEAF: LEAF, HIDDEN: HIDDEN.slice(),
+    parseWorkbook: parseWorkbook, homeRows: homeRows, visibleWarnings: visibleWarnings, rankValues: rankValues, get: get, keys: keys,
     detect: detect, detectSheets: detectSheets, inspect: inspect,
     toRecords: toRecords, fromRecords: fromRecords, apply: apply, workbookReader: workbookReader,
     num: num, codeOf: codeOf, periodLabel: periodLabel, periodEnd: periodEnd, register: register

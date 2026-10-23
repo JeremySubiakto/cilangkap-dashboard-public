@@ -51,7 +51,8 @@
     function pick(arr) { return arr[Math.floor(R() * arr.length)]; }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
-    var PRODUCTS = ['KSM', 'KPR', 'KKB', 'CC', 'MG', 'PEN', 'OTH'];
+    /* D41 (V8, 23 Oct 2026): the sample data carries no KSM or KKB */
+    var PRODUCTS = ['KPR', 'CC', 'MG', 'PEN', 'OTH'];
     var MONTHS = [];
     (function () { for (var i = 0; i < 24; i++) { var d = new Date(2024, 10 + i, 1); MONTHS.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); } })();
     var PACE = 12 / 31;
@@ -77,8 +78,8 @@
       R = prng(seed);
       var d = {};
       /* booking 24 months */
-      var share = { KSM: 0.52, KPR: 0.2, KKB: 0.12, CC: 0.04, MG: 0.05, PEN: 0.05, OTH: 0.02 };
-      var ticket = { KSM: 2.2e8, KPR: 4.5e8, KKB: 2.4e8, CC: 1.5e7, MG: 3.2e8, PEN: 1.8e8, OTH: 4e7 };
+      var share = { KPR: 0.52, CC: 0.08, MG: 0.17, PEN: 0.18, OTH: 0.05 };
+      var ticket = { KPR: 4.5e8, CC: 1.5e7, MG: 3.2e8, PEN: 1.8e8, OTH: 4e7 };
       d.booking = MONTHS.map(function (m, i) {
         var season = 1 + 0.1 * Math.sin((i / 12) * 2 * Math.PI + 1.2);
         var total = 7.9e9 * season * rnd(0.9, 1.1) * (1 + i * 0.006);
@@ -93,16 +94,16 @@
       });
       /* matrix */
       var groups = [['Tamtama', 540], ['Bintara', 1120], ['Pama', 410], ['Pamen', 260], ['Pati', 38], ['PNS', 632]];
-      var base = { KSM: 0.46, KPR: 0.12, KKB: 0.15, CC: 0.11, MG: 0.02, PEN: 0.14 };
+      var base = { KPR: 0.12, CC: 0.11, MG: 0.02, PEN: 0.14 };
       var mult = {
-        Tamtama: { KSM: 1.18, KPR: 0.45, KKB: 0.7, CC: 0.35, MG: 0.4, PEN: 0.6 },
-        Bintara: { KSM: 1.28, KPR: 0.95, KKB: 0.95, CC: 0.6, MG: 0.8, PEN: 1.1 },
-        Pama: { KSM: 0.95, KPR: 1.35, KKB: 1.2, CC: 1.4, MG: 1.1, PEN: 0.7 },
-        Pamen: { KSM: 0.72, KPR: 1.7, KKB: 1.55, CC: 2.1, MG: 2.4, PEN: 1.3 },
-        Pati: { KSM: 0.38, KPR: 1.9, KKB: 1.7, CC: 3.6, MG: 3.2, PEN: 1.6 },
-        PNS: { KSM: 1.05, KPR: 1.05, KKB: 0.85, CC: 0.9, MG: 0.9, PEN: 1.25 }
+        Tamtama: { KPR: 0.45, CC: 0.35, MG: 0.4, PEN: 0.6 },
+        Bintara: { KPR: 0.95, CC: 0.6, MG: 0.8, PEN: 1.1 },
+        Pama: { KPR: 1.35, CC: 1.4, MG: 1.1, PEN: 0.7 },
+        Pamen: { KPR: 1.7, CC: 2.1, MG: 2.4, PEN: 1.3 },
+        Pati: { KPR: 1.9, CC: 3.6, MG: 3.2, PEN: 1.6 },
+        PNS: { KPR: 1.05, CC: 0.9, MG: 0.9, PEN: 1.25 }
       };
-      var cols = ['KSM', 'KPR', 'KKB', 'CC', 'MG', 'PEN'];
+      var cols = ['KPR', 'CC', 'MG', 'PEN'];
       var colTot = {};
       cols.forEach(function (c) { colTot[c] = { d: 0, n: 0 }; });
       var mrows = groups.map(function (g) {
@@ -129,13 +130,13 @@
         return { key: g[0], label: g[0], value: v, value2: a, note: F.int(v) + ' · skor rata ' + sc };
       });
       /* runway scatter, 1.800 facilities */
-      var w = [['KSM', 0.55], ['KPR', 0.17], ['KKB', 0.12], ['MG', 0.06], ['PEN', 0.1]];
+      var w = [['KPR', 0.5], ['MG', 0.2], ['PEN', 0.3]];
       d.runway = [];
       for (var i = 0; i < 1800; i++) {
-        var u = R(), code = 'KSM', acc = 0;
+        var u = R(), code = 'KPR', acc = 0;
         for (var k = 0; k < w.length; k++) { acc += w[k][1]; if (u <= acc) { code = w[k][0]; break; } }
         var runway = clamp(Math.abs(110 + gauss() * 62), 2, 275);
-        var cap = code === 'KPR' ? 240 : code === 'KKB' ? 60 : 180;
+        var cap = code === 'KPR' ? 240 : 180;
         var tenor = Math.min(runway * rnd(0.12, 0.97), cap * rnd(0.08, 1));
         if (R() < 0.026) tenor = Math.min(240, runway + rnd(3, 42));
         d.runway.push({ x: runway, y: Math.max(1, tenor), code: code, id: 'f' + i });
@@ -144,7 +145,7 @@
       var n0 = 1204;
       var s1 = Math.round(n0 * rnd(0.78, 0.84)), s2 = Math.round(s1 * rnd(0.9, 0.95)), s3 = Math.round(s2 * rnd(0.91, 0.96)), s4 = Math.round(s3 * rnd(0.78, 0.86)), s5 = Math.round(s4 * rnd(0.55, 0.64));
       d.topup = [
-        { key: 'aktif', label: 'KSM aktif', n: n0 }, { key: 'mob', label: 'MoB ≥ 12', n: s1 }, { key: 'kol', label: 'Kol 1 (12 bln)', n: s2 },
+        { key: 'aktif', label: 'Fasilitas aktif', n: n0 }, { key: 'mob', label: 'MoB ≥ 12', n: s1 }, { key: 'kol', label: 'Kol 1 (12 bln)', n: s2 },
         { key: 'gaji', label: 'Gaji masuk ≤ 1 bln', n: s3 }, { key: 'runway', label: 'Runway ≥ 24 bln', n: s4 }, { key: 'eligible', label: 'Tambahan ≥ Rp 25 jt', n: s5 }
       ];
       d.topupPotensi = s5 * rnd(8.6e7, 9.8e7);
@@ -176,7 +177,7 @@
       for (var dd = 0; dd <= 30; dd++) { d.retX.push(dd); d.ret.push(clamp(0.21 + 0.79 * Math.exp(-dd / rnd(6.2, 6.8)) + rnd(-0.008, 0.008), 0, 1)); }
       d.ret[0] = 1;
       /* product mix and status */
-      var os = { KSM: 184.6e9, KPR: 96.1e9, KKB: 41.3e9, CC: 2.9e9, MG: 27.8e9, PEN: 6.2e9, OTH: 0.3e9 };
+      var os = { KPR: 96.1e9, CC: 2.9e9, MG: 27.8e9, PEN: 6.2e9, OTH: 0.3e9 };
       d.mix = PRODUCTS.map(function (p) { return { key: p, value: os[p] * rnd(0.94, 1.06) }; });
       d.status = [{ key: 'DEBITUR', label: 'Debitur', value: Math.round(rnd(1760, 1860)) }, { key: 'WHITESPACE', label: 'Whitespace', value: Math.round(rnd(570, 620)) }, { key: 'PROSPECT', label: 'Prospek', value: Math.round(rnd(560, 610)) }];
       d.sparks = [0, 1, 2].map(function (q) { var v = [120, 1700, 0.7][q]; return Array.from({ length: 13 }, function () { v *= rnd(0.985, 1.025); return v; }); });
@@ -221,7 +222,7 @@
         d.prospek.push({
           id: 'p' + pi, score: sc, band: sc >= 80 ? 'A' : sc >= 65 ? 'B' : sc >= 50 ? 'C' : 'D',
           name: (rk === 'PNS' ? '' : rk + ' ') + pick(LETTERS) + '*** ' + pick(LETTERS) + '***', rank: rk, satker: st[0], matra: st[2],
-          status: R() < 0.52 ? 'Whitespace' : 'Prospek', rec: pick(['KSM', 'KSM', 'KSM', 'KPR', 'KKB', 'CC', 'PEN']),
+          status: R() < 0.52 ? 'Whitespace' : 'Prospek', rec: pick(['KPR', 'KPR', 'MG', 'CC', 'PEN']),
           potensi: Math.round(rnd(25, 420)) * 1e6, runway: Math.round(rnd(14, 260)), dist: rnd(0.3, 14.5)
         });
       }
@@ -237,15 +238,13 @@
         return {
           key: s.key, name: s.name, role: s.role, value: s.value, achievement: s.achievement,
           movement: (byPrev.indexOf(s) + 1) - (byNow.indexOf(s) + 1),
-          mix: [{ key: 'KSM', value: rnd(40, 70) }, { key: 'KPR', value: rnd(10, 30) }, { key: 'KKB', value: rnd(5, 20) }, { key: 'CC', value: rnd(2, 10) }]
+          mix: [{ key: 'KPR', value: rnd(40, 70) }, { key: 'MG', value: rnd(10, 30) }, { key: 'PEN', value: rnd(5, 20) }, { key: 'CC', value: rnd(2, 10) }]
         };
       });
       d.avg = d.staff.reduce(function (a, s) { return a + s.value; }, 0) / d.staff.length;
       /* bullet */
       d.bullet = [
-        { key: 'KSM', label: 'KSM', actual: rnd(3.6e9, 4.6e9), target: 6.0e9, pace: PACE },
         { key: 'KPR', label: 'KPR', actual: rnd(0.7e9, 1.2e9), target: 2.5e9, pace: PACE },
-        { key: 'KKB', label: 'KKB', actual: rnd(0.32e9, 0.55e9), target: 0.8e9, pace: PACE },
         { key: 'CC', label: 'Kartu Kredit', actual: Math.round(rnd(18, 34)), target: 60, pace: PACE, format: 'int' },
         { key: 'MG', label: 'Multiguna', actual: rnd(0.08e9, 0.2e9), target: 0.5e9, pace: PACE },
         { key: 'PEN', label: 'Pensiun', actual: rnd(0.3e9, 0.46e9), target: 0.35e9, pace: PACE }
@@ -296,7 +295,7 @@
       var mtd = PRODUCTS.reduce(function (a, p) { return a + lastB.byProduct[p]; }, 0);
       var att = mtd / lastB.target;
       return [
-        { eyebrow: 'Outstanding Konsumtif', product: 'KSM', info: 'Σ outstanding fasilitas konsumtif aktif pada filter populasi dan produk yang berlaku. Sumber: data sintetis.', value: 359.2e9 * (0.97 + R() * 0.06), format: 'rp', delta: { value: 0.018 + (R() - 0.5) * 0.01, label: 'MoM' }, spark: D.sparks[0].map(function (v) { return v * 3e9; }), sparkLabels: MONTHS.slice(11).map(F.monthLong), onClick: onClick('KPI Outstanding') },
+        { eyebrow: 'Outstanding Konsumtif', product: 'KPR', info: 'Σ outstanding fasilitas konsumtif aktif pada filter populasi dan produk yang berlaku. Sumber: data sintetis.', value: 359.2e9 * (0.97 + R() * 0.06), format: 'rp', delta: { value: 0.018 + (R() - 0.5) * 0.01, label: 'MoM' }, spark: D.sparks[0].map(function (v) { return v * 3e9; }), sparkLabels: MONTHS.slice(11).map(F.monthLong), onClick: onClick('KPI Outstanding') },
         { eyebrow: 'Debitur · NOA', value: 1812, format: 'int', value2: { value: 2376, format: 'int', unit: 'NOA' }, delta: { value: 22, kind: 'int', label: 'MoM' }, spark: D.sparks[1], sparkFormat: 'int' },
         { eyebrow: 'Booking MTD vs Target', value: mtd, format: 'rp', value2: { value: att, format: 'pct0', sep: false }, target: { attainment: att, pace: PACE, month: 'Okt' }, info: 'Booking bulan berjalan dibandingkan target bulan, dengan pace = porsi hari kalender yang telah berlalu (12/31).' },
         { eyebrow: 'Penetrasi Payroll', value: 0.729, format: 'pct', delta: { value: 0.006, kind: 'pp', label: 'MoM' }, spark: D.sparks[2], sparkFormat: 'pct' },
@@ -331,7 +330,7 @@
     H.ws = C.hbars($('c-ws'), D.ws, { label: 'Whitespace per pangkat', format: 'int', valueLabel: 'Whitespace', secondary: { label: 'Lead band A', color: 'gold' }, onHover: onHover('Whitespace'), onClick: onClick('Whitespace') });
 
     /* ── runway scatter ── */
-    C.legend($('lg-runway'), ['KSM', 'KPR', 'KKB', 'MG', 'PEN'].map(function (k) { return { key: k }; }).concat([{ key: 'past', label: 'Melewati pensiun', glyph: 'ring', color: 'neg' }]));
+    C.legend($('lg-runway'), ['KPR', 'MG', 'PEN'].map(function (k) { return { key: k }; }).concat([{ key: 'past', label: 'Melewati pensiun', glyph: 'ring', color: 'neg' }]));
     function runwayNote() {
       var past = D.runway.filter(function (p) { return p.y > p.x; });
       var r24 = D.runway.filter(function (p) { return p.x <= 24; }).length;
@@ -348,7 +347,7 @@
     runwayNote();
 
     /* ── top-up stepBars ── */
-    H.topup = C.stepBars($('c-topup'), D.topup, { label: 'Eligibilitas top-up KSM', format: 'int', footer: 'Potensi top-up ' + F.rp(D.topupPotensi), onHover: onHover('Top-up'), onClick: onClick('Top-up') });
+    H.topup = C.stepBars($('c-topup'), D.topup, { label: 'Eligibilitas top-up', format: 'int', footer: 'Potensi top-up ' + F.rp(D.topupPotensi), onHover: onHover('Top-up'), onClick: onClick('Top-up') });
 
     /* ── DSR histogram + figures ── */
     function dsrFigs() {
@@ -401,7 +400,7 @@
     H.mix = C.shareBars($('c-mix'), D.mix, { single: true, barHeight: 12, format: 'rp', label: 'Mix produk berdasarkan outstanding', onSegmentClick: function (p) { say('klik', 'Mix · toggle produk ' + p.key); }, onHover: onHover('Mix') });
     H.status = C.shareBars($('c-status'), D.status, { single: true, barHeight: 8, format: 'int', label: 'Status nasabah', onHover: onHover('Status') });
     mixLabels();
-    H.s1 = C.sparkline($('s1'), D.sparks[0].map(function (v) { return v * 1e9; }), { color: 'KSM', format: 'rp', labels: MONTHS.slice(11).map(F.monthLong), label: 'Outstanding KSM' });
+    H.s1 = C.sparkline($('s1'), D.sparks[0].map(function (v) { return v * 1e9; }), { color: 'KPR', format: 'rp', labels: MONTHS.slice(11).map(F.monthLong), label: 'Outstanding KPR' });
     H.s2 = C.sparkline($('s2'), D.sparks[1], { color: 'text-2', format: 'int', labels: MONTHS.slice(11).map(F.monthLong), label: 'Debitur' });
     H.s3 = C.sparkline($('s3'), D.sparks[2], { color: 'gold', format: 'pct', labels: MONTHS.slice(11).map(F.monthLong), label: 'Penetrasi' });
 
@@ -473,8 +472,8 @@
     /* ── rings ── */
     H.ringHero = C.progressRing($('r-hero'), { value: 0.82, pace: PACE, label: 'poin vs target' }, { size: 160, label: 'Poin tim terhadap target' });
     var ringItems = [
-      { k: 'r40', v: 0.64, label: 'Booking KSM', size: 40 }, { k: 'r40', v: 1.18, label: 'Kartu Kredit (NOA)', size: 40 },
-      { k: 'r20', v: 0.48, label: 'KPR · 20 px (tabel)', size: 20 }, { k: 'r20', v: 0.93, label: 'KKB · 20 px (tabel)', size: 20 }
+      { k: 'r40', v: 0.64, label: 'Booking KPR', size: 40 }, { k: 'r40', v: 1.18, label: 'Kartu Kredit (NOA)', size: 40 },
+      { k: 'r20', v: 0.48, label: 'Multiguna · 20 px (tabel)', size: 20 }, { k: 'r20', v: 0.93, label: 'Pensiun · 20 px (tabel)', size: 20 }
     ];
     H.rings = ringItems.map(function (it) {
       var li = document.createElement('li');
@@ -558,10 +557,10 @@
     $('g-hl').addEventListener('click', function () {
       hlOn = !hlOn;
       this.setAttribute('aria-pressed', hlOn ? 'true' : 'false');
-      var k = hlOn ? 'KSM' : null;
+      var k = hlOn ? 'KPR' : null;
       [H.booking, H.runway, H.mix, H.bullet].forEach(function (h) { h.highlight(k); });
-      H.matrix.highlight(hlOn ? { col: 'KSM' } : null);
-      say('sorot', hlOn ? 'KSM (seri lain 30%)' : 'dimatikan');
+      H.matrix.highlight(hlOn ? { col: 'KPR' } : null);
+      say('sorot', hlOn ? 'KPR (seri lain 30%)' : 'dimatikan');
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-metal]'), function (b) {
       b.addEventListener('click', function () {

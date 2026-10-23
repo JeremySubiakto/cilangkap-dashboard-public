@@ -14,7 +14,7 @@ html[data-theme="day"] .ws-demo { color: var(--text-1); border-color: var(--gold
   flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
   border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer;
 }
-.ws-tool:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--glass-card-hover); color: var(--text-1); }
+@media (hover: hover) { .ws-tool:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--glass-card-hover); color: var(--text-1); } }
 .ws-tool:disabled, .ws-tool[aria-disabled="true"] { opacity: .45; cursor: default; }   /* aria-disabled stays focusable: its refusal is said */
 .ws-tool[hidden] { display: none; }
 .ws-tool .icon { width: 15px; height: 15px; }
@@ -85,7 +85,7 @@ html[data-theme="day"] .ws-num.is-ok .ws-num__v, html[data-theme="day"] .ws-num.
   border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer;
 }
 .ws-co__x { margin-right: -6px; color: var(--text-1); }
-.ws-co__icon:hover { background: var(--glass-card-hover); color: var(--text-1); }
+@media (hover: hover) { .ws-co__icon:hover { background: var(--glass-card-hover); color: var(--text-1); } }
 .ws-co__icon .icon { width: 14px; height: 14px; }
 .ws-co__title {
   margin: 0; font: 400 19px/24px var(--font-serif); color: var(--text-1); letter-spacing: -.005em;
@@ -109,7 +109,7 @@ html[data-theme="day"] .ws-num.is-ok .ws-num__v, html[data-theme="day"] .ws-num.
 .ws-co__acts > :only-child { flex: 1 1 auto; }
 .ws-co__links { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .ws-co__link { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; font: 500 12px/16px var(--font-sans); color: var(--signal); text-decoration: none; white-space: nowrap; }
-.ws-co__link:hover { text-decoration: underline; text-underline-offset: 2px; }
+@media (hover: hover) { .ws-co__link:hover { text-decoration: underline; text-underline-offset: 2px; } }
 .ws-co__link .icon { width: 12px; height: 12px; }
 .ws-co__srcline { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; }
 .ws-co__srcline[hidden] { display: none; }
@@ -204,7 +204,7 @@ body[data-view="overview"] .ws-bar { cursor: default; }
   border: 0; border-radius: 6px; background: transparent; color: var(--text-3); cursor: grab; touch-action: none;
 }
 .ws-grip[hidden] { display: none; }
-.ws-grip:hover { color: var(--text-1); background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-grip:hover { color: var(--text-1); background: var(--glass-card-hover); } }
 .ws-grip .icon { width: 14px; height: 14px; }
 /* the card head: the eyebrow sits in the bar; the big Tutup is the bar's Tutup (tablet keeps the big one) */
 body.ws-on:not(.ws-tablet) .drawer.ws-win .drawer__titles > .t-eyebrow, .ws-pin .drawer__titles > .t-eyebrow { display: none; }
@@ -231,7 +231,7 @@ body.ws-on .drawer.ws-win .drawer__body { padding-top: 0; }
   justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 8px 0 4px; margin: 0 0 2px -4px;
   border: 0; border-radius: 6px; background: transparent; color: var(--signal); font: 500 13px/18px var(--font-sans); cursor: pointer;
 }
-.ws-crumb:hover { background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-crumb:hover { background: var(--glass-card-hover); } }
 .ws-crumb .icon { width: 13px; height: 13px; }
 .ws-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
 .ws-quick__btn { min-height: 34px; padding: 4px 12px; font-weight: 600; }
@@ -261,7 +261,7 @@ html[data-theme="day"] .ws-quick__done { color: var(--text-1); }
   display: flex; align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 0;
   border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; text-align: left;
 }
-.ws-fold__btn:hover { color: var(--text-1); }
+@media (hover: hover) { .ws-fold__btn:hover { color: var(--text-1); } }
 /* a long title wraps instead of being cut (final integration); the preview only takes the room that is left */
 .ws-fold__t { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .ws-fold__pv { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-3); }
@@ -294,7 +294,7 @@ html[data-theme="day"] .ws-quick__done { color: var(--text-1); }
 }
 .ws-src { display: grid; gap: 6px; }
 .ws-src__btn { justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 6px; margin-left: -6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font: 500 12px/16px var(--font-sans); cursor: pointer; }
-.ws-src__btn:hover { color: var(--text-1); background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-src__btn:hover { color: var(--text-1); background: var(--glass-card-hover); } }
 .ws-src__btn .icon { width: 13px; height: 13px; }
 .ws-src__text { display: grid; gap: 4px; font: 400 12px/16px var(--font-sans); color: var(--text-2); overflow-wrap: anywhere; max-height: 140px; overflow-y: auto; }
 .ws-src__text[hidden] { display: none; }
@@ -321,7 +321,7 @@ body.ws-on .ws-win[data-dock="right"] .ws-rz:not(.ws-rz--w), body.ws-on .ws-win[
   content: ""; position: absolute; top: 50%; left: 2px; width: 4px; height: 36px; margin-top: -18px; border-radius: 2px;
   background: var(--rule-strong); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
 }
-.ws-win[data-dock]:hover .ws-rz--w::before, .ws-win[data-dock]:hover .ws-rz--e::before { opacity: 1; }
+@media (hover: hover) { .ws-win[data-dock]:hover .ws-rz--w::before, .ws-win[data-dock]:hover .ws-rz--e::before { opacity: 1; } }
 @media (pointer: coarse) {
   .ws-rz--n, .ws-rz--s { height: 16px; } .ws-rz--n { top: -8px; } .ws-rz--s { bottom: -8px; }
   .ws-rz--e, .ws-rz--w { width: 16px; } .ws-rz--e { right: -8px; } .ws-rz--w { left: -8px; }
@@ -354,12 +354,12 @@ body[data-view="overview"] .ws-co__acts .btn, body[data-view="overview"] .ws-qui
   display: inline-flex; align-items: center; gap: 6px; height: 30px; max-width: 200px; padding: 0 4px 0 10px;
   border: 0; background: transparent; color: var(--text-1); font: 500 12.5px/1 var(--font-sans); cursor: pointer; border-radius: 999px 0 0 999px;
 }
-.ws-chip:hover { background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-chip:hover { background: var(--glass-card-hover); } }
 .ws-chip .icon { width: 13px; height: 13px; color: var(--text-2); flex: none; }
 .ws-chip.is-pinned .icon { color: var(--gold); }
 .ws-chip__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-chip__x { display: inline-grid; place-items: center; width: 28px; height: 30px; border: 0; background: transparent; color: var(--text-2); cursor: pointer; border-radius: 0 999px 999px 0; }
-.ws-chip__x:hover { color: var(--text-1); background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-chip__x:hover { color: var(--text-1); background: var(--glass-card-hover); } }
 .ws-chip__x .icon { width: 11px; height: 11px; }
 
 /* ── 4 · Adopted workspace: the summary rail (slim 76 px · full 360 px · overlay) ─ */
@@ -399,7 +399,8 @@ html[data-theme="day"] .ws-slim { --ws-accent: var(--btn-primary-bg); }   /* Ter
   transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
 }
 .ws-slim__open .icon { width: 18px; height: 18px; }
-.ws-slim:hover .ws-slim__open, .ws-slim__open:focus-visible { background: var(--surface-hover); color: var(--text-1); }
+.ws-slim__open:focus-visible { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .ws-slim:hover .ws-slim__open { background: var(--surface-hover); color: var(--text-1); } }
 .ws-slim__open:active { background: var(--surface-hover); color: var(--text-1); scale: .96; }
 
 /* the tooltip: "Buka panel Merchant" and the key "[", right of the rail. After 400 ms under the cursor, at once on
@@ -417,7 +418,7 @@ html[data-theme="day"] .ws-slim { --ws-accent: var(--btn-primary-bg); }   /* Ter
 }
 .ws-slim__tip::before { content: ""; position: absolute; top: 0; bottom: 0; left: -12px; width: 12px; }   /* hover bridge */
 .ws-slim__tip .kbd { min-width: 20px; height: 20px; border-radius: 5px; }
-.ws-slim__open:hover + .ws-slim__tip, .ws-slim__tip:hover { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 400ms; }
+@media (hover: hover) { .ws-slim__open:hover + .ws-slim__tip, .ws-slim__tip:hover { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 400ms; } }
 .ws-slim__open:focus-visible + .ws-slim__tip { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 0s; }
 .ws-slim.is-tip-off .ws-slim__tip { opacity: 0; visibility: hidden; transition: none; }
 
@@ -438,7 +439,7 @@ html[data-theme="day"] .ws-slim { --ws-accent: var(--btn-primary-bg); }   /* Ter
   width: var(--ws-scope-w); height: var(--ws-scope-h); min-height: var(--ws-scope-h); padding: 0; border: 0; border-radius: 7px; cursor: pointer;
   font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2);
 }
-.ws-slim .ws-scope__opt:hover { color: var(--text-1); }
+@media (hover: hover) { .ws-slim .ws-scope__opt:hover { color: var(--text-1); } }
 .ws-slim .ws-scope__u { font-size: 12px; font-weight: 500; white-space: pre; }   /* the option is a flex box: "pre" keeps the space of " km" */
 .ws-slim .ws-scope__opt[aria-checked="true"] {
   background: var(--glass-card-hover); color: var(--text-1); cursor: default;
@@ -515,7 +516,8 @@ body.ws-adopted .ws-drawer.is-dragging { will-change: transform; }
   display: grid; place-items: center; border: 0; background: transparent; cursor: ns-resize; z-index: 2;
 }
 .ws-drawer__grip { width: 40px; height: 4px; border-radius: 2px; background: var(--rule-strong); transition: background var(--dur-fast) var(--ease-out); }
-.ws-drawer__grab:hover .ws-drawer__grip, .ws-drawer__grab:focus-visible .ws-drawer__grip { background: var(--text-2); }
+.ws-drawer__grab:focus-visible .ws-drawer__grip { background: var(--text-2); }
+@media (hover: hover) { .ws-drawer__grab:hover .ws-drawer__grip { background: var(--text-2); } }
 .ws-drawer__row { display: flex; align-items: center; gap: 12px; height: 44px; min-width: 0; }
 .ws-drawer__legend { flex: none; width: 150px; height: 40px; }
 body.ws-adopted:not(.ws-legend-on) .ws-drawer__legend { display: none; }
@@ -533,7 +535,7 @@ body.ws-adopted:not(.ws-legend-on) .ws-drawer__legend { display: none; }
   box-shadow: var(--glass-shadow-sm);
 }
 .ws-tabscroll[hidden] { display: none; }
-.ws-tabscroll:hover { background: var(--glass-card-hover); }
+@media (hover: hover) { .ws-tabscroll:hover { background: var(--glass-card-hover); } }
 .ws-tabscroll .icon { width: 13px; height: 13px; }
 .ws-tabscroll--prev { left: 0; } .ws-tabscroll--next { right: 0; }
 .ws-drawer__tabs > * { position: static !important; padding: 0 !important; margin: 0 !important; border: 0 !important; background: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
@@ -631,4 +633,57 @@ body.ws-suspended .ws-win, body.ws-suspended .ws-co, body.ws-suspended .ws-tray-
   .ws-co, .ws-co__tail, .ws-tray--float, .ws-edge, .ws-pin,
   html[data-theme="day"] body[data-view="deep"].ws-on .drawer.ws-win, html[data-theme="day"] body[data-view="deep"] .ws-pin,
   html[data-theme="day"] body[data-view="deep"] .ws-co, html[data-theme="day"] body[data-view="deep"] .ws-co__tail { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ── 9 · V8 (docs/V8_SPEC.md §5.1 S7; MOBILE_UX_PLAN M7, M13, M15) ──────────────────────────────────────────── */
+
+/* two quick actions in a head (QUICK_MAX), side by side; a navigation action ("Lihat di Sekolah ›") is quieter */
+.ws-quicks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 2px; }
+.ws-quicks > .ws-quick { margin-top: 0; }
+.ws-sticky .ws-quicks { flex: 2 1 0; flex-wrap: nowrap; gap: 8px; margin: 0; min-width: 0; }
+.ws-sticky .ws-quicks > .ws-quick { flex: 1 1 0; min-width: 0; }
+/* V8 fix round: a primary ("Rute di Google Maps") and quick actions together: the quick actions take a second line */
+.ws-sticky.has-extra { flex-wrap: wrap; }
+.ws-sticky__extra { display: flex; flex: 1 0 100%; min-width: 0; }
+.ws-sticky__extra > .ws-quick, .ws-sticky__extra > .ws-quicks { flex: 1 1 0; min-width: 0; }
+/* V8 integration (T7 at 360 × 780): one quick action shares the row (Rute · + Rencana kunjungan · Semua detail), as
+   Kesehatan's three buttons do; on its own line it fell under the tab bar at peek when the card head took four lines */
+.ws-sticky.has-extra:has(> .ws-sticky__extra > .ws-quick:only-child) { flex-wrap: nowrap; }
+.ws-sticky.has-extra:has(> .ws-sticky__extra > .ws-quick:only-child) > .ws-sticky__extra { flex: 1 1 0; order: 1; }
+.ws-sticky.has-extra:has(> .ws-sticky__extra > .ws-quick:only-child) > .ws-sticky__more { order: 2; }
+
+/* a callout link that runs in the page ("+ Rencana kunjungan"), after the Google links */
+.ws-co__run { padding: 0; border: 0; background: none; cursor: pointer; }
+.ws-co__run:disabled { color: var(--text-2); cursor: default; }
+.ws-co__run .icon { width: 12px; height: 12px; }
+
+/* the slim rail's crumb after MCD.nav.go: "‹ Kembali" (the full words in title and aria-label) */
+.ws-slim__crumb {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 2px; width: 64px; min-height: 32px;
+  margin: 0 0 8px; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: 8px; background: transparent;
+  color: var(--text-1); font: 600 12px/16px var(--font-sans); cursor: pointer;
+}
+.ws-slim__crumb[hidden] { display: none; }
+.ws-slim__crumb .icon { width: 12px; height: 12px; flex: none; }
+@media (hover: hover) { .ws-slim__crumb:hover { background: var(--surface-hover); } }
+
+/* Rencana kunjungan as a card (planCard): a pin of its own kind; its body is plan.js's */
+.ws-plan .drawer__body.ws-plan__body { padding-top: var(--s-3); }
+.ws-chip--plan .icon { color: var(--ws-accent, var(--btn-primary-bg)); }
+
+/* M7: the sheet footer's Google links and the card's small controls are 44 px on phones (the main field action) */
+@media (max-width: 767px) {
+  .ws-link-btn, .ws-foot__acts .gmaps-link, .ws-foot__acts .btn { min-height: 44px; padding: 8px 12px; font-size: 14px; line-height: 18px; }
+  .ws-foot__acts .btn .icon, .ws-link-btn .icon { width: 14px; height: 14px; }
+  .ws-src__btn, .ws-crumb, .ws-fold__btn { min-height: 44px; }
+}
+
+/* M15: the source notes scroll on their own */
+.ws-src__text { overscroll-behavior: contain; }
+
+/* M13: a phone turned sideways keeps the phone's brief and sticky row in the left-column card */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body.ws-land .ws-brief { display: grid; }
+  body.ws-land .ws-sticky { display: flex; }
+  body.ws-land .ws-sticky__note:not([hidden]) { display: block; }
 }

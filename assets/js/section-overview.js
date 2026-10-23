@@ -9,7 +9,7 @@
  * One page, no map and no views (the layout is 'page'; the view switch and the breadcrumb are hidden here):
  *   1. Action title with its unit, period and source. Before the LVM import, one line under it: what the
  *      import adds, with the single primary button "Impor file LVM".
- *   2. KPI tiles beside "Prioritas kunjungan" (the top 3 of MCD.territory.priority). Before the import:
+ *   2. KPI tiles beside "Urutan kecamatan" (the top 3 of MCD.territory.priority). Before the import:
  *      "Sasaran EDC", "Sasaran LVM" (counts of MCD.sme.edcTierCounts) and "Siswa SMA 17+ (dapat memiliki
  *      KTP)"; the merchant total is already the title. After the import: the LVM tiles.
  *   3. Row 2, the named rankings (item 31, 35), side by side from 1200 px:
@@ -31,7 +31,8 @@
  *   4. Columns per kecamatan (10 with the most merchants within 15 km, coloured by the ranked third;
  *      Cipayung, the branch's kecamatan, is always included) beside a donut (LVM status or jenis usaha).
  *   5. UREG and USAK against target per branch: horizontal glass bars with a dashed target line.
- *   6. Pintasan to Merchant, Sekolah and KPR, plus the programmes that end soon.
+ *   6. Pintasan: Merchant · Kesehatan · Sekolah · Kampus (V8 D56; KPR fifth only while shown), plus the programmes
+ *      that end soon. The Kesehatan door reads MCD.health.door() (15 km) once health-facilities is in (idle, 3 s).
  *
  * Glass treatment (item 31): gradient fills, a soft inner highlight, gentle shadows, rounded ends. Lengths
  * and angles still carry the data from a zero baseline. No 3D faces, no rotation, tilt or perspective.
@@ -155,7 +156,7 @@
     donutMode: 'status', barMode: 'ureg', tables: {}, resizeT: 0, uid: 0, mid: 0,
     sma: { metric: 'all', kec: null }, charts: {}, sas: {}, sasCount: null, google: null, googleBusy: false, googleToken: 0, onDist: null,
     drawKey: {}, kpiSig: '', counted: {}, jobs: [], tipOpen: {}, crumbCss: true, hints: {},
-    campusT: 0, campusIdle: 0, campusIdleFn: null, campusSum: null };
+    campusT: 0, campusIdle: 0, campusIdleFn: null, campusSum: null, healthT: 0, healthIdle: 0, healthIdleFn: null };
   var ONCE = { schoolsAsked: false, smaAsked: false, smaFailed: false, poi: { ref: null, n: null }, tileCats: { ref: null, by: null }, tni: null };
 
   /* ------------------------------------------------------------------ helpers */
@@ -985,6 +986,7 @@
     if (M.demo) return 'Sumber: data contoh (ilustrasi) · merchant publik dari Overture Maps Places (' + poisWhen() + ')' + (extra ? ' · ' + extra : '');
     var s = 'Sumber: Overture Maps Places (' + poisWhen() + ')';
     if (M.hasBank) s += ' · file Rev LVM' + (M.asOf ? ' per ' + dateTxt(M.asOf) : '');
+    if (fundingCounts()) s += ' · file funding merchant cabang';
     return s + (extra ? ' · ' + extra : '');
   }
 
@@ -1075,13 +1077,16 @@
     r.heroM = el('p', { class: 'ov-hero__m' });
     r.hero.appendChild(r.heroT); r.hero.appendChild(r.heroS); r.hero.appendChild(r.heroM);
     r.banner = el('div', { class: 'ov-banner', role: 'note', hidden: true });
+    /* V8 final fix (critic, 24 Oct 2026): the user's priority (Kesehatan) and the branch's own merchants (funding file)
+       on the first screen, one line each, instead of only in "Pintasan" four screens down */
+    r.quick = el('ul', { class: 'ov-quick', aria: { label: 'Kesehatan dan merchant KCP Cilangkap' } });
     r.kpis = el('div', { class: 'ov-kpis', role: 'list', aria: { label: 'Angka utama' } });
     r.cols = exhibit('ov-x--cols');
     r.colsTable = tableToggle(r.cols, 'cols');
     r.colsPlot = el('div', { class: 'ov-plot ov-plot--cols' });
     r.colsKey = el('ul', { class: 'ov-key', aria: { label: 'Arti warna' } });
     r.cols.body.appendChild(r.colsPlot); r.cols.body.appendChild(r.colsKey); r.cols.body.appendChild(r.colsTable);
-    r.prio = exhibit('ov-x--prio', 'Prioritas kunjungan');
+    r.prio = exhibit('ov-x--prio', 'Urutan kecamatan');
     r.prioList = el('ol', { class: 'ov-prio' });
     r.prio.body.appendChild(r.prioList);
     r.donut = exhibit('ov-x--donut');
@@ -1131,10 +1136,10 @@
     r.sas = { edc: sasPanel('edc'), lvm: sasPanel('lvm') };
     r.edcAct = r.sas.edc.act; r.edcGoogle = r.sas.edc.google;
     r.short = el('section', { class: 'ov-short', aria: { labelledby: 'ov-short-t' } });
-    /* Row 1: the title, the import line and the KPI tiles beside "Prioritas kunjungan". Row 2: the named
+    /* Row 1: the title, the import line and the KPI tiles beside "Urutan kecamatan". Row 2: the named
        rankings (SMA, Sasaran EDC, Sasaran LVM), side by side from 1200 px, so they start on the first screen.
        Then the columns beside the donut, the UREG / USAK bars and the shortcuts. */
-    root.appendChild(el('div', { class: 'ov-grid ov-grid--a' }, el('div', { class: 'ov-lead' }, r.hero, r.banner, r.kpis), r.prio.el));
+    root.appendChild(el('div', { class: 'ov-grid ov-grid--a' }, el('div', { class: 'ov-lead' }, r.hero, r.banner, r.quick, r.kpis), r.prio.el));
     root.appendChild(el('div', { class: 'ov-grid ov-grid--r' }, r.sma.el, r.sas.edc.el, r.sas.lvm.el));
     root.appendChild(el('div', { class: 'ov-grid ov-grid--c' }, r.cols.el, r.donut.el));
     root.appendChild(el('div', { class: 'ov-grid ov-grid--b' }, r.bars.el));
@@ -1454,7 +1459,7 @@
     return node;
   }
 
-  /** A column, a priority row or "Lihat merchant": highlight the kecamatan in Merchant › Prioritas kunjungan. */
+  /** A column, a priority row or "Lihat merchant": highlight the kecamatan in Merchant › Urutan kecamatan. */
   function openKec(id) {
     if (MCD.sme && isFn(MCD.sme.setView)) safe(MCD.sme.setView, MCD.sme, [{ kec: id }]);
     go('merchants', { view: 'deep', action: 'merchants:leads' });
@@ -1471,7 +1476,7 @@
     var r = S.refs, x = r.prio, list = M.priority;
     clear(r.prioList);
     if (!list.length) {
-      x.title.textContent = 'Prioritas kunjungan belum dapat ditampilkan';
+      x.title.textContent = 'Urutan kecamatan belum dapat ditampilkan';
       x.sub.textContent = '';
       x.src.textContent = 'Sumber: BPS, OpenStreetMap';
       return;
@@ -2154,6 +2159,91 @@
     p.textContent = c.text;
     if (c.title) p.setAttribute('title', c.title); else p.removeAttribute('title');
   }
+  /* ---- V8: the Kesehatan door (HEALTH_SPEC §3.3, V8 §4.8). 15 km numbers from MCD.health.door(); the file comes
+     through MCD.health.load() (MCD.app.lazy('health-facilities')) 3 s after the mount, at idle, never in the mount frame.
+     Budget guard (HEALTH §11.2, 150 ms at 1×): a device that says it is slow (deviceMemory < 4 GB, Save-Data) loads
+     nothing here, and a load measured above the budget stops later Ringkasan loads in this session; the number then
+     appears once Kesehatan has been opened. */
+  var HEALTH_WAIT_MS = 3000, HEALTH_BUDGET_MS = 150;
+  var HEALTH_LINE_WAIT = 'Rumah sakit dan klinik dalam 15 km';
+  var HEALTH_GUARD = { slow: false, ms: null };
+  function healthApi() { var H = MCD.health; return H && isFn(H.door) ? H : null; }
+  function healthLine() {
+    var H = healthApi(), d = H ? safe(H.door, H) : null;
+    return d && isNum(d.rs) ? { text: d.line, title: d.title || null } : { text: HEALTH_LINE_WAIT, title: null };
+  }
+  function paintHealthLine() {
+    var c = healthLine();
+    [S.refs && S.refs.healthLine, S.refs && S.refs.quickHealth].forEach(function (p) {
+      if (!p) return;
+      p.textContent = p === S.refs.quickHealth ? 'Kesehatan: ' + c.text : c.text;
+      if (c.title) p.setAttribute('title', c.title); else p.removeAttribute('title');
+    });
+  }
+  /** {n, idle} of the funding file (counts only, the same rule as Merchant: Tier Freq nihil with at least one EDC), or null. */
+  function fundingCounts() {
+    var F = MCD.funding, m = F && isFn(F.current) ? safe(F.current, F) : null;
+    if (!m || !Array.isArray(m.merchants)) return null;
+    var t = m.aggregates && m.aggregates.total;
+    return { n: t && isNum(t.merchants) ? t.merchants : m.merchants.length,
+      idle: m.merchants.filter(function (r) { return r && r.tierFreq === 'nihil' && (r.edc | 0) >= 1; }).length };
+  }
+  /** The first-screen lines: Kesehatan while that section is shown; the branch's funding merchants once imported. */
+  function renderQuick() {
+    var r = S.refs;
+    if (!r || !r.quick) return;
+    clear(r.quick);
+    r.quickHealth = null;
+    if (shown('health')) {
+      var hl = healthLine();
+      r.quickHealth = el('span', { class: 'ov-quick__t', text: 'Kesehatan: ' + hl.text, title: hl.title || null });
+      r.quick.appendChild(el('li', { class: 'ov-quick__row' }, el('span', { class: 'ov-quick__ic', aria: { hidden: 'true' } }, icon('sec-health')), r.quickHealth,
+        btn('Buka Kesehatan', { cls: 'btn--ghost ov-quick__b', after: 'chev-r', run: function () { go('health'); } })));
+    }
+    var fc = fundingCounts();
+    if (fc) {
+      r.quick.appendChild(el('li', { class: 'ov-quick__row' }, el('span', { class: 'ov-quick__ic', aria: { hidden: 'true' } }, icon('sec-merchants')),
+        el('span', { class: 'ov-quick__t', text: 'Merchant KCP Cilangkap: ' + int(fc.n) + ', ' + int(fc.idle) + ' dengan EDC tidak bertransaksi' }),
+        btn('Lihat EDC tidak bertransaksi', { cls: 'btn--ghost ov-quick__b', after: 'chev-r', run: function () { go('merchants', { view: 'deep', action: 'merchants:idle' }); } })));
+    }
+    r.quick.hidden = !r.quick.children.length;
+  }
+  function slowDevice() {
+    var n = W.navigator || {}, c = n.connection || {};
+    return !!((isNum(n.deviceMemory) && n.deviceMemory < 4) || c.saveData === true);
+  }
+  function stopHealth() {
+    if (S.healthT) { clearTimeout(S.healthT); S.healthT = 0; }
+    if (S.healthIdle) {
+      if (S.healthIdleFn && isFn(W.cancelIdleCallback)) safe(W.cancelIdleCallback, W, [S.healthIdle]);
+      else clearTimeout(S.healthIdle);
+      S.healthIdle = 0;
+    }
+    S.healthIdleFn = null;
+  }
+  function askHealth() {
+    stopHealth();
+    var H = healthApi();
+    if (!H || !shown('health')) return;
+    if (H.ready && safe(H.ready, H)) { paintHealthLine(); return; }
+    if (HEALTH_GUARD.slow || slowDevice() || !isFn(H.load)) return;
+    S.healthT = setTimeout(function () {
+      S.healthT = 0;
+      var run = function () {
+        S.healthIdle = 0; S.healthIdleFn = null;
+        if (!S.ctx) return;
+        var now = function () { return W.performance && isFn(W.performance.now) ? W.performance.now() : Date.now(); }, t0 = now(), p;
+        try { p = H.load(); } catch (e) { p = null; }
+        Promise.resolve(p).then(function (ok) {
+          HEALTH_GUARD.ms = Math.round(now() - t0);
+          if (HEALTH_GUARD.ms > HEALTH_BUDGET_MS) HEALTH_GUARD.slow = true;
+          if (ok !== false && S.ctx) paintHealthLine();
+        }, function () { /* the waiting line stays (no error on Ringkasan) */ });
+      };
+      if (isFn(W.requestIdleCallback)) { S.healthIdleFn = run; S.healthIdle = W.requestIdleCallback(run, { timeout: HEALTH_WAIT_MS }); }
+      else S.healthIdle = setTimeout(run, 0);
+    }, HEALTH_WAIT_MS);
+  }
   function stopCampus() {
     if (S.campusT) { clearTimeout(S.campusT); S.campusT = 0; }
     if (S.campusIdle) {
@@ -2192,7 +2282,8 @@
     var cfg = MCD.config || {};
     if (!isFn(cfg.livePrograms)) return [];
     var t = new Date(), asOf = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
-    return (safe(cfg.livePrograms, cfg, [asOf]) || []).filter(function (p) { return p.product === 'BIZ' || p.product === 'KPR'; }).slice(0, 3).map(function (p) {
+    /* V8 final fix: a programme of a hidden section (KPR, teammates' decision) stays out of the list */
+    return (safe(cfg.livePrograms, cfg, [asOf]) || []).filter(function (p) { return p.product === 'BIZ' || (p.product === 'KPR' && shown('property')); }).slice(0, 3).map(function (p) {
       var s = (isFn(cfg.programStatus) && safe(cfg.programStatus, cfg, [p, asOf])) || {};
       return { p: p, days: s.daysLeft, level: s.level };
     });
@@ -2212,12 +2303,15 @@
     ].filter(Boolean);
     /* v6: the Kampus door after Sekolah (D2: same anatomy, no campus names) */
     if (campusDoorOn()) { var cl = campusLine(); cards.splice(2, 0, { id: 'campus', icon: 'sec-campus', t: 'Kampus', line: cl.text, title: cl.title, b: 'Buka Kampus' }); }
-    r.campusLine = null;
-    var grid = el('div', { class: 'ov-doors' + (cards.length === 4 ? ' ov-doors--4' : '') });
+    /* V8 D56 (HEALTH H11): Kesehatan second, after Merchant: Merchant · Kesehatan · Sekolah · Kampus (· KPR while shown) */
+    if (shown('health')) { var hl = healthLine(); cards.splice(1, 0, { id: 'health', icon: 'sec-health', t: 'Kesehatan', line: hl.text, title: hl.title, b: 'Buka Kesehatan' }); }
+    r.campusLine = null; r.healthLine = null;
+    var grid = el('div', { class: 'ov-doors' + (cards.length === 4 ? ' ov-doors--4' : cards.length === 5 ? ' ov-doors--5' : '') });
     cards.forEach(function (c) {
       var acts = el('div', { class: 'ov-door__act' }, btn(c.b, { after: 'chev-r', run: function () { go(c.id); } }));
       var line = el('p', { class: 'ov-door__l', text: c.line, title: c.title || null });
       if (c.id === 'campus') r.campusLine = line;
+      if (c.id === 'health') r.healthLine = line;
       var main = el('div', { class: 'ov-door__main' }, el('h3', { class: 'ov-door__t', text: c.t }), line);
       if (c.id === 'property') {
         /* the second door sits above the primary button, so the primary buttons of every door share one baseline */
@@ -2251,6 +2345,7 @@
     if (!S.ctx || !S.refs) return;
     var M = model(force);
     renderHero(M);
+    renderQuick();
     renderKpis(M);
     renderCols(M);
     renderPrio(M);
@@ -2297,7 +2392,7 @@
   Object.defineProperty(SPEC, 'source', { enumerable: true, get: function () {
     var M = S.model;
     if (M && M.hasLvm && S.ctx) return S.ctx.provenance('lvm');
-    return 'Sumber: Overture Maps (' + poisWhen() + '), OpenStreetMap, BPS · data publik · file LVM belum diimpor';
+    return 'Sumber: Overture Maps (' + poisWhen() + '), OpenStreetMap, BPS · data publik' + (fundingCounts() ? ' · file funding merchant cabang' : '') + ' · file LVM belum diimpor';
   } });
 
   /**
@@ -2328,6 +2423,7 @@
       askSchools();
       ensureSma();
       askCampuses();
+      askHealth();
       /* the shared "Jam sibuk" and "Motor (tanpa tol)" switches change every distance on the page */
       S.onDist = function () { if (S.ctx && S.refs) { renderSma(); renderSasaran(); } };
       if (isFn(W.addEventListener)) W.addEventListener('mcd:distance', S.onDist);
@@ -2342,7 +2438,7 @@
           { label: 'Lihat Jaringan nasional (lewat kantor pusat)', kw: 'jaringan nasional kantor pusat minimarket waralaba chain', run: function () { openSasaran('nasional'); } }
         ].filter(Boolean);
         (M.priority || []).forEach(function (p) {
-          cmds.push({ label: 'Prioritas ' + p.rank + ': Kec. ' + p.name, kw: 'kecamatan prioritas kunjungan ' + (p.kota || ''), run: function () { openKec(p.id); } });
+          cmds.push({ label: 'Urutan ' + p.rank + ': Kec. ' + p.name, kw: 'kecamatan urutan kecamatan kunjungan ' + (p.kota || ''), run: function () { openKec(p.id); } });
         });
         var D = smaData();
         if (D) smaTop(D, { metric: 'all', n: 3 }).forEach(function (row) {
@@ -2373,6 +2469,7 @@
       if (S.onDist && isFn(W.removeEventListener)) W.removeEventListener('mcd:distance', S.onDist);
       S.onDist = null;
       stopCampus();
+      stopHealth();
       Object.keys(S.charts).forEach(dropChart);
       stopJobs();
       S.drawKey = {}; S.kpiSig = ''; S.counted = {};
@@ -2399,6 +2496,9 @@
       state: function () { return { hints: S.hints, dotsKeyIn: S.dotsKeyIn, cardKec: S.sma.cardKec, nat: S.model && S.model.sas ? S.model.sas.nat : null }; } },
     /* v6 (V6_SPEC §6.12) for tests/overview-data-v6.test.mjs */
     _v6: { campusTotals: campusTotals, campusLine: campusLine, campusDoorOn: campusDoorOn, CAMPUS_TITLE: CAMPUS_TITLE, CAMPUS_LINE_WAIT: CAMPUS_LINE_WAIT,
-      CAMPUS_WAIT_MS: CAMPUS_WAIT_MS, state: function () { return { waiting: !!S.campusT, idle: !!S.campusIdle, line: S.refs ? S.refs.campusLine : null }; } }
+      CAMPUS_WAIT_MS: CAMPUS_WAIT_MS, state: function () { return { waiting: !!S.campusT, idle: !!S.campusIdle, line: S.refs ? S.refs.campusLine : null }; } },
+    /* V8 (tests/places-v8.test.mjs): the Kesehatan door's load and its budget guard */
+    _v8: { HEALTH_WAIT_MS: HEALTH_WAIT_MS, HEALTH_BUDGET_MS: HEALTH_BUDGET_MS, guard: HEALTH_GUARD, healthLine: healthLine,
+      state: function () { return { waiting: !!S.healthT, idle: !!S.healthIdle, line: S.refs ? S.refs.healthLine : null }; } }
   };
 })(window.MCD = window.MCD || {});

@@ -1225,3 +1225,14 @@ html.mcd-entering body > :not(#gate):not(script):not(style):not(link):not(noscri
 @keyframes gate-sheen { 0% { opacity: 1; background-position: 120% 0; } 100% { opacity: 1; background-position: -40% 0; } }
 @keyframes gate-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes gate-enter { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- V8 phone layout only (docs/V8_SPEC.md D59; MOBILE_UX_PLAN M7, M8, M19) ------------------------------------
+ * Layout, no look: the idle warning sits above the tab bar and the home indicator with a 44 px button, and the
+ * sign-in clears the status bar of a Home Screen web app. Hovers, colours, the drift and the map stay as they are. */
+@media (max-width: 599px) {
+  .mcd-idle { left: 8px; right: 8px; width: auto; bottom: calc(var(--tabbar-h, 56px) + env(safe-area-inset-bottom, 0px) + 8px); }
+  .mcd-idle__btn { height: 44px; }
+}
+@media (max-width: 640px) {
+  .gate-stage { padding-top: max(5vh, 20px, calc(env(safe-area-inset-top, 0px) + 12px)); }
+}

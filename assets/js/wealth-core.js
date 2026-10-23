@@ -49,7 +49,7 @@
   var VERSION = '7.0.0';
   var HAS = Object.prototype.hasOwnProperty;
   var CENTER = [106.91329, -6.32818];                   // Mabes TNI Cilangkap, the centre of every scope ring
-  var SCOPES = [15, 30];
+  var SCOPES = [5, 15, 30];                                // 5 km by default (teammates, 23 Oct 2026; V8 §4.5)
   var MERCHANT_KM = 15;                                // data/sme-pois.js stops at 15 km
   var MERCHANT_TIERS = ['edc', 'naik-edc'];            // Sasaran EDC (and Naik ke EDC after an LVM import); never 'nasional'
 

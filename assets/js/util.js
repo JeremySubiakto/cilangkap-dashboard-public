@@ -777,7 +777,7 @@
 
   /**
    * Safe DOM builder (§J.1): el('button', {class:'chip', type:'button', aria:{pressed:'true'},
-   * on:{click: fn}}, 'KSM'). Strings become text nodes; innerHTML is refused.
+   * on:{click: fn}}, 'KPR'). Strings become text nodes; innerHTML is refused.
    * Props: class|className (string|array), text, style {}, dataset|data {}, aria {}, attrs {},
    * on {event: fn} or onClick: fn, other keys → DOM property when present, else attribute.
    * SVG: el('svg', …) and its children via el.svg(tag, …) (or any tag in the SVG set).

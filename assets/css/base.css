@@ -126,7 +126,7 @@ body {
 /* Product and status glyphs: filled symbols, each with a hue token */
 .glyph { width: 10px; height: 10px; flex: none; fill: currentColor; stroke: none; vertical-align: middle; }
 .glyph--12 { width: 12px; height: 12px; }
-.g-ksm { color: var(--p-ksm); }  .g-kpr { color: var(--p-kpr); }  .g-kkb { color: var(--p-kkb); }
+.g-azure { color: var(--p-azure); }  .g-kpr { color: var(--p-kpr); }  .g-copper { color: var(--p-copper); }
 .g-cc  { color: var(--p-cc); }   .g-mg  { color: var(--p-mg); }   .g-pen { color: var(--p-pen); }
 .g-oth { color: var(--p-oth); }  .g-ws  { color: var(--st-whitespace); }  .g-pr { color: var(--st-prospect); }
 .g-merchant { color: var(--b-merchant); }  .g-giro { color: var(--b-giro); }  .g-payroll { color: var(--b-payroll); }

@@ -170,7 +170,7 @@ body.rail-r-collapsed .rail--r { transform: translateX(calc(100% + var(--inset))
   white-space: nowrap;
   transition: color var(--dur-hover) var(--ease-standard);
 }
-.tab:hover { color: var(--text-1); }
+@media (hover: hover) { .tab:hover { color: var(--text-1); } }
 .tab[aria-selected="true"] { color: var(--text-1); }
 .tab:focus-visible { outline-offset: -6px; box-shadow: inset 0 0 0 5px var(--signal-a20); }
 .tab__key { display: none; font: 400 12px/1 var(--font-mono); color: var(--text-3); }
@@ -304,8 +304,10 @@ body.rail-r-collapsed .rail--r { transform: translateX(calc(100% + var(--inset))
 
 /* xs < 600 (spec at 390×844): the page flows; the map is a hero behind it */
 @media (max-width: 599px) {
-  :root { --topbar-h: var(--topbar-h-xs); --map-h-xs: 52vh; }
-  body[data-posture="sheet"] { --map-h-xs: 34vh; }
+  /* V8 M5 option B (docs/V8_SPEC.md §0.3, §4.9) and M9: the hero is about half the screen; svh, so the WebGL canvas
+     never resizes while the URL bar moves (the vh line is the fallback for older browsers) */
+  :root { --topbar-h: var(--topbar-h-xs); --map-h-xs: 48vh; --map-h-xs: 48svh; }
+  body[data-posture="sheet"] { --map-h-xs: 34vh; --map-h-xs: 34svh; }
   body { overflow-x: hidden; overflow-y: auto; }
   #map { bottom: auto; top: var(--topbar-h); height: var(--map-h-xs); }
   #map-vignette { display: none; }

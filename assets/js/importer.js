@@ -24,6 +24,10 @@
  *   MCD.importer.exportImportedDatasets()       → {lvm, edc, sekolah, sites} imported/vault datasets, runtime fields stripped
  *   MCD.importer.registerSchema(type, schema)   sections add dataset types
  *   MCD.importer.schemas() · reasons · reportCsv(report) · templateCsv(type) · geocode(rec, opts) · parse.* · reset()
+ *   V8 (docs/V8_SPEC.md §3.2, §3.3, D45): a schema may carry via ('funding': read only through the one import row
+ *   "Funding merchant (cabang)", never offered alone) and vaultOnly (the vault path only); registerSchema keeps both and
+ *   schemas() lists them, so Data & Privasi leaves such types out of its generic type list.
+ *   lookupSchema(type) → {type, label, dataKey, via, vaultOnly} | null (no throw for an unknown type)
  *
  * Sheet = {name, file, kind:'csv'|'xlsx', headers[], rows[][], rowNos[]}; rowNos are the
  * 1-based spreadsheet row numbers (header = row 1 for a plain CSV).
@@ -404,7 +408,10 @@
         return { key: c.key, type: c.type || 'string', req: c.req || false, syn: c.syn || [], personal: !!c.personal, note: c.note || null };
       }),
       detect: schema.detect || null, deny: (schema.deny || []).map(normHeader), monthly: schema.monthly || {}, daily: schema.daily || {},
-      build: schema.build, minScore: schema.minScore || 1, description: schema.description || null
+      build: schema.build, minScore: schema.minScore || 1, description: schema.description || null,
+      /* V8 D45 (docs/V8_SPEC.md §3.2, §3.3): via 'funding' = read only through the one import row "Funding merchant
+         (cabang)" of Data & Privasi, never offered on its own; vaultOnly = the vault path only, never a file */
+      via: schema.via ? String(schema.via) : null, vaultOnly: schema.vaultOnly === true
     };
     s.colByKey = {};
     s.lookup = {};
@@ -781,7 +788,7 @@
   /* ====================================================== Schools & yayasan */
 
   var SCHOOL_PRODUCTS = [[/giro|operasional|kopra|cms/, 'GIRO'], [/payroll|gaji guru|gaji/, 'PAYROLL'], [/\bva\b|virtual|spp|biaya sekolah/, 'VA_SPP'],
-    [/simpel|simpanan pelajar/, 'SIMPEL'], [/tabungan|tabunganku|siswa/, 'TABUNGAN'], [/edc|qris|merchant|livin.*merchant|kantin/, 'LVM'], [/kredit|ksm|kpr|kur|pinjaman/, 'KREDIT']];
+    [/simpel|simpanan pelajar/, 'SIMPEL'], [/tabungan|tabunganku|siswa/, 'TABUNGAN'], [/edc|qris|merchant|livin.*merchant|kantin/, 'LVM'], [/kredit|ksm|kpr|kur|pinjaman/, 'KREDIT']];   // D41: reads the bank's own product wording and maps it to KREDIT; no screen names that product
   function schoolProduct(v) {
     var s = lower(v);
     if (!s) return null;
@@ -1126,11 +1133,16 @@
   function schemas() {
     return ORDER.map(function (t) {
       var s = SCHEMAS[t];
-      return { type: t, label: s.label, dataKey: s.dataKey, description: s.description,
+      return { type: t, label: s.label, dataKey: s.dataKey, description: s.description, via: s.via || null, vaultOnly: !!s.vaultOnly,
         columns: s.columns.map(function (c) { return { key: c.key, type: c.type, req: c.req, syn: c.syn.slice(), personal: c.personal, note: c.note }; }),
         monthly: Object.keys(s.monthly).map(function (k) { return { key: k, pattern: s.monthly[k] + '_YYYY_MM' }; }),
         deny: DENY.concat(s.deny) };
     });
+  }
+  /** V8: the routing facts of one schema, or null for a type nobody registered (never throws). */
+  function lookupSchema(type) {
+    var s = SCHEMAS[type];
+    return s ? { type: s.type, label: s.label, dataKey: s.dataKey, via: s.via || null, vaultOnly: !!s.vaultOnly } : null;
   }
   /** Drops importer buffers (§K.1 "Remove all data from memory"). */
   function reset() { lastReport = null; }
@@ -1138,7 +1150,7 @@
   MCD.importer = {
     read: read, readText: readText, ensureXlsx: ensureXlsx, detect: detect, mapHeaders: mapHeaders,
     parse: parseSheet, parseAsync: parseAsync, apply: apply, applyDataset: applyDataset,
-    exportImportedDatasets: exportImportedDatasets, registerSchema: registerSchema, schemas: schemas,
+    exportImportedDatasets: exportImportedDatasets, registerSchema: registerSchema, schemas: schemas, lookupSchema: lookupSchema,
     reportCsv: reportCsv, templateCsv: templateCsv, geocode: geocode, reset: reset, reasons: REASONS,
     lastReport: function () { return lastReport; }, normHeader: normHeader, denyList: DENY.slice(),
     sha256Hex: function (s) { return hex(sha256(utf8(String(s)))); }, hmacHex: function (k, m) { return hex(hmacSha256(utf8(String(k)), utf8(String(m)))); }

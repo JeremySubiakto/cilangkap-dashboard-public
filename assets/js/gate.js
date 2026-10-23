@@ -86,7 +86,7 @@
   var T = {
     eyebrow: 'KCP JAKARTA CILANGKAP (12903)',
     title: 'Dashboard Akuisisi',
-    lede: 'Pantau peluang merchant, sekolah dan KPR di sekitar cabang.',
+    lede: 'Pantau peluang merchant, sekolah, kampus dan kesehatan di sekitar cabang.',
     cardTitle: 'Selamat datang',
     cardTitleBack: 'Masuk kembali',
     label: 'Kata sandi',

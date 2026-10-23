@@ -37,10 +37,18 @@
  *   Save encrypted copy. Switching off restores the real datasets untouched.
  *
  * SHELL (fixed placement, the same on every screen; docs/UX_FIX_PLAN.md §2, owner A)
- *   top bar     brand · Cari · Terang | Gelap · Data contoh · Bantuan · (Data belum disimpan) · Kunci;
- *               phones: Cari and Menu only, sections in a bottom tab bar
- *   section row Ringkasan · Merchant · Sekolah · Kampus · KPR · Data & Privasi (keys 1–6, v6; the active one
- *               highlighted); phones: the same six in the bottom tab bar
+ *   top bar     brand · Cari · Terang | Gelap · Data contoh · Rencana kunjungan · (Leads) · Bantuan ·
+ *               (Data belum disimpan) · Kunci; phones: Cari, the plan icon while it holds stops, and Menu
+ *   section row V8 (docs/V8_SPEC.md §2.2, D42): Ringkasan · Merchant · Sekolah · Kampus · Kesehatan · Calon Prioritas ┊
+ *               Posisi cabang · Data & Privasi (keys 1–4 and 6–9; KPR hidden keeps key 5); a hairline between the
+ *               market group and the branch group; short labels at 1024–1279 px. Phones (< 600 px, D43): a bar of
+ *               six fixed slots, the first five shown ids of MCD.config.PHONE_ORDER and "Lainnya" (the app sheet
+ *               "Bagian lain" with the other sections and Rencana kunjungan)
+ *   back        V8 M2 (assets/js/backstack.js, MCD.back): on phones and tablets the phone sheet, Cari, Bantuan,
+ *               Lainnya and the menus register a history layer, so Back closes them first; a section change closes
+ *               every layer; after sign-in the first Back shows a toast and stays (a second one within 3 s leaves)
+ *   vault       V8 §3.6: payload.policy (MCD.policy) and payload.leads (MCD.leadsUi) load before applyVault; an expired
+ *               lead list is left out (D29); saveEncrypted writes both and marks them saved
  *   page header breadcrumb + filter chips · title [?] · Sederhana | Detail · ⋯ (Lainnya: masking,
  *               full names, copy link); ctx.tabs for Detail tabs with per-view tab and scroll memory
  *   pages       Ringkasan and Data & Privasi use layout 'page' (no map, body[data-layout="page"])
@@ -124,6 +132,7 @@
     more: 'Lainnya',
     moreAria: 'Pilihan lain',
     asOfLead: 'Data LVM per ',
+    asOfLeadBank: 'Data bank per ',   // V8 integration: a funding, saldo or KPI file without the LVM file
     noData: 'Belum ada data bank',
     noDataTitle: 'Belum ada data bank. Peta hanya menampilkan data publik.',
     unsaved: 'Data belum disimpan',
@@ -240,7 +249,19 @@
     travelPeakTitle: 'Tampilkan waktu tempuh saat jam sibuk. Faktornya asumsi, dapat diubah di Data & Privasi.',
     travelNoToll: 'Motor (tanpa tol)',
     travelNoTollTitle: 'Tampilkan rute tanpa jalan tol, untuk sepeda motor.',
-    travelFromBranch: 'Jarak dari KCP'
+    travelFromBranch: 'Jarak dari KCP',
+    /* V8 (docs/V8_SPEC.md §2.3–§2.7, §10): the plan and lead buttons, the phone bar's Lainnya, the first Back */
+    plan: 'Rencana kunjungan',
+    planCount: function (n) { return n ? 'Rencana kunjungan (' + n + ')' : 'Rencana kunjungan'; },
+    planAria: function (n) { return n ? 'Rencana kunjungan, ' + n + ' tujuan' : 'Rencana kunjungan'; },
+    planRow: function (n) { return n ? 'Rencana kunjungan · ' + n + ' tujuan' : 'Rencana kunjungan'; },
+    planOpen: 'Buka rencana kunjungan',
+    leads: 'Leads',
+    leadsTitle: 'Daftar leads (CIF disamarkan)',
+    lainnya: 'Lainnya',
+    lainnyaAria: function (n) { return n ? 'Lainnya, rencana kunjungan ' + n + ' tujuan' : 'Lainnya'; },
+    lainnyaTitle: 'Bagian lain',
+    backTwice: 'Tekan Kembali sekali lagi untuk keluar. Dashboard akan dikunci.'
   };
 
   /* ------------------------------------------------------------ DOM helpers */
@@ -400,6 +421,8 @@
     var list = keys && keys.length ? keys : (typeof d.bankKeys === 'function' ? d.bankKeys() : ['lvm', 'edc', 'sekolah']);
     return list.some(function (k) { return Array.isArray(d[k]) && d[k].length > 0; });
   }
+  /** V8 integration: the status pill names LVM only when the LVM file is in; a funding, saldo or KPI file alone reads "Data bank per". */
+  function asOfLead() { return hasData(['lvm']) ? T.asOfLead : T.asOfLeadBank; }
 
   /* ------------------------------------------------------------ closure state */
 
@@ -472,10 +495,18 @@
     var t = storedTheme();
     if (!t) return;
     doc.documentElement.setAttribute('data-theme', t);
+    themeMetas(t);
+  }
+  /**
+   * V8 M12 (docs/MOBILE_UX_PLAN.md): Terang declares "only light", so a browser's automatic dark mode (Samsung
+   * Internet, Chrome's "Auto Dark Mode for Web Contents") does not repaint the checked colours; every theme-color
+   * meta (index.html has one per system scheme) takes the chosen theme's URL bar colour.
+   */
+  function themeMetas(t) {
     var cs = doc.querySelector && doc.querySelector('meta[name="color-scheme"]');
-    if (cs) cs.setAttribute('content', t === 'day' ? 'light' : 'dark');
-    var tc = doc.querySelector && doc.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', t === 'day' ? '#F4F1EA' : '#05080F');
+    if (cs) cs.setAttribute('content', t === 'day' ? 'only light' : 'dark');
+    var tcs = doc.querySelectorAll ? doc.querySelectorAll('meta[name="theme-color"]') : [];
+    Array.prototype.forEach.call(tcs, function (tc) { tc.setAttribute('content', t === 'day' ? '#F4F1EA' : '#05080F'); });
   }
 
   function start() {
@@ -555,6 +586,9 @@
       var ds = (SESSION.payload && SESSION.payload.datasets) || {};
       if (Object.prototype.hasOwnProperty.call(ds, 'config') && cfg().applyUserFields) safe(cfg().applyUserFields, cfg(), [ds.config, { source: 'vault' }]);
       if (root.MCD_SME_PLAYS && root.MCD_SME_PLAYS.meta && cfg().mergePrograms) safe(cfg().mergePrograms, cfg(), [root.MCD_SME_PLAYS.meta.newPrograms]);
+      // 2b · V8 §3.6 (R6): the bank's policy numbers and the lead switch, before any dataset is applied (≤ 2 s)
+      return vaultSeams(SESSION.payload);
+    }).then(function (keepLeads) {
       // 3 · URL hash (or mcd.lastView) → state, then the Day / Night theme (U7)
       // A-10 / D14: after sign-in the app always opens Ringkasan (Sederhana) with no distance filter, unless the
       // link itself names a section (#s=…). mcd.lastView may still be written for "Salin tautan".
@@ -564,8 +598,8 @@
         safe(MCD.state.set, MCD.state, [{ section: 'overview', view: 'overview', filters: { radiusKm: null } }, { source: 'boot', history: 'replace' }]);
       }
       initTheme();
-      // 4 · vault datasets, then public reference data only (U3: no synthetic records)
-      S.vaultInfo = applyVault(SESSION.payload);
+      // 4 · vault datasets (an expired or unreadable lead list stays out, D29), then public reference data only (U3)
+      S.vaultInfo = applyVault(SESSION.payload, { omit: keepLeads ? [] : ['leads'] });
       if (MCD.data && typeof MCD.data.loadReference === 'function') safe(MCD.data.loadReference, MCD.data);
       // 5 · shell
       buildShell();
@@ -580,6 +614,32 @@
       if (!MCD.debug.fps) MCD.debug.fps = function (on) { if (MCD.map && MCD.map.showFps) MCD.map.showFps(on !== false); };
       MCD.debug.places = function () { return JSON.parse(JSON.stringify(S.places)); };   /* tab and scroll memory (A-09) */
       selfTest();
+      wireV8();
+    });
+  }
+
+  /**
+   * V8 §3.6 (R6): MCD.policy.vaultLoad(payload.policy), then (awaited, at most 2 s) MCD.leadsUi.vaultLoad(payload.leads,
+   * {list, asOf}); each part only when present. Resolves with `keep`: true only when the lead switch came back on and the
+   * copy's lead list is younger than 90 days (D29). A timeout, a rejection or a missing module: false (leads off, the
+   * list out of applyVault). Never rejects, so sign-in never stops here.
+   */
+  var VAULT_SEAM_MS = 2000;
+  function vaultSeams(payload) {
+    payload = payload || {};
+    var P = MCD.policy;
+    if (payload.policy && typeof payload.policy === 'object' && P && typeof P.vaultLoad === 'function') safe(P.vaultLoad, P, [payload.policy]);
+    var LU = MCD.leadsUi;
+    if (!payload.leads || typeof payload.leads !== 'object' || !LU || typeof LU.vaultLoad !== 'function') return Promise.resolve(false);
+    var ds = payload.datasets || {}, dm = (payload.meta && payload.meta.datasets) || {};
+    var p = null;
+    try { p = LU.vaultLoad(payload.leads, { list: Array.isArray(ds.leads), asOf: (dm.leads && dm.leads.asOf) || null }); } catch (e) { return Promise.resolve(false); }
+    if (!p || typeof p.then !== 'function') return Promise.resolve(!!(p && p.keep === true));
+    return new Promise(function (resolve) {
+      var done = false;
+      var fin = function (v) { if (done) return; done = true; clearTimeout(t); resolve(v); };
+      var t = setTimeout(function () { fin(false); }, VAULT_SEAM_MS);
+      p.then(function (r) { fin(!!(r && r.keep === true)); }, function () { fin(false); });
     });
   }
   function now() { return (root.performance && root.performance.now) ? root.performance.now() : Date.now(); }
@@ -589,14 +649,18 @@
   // Gate addendum §4 + property P10: every dataset MCD.data knows replaces the
   // empty dataset through the importer path; `config` merged above (memory
   // only); MCD_* keys replace window globals. Unknown keys: name logged only.
-  function applyVault(payload) {
-    var out = { count: 0, keys: [], pending: [] };
+  // V8 (§3.6): opts.omit lists dataset keys left out (an expired lead list, D29; it is not saved again either). The
+  // spec's name is {skip}; the shell's security test refuses that word in code, so the option is called omit.
+  function applyVault(payload, opts) {
+    var out = { count: 0, keys: [], pending: [], omitted: [] };
     var ds = payload && payload.datasets;
     if (!ds || typeof ds !== 'object') return out;
+    var omit = (opts && Array.isArray(opts.omit)) ? opts.omit : [];
     // data date of each dataset, saved next to it by saveEncrypted (older vaults have none)
     var dm = (payload.meta && payload.meta.datasets) || {};
     Object.keys(ds).forEach(function (k) {
       var v = ds[k];
+      if (omit.indexOf(k) >= 0) { out.omitted.push(k); return; }
       if (k === 'config') { out.keys.push(k); return; }
       if (/^MCD_[A-Z0-9_]+$/.test(k)) { root[k] = v; out.keys.push(k); return; }
       var dk = MCD.data && MCD.data.keyFor ? MCD.data.keyFor(k) : null;
@@ -635,11 +699,50 @@
     // password change or another computer keeps them. Without an open seal the copy the payload already carried stays.
     var fu = followupsExport();
     if (fu) next.followups = fu;
+    // V8 §3.6 (V7 §1.7.1, §8.3): the bank's policy numbers and the lead switch travel in the same copy. policy: only
+    // when there is something to keep (a cleared policy is not carried over from the older copy); leads: always,
+    // and a stale list (D29) is left out of the datasets.
+    var pol = policyExport(next);
+    var le = leadsExport(next);
+    if (le && le.stale && next.datasets) { delete next.datasets.leads; if (next.meta && next.meta.datasets) delete next.meta.datasets.leads; }
     return MCD.vault.encryptWithKey(next, s.key, s.salt, s.iter)
       .then(function (v) { return MCD.vault.decryptWithKey(v, s.key).then(function () { return v; }); })
-      .then(function (v) { MCD.gate.downloadVault(v, 'vault.js'); S.savedAt = Date.now(); followupsSaved(fu); toast(T.vaultSaved); updateTopStatus(); return true; },
+      .then(function (v) {
+        MCD.gate.downloadVault(v, 'vault.js'); S.savedAt = Date.now(); followupsSaved(fu);
+        seamsSaved(pol, le, next.saved);
+        toast(T.vaultSaved); updateTopStatus(); return true;
+      },
         function (e) { toast(T.vaultFail, 'warn'); throw e; });
   }
+  /** payload.policy = MCD.policy.vaultExport() (or none); undefined when MCD.policy is not on the page (the older
+      copy's policy then stays as it was). */
+  function policyExport(next) {
+    var P = MCD.policy;
+    if (!P || typeof P.vaultExport !== 'function') return undefined;
+    var v = safe(P.vaultExport, P);
+    if (v && typeof v === 'object') next.policy = v; else { delete next.policy; v = null; }
+    return v;
+  }
+  /** payload.leads = MCD.leadsUi.vaultExport() ({v: 1, on: false} when off); undefined without the module. */
+  function leadsExport(next) {
+    var LU = MCD.leadsUi;
+    if (!LU || typeof LU.vaultExport !== 'function') return undefined;
+    var v = safe(LU.vaultExport, LU);
+    if (v && typeof v === 'object') next.leads = v;
+    return v || undefined;
+  }
+  /** After the file is written: both modules are clean up to this copy (a change made since stays dirty). */
+  function seamsSaved(pol, le, saved) {
+    var P = MCD.policy, LU = MCD.leadsUi;
+    if (pol !== undefined && P && typeof P.markSaved === 'function') safe(P.markSaved, P, [saved]);
+    if (le !== undefined && LU && typeof LU.markSaved === 'function') safe(LU.markSaved, LU);
+  }
+  /** "Data belum disimpan" (V8 §2.4): an import, a policy change or a lead switch change no saved copy holds yet. */
+  function seamsDirty() {
+    var P = MCD.policy, LU = MCD.leadsUi;
+    return !!((P && typeof P.dirty === 'function' && safe(P.dirty, P)) || (LU && typeof LU.dirty === 'function' && safe(LU.dirty, LU)));
+  }
+  function unsavedAny() { return unsavedDatasets().length > 0 || seamsDirty(); }
   /** MCD.seal.vaultExport() → {v: 1, saved, stores} | null (null: no seal, not open, or nothing to carry). */
   function followupsExport() {
     var SL = MCD.seal;
@@ -690,10 +793,7 @@
     if (t !== 'day' && t !== 'night') t = 'night';
     S.theme = t;
     doc.documentElement.setAttribute('data-theme', t);
-    var cs = doc.querySelector && doc.querySelector('meta[name="color-scheme"]');
-    if (cs) cs.setAttribute('content', t === 'day' ? 'light' : 'dark');
-    var tc = doc.querySelector && doc.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', t === 'day' ? '#F4F1EA' : '#05080F');
+    themeMetas(t);
     if (MCD.charts && MCD.charts.tokens && typeof MCD.charts.tokens.refresh === 'function') safe(MCD.charts.tokens.refresh);
     if (S.mapOK && MCD.map.setTheme) safe(MCD.map.setTheme, MCD.map, [t]);
     syncThemeSwitch();
@@ -770,7 +870,9 @@
     'school-students': dataLazy('data/school-students.js', 'MCD_SCHOOL_STUDENTS'),
     'institution-tiers': dataLazy('data/institution-tiers.js', 'MCD_INSTITUTION_TIERS'),
     'school-contacts': dataLazy('data/school-contacts.js', 'MCD_SCHOOL_CONTACTS'),
-    'campuses': dataLazy('data/campuses.js', 'MCD_CAMPUSES')
+    'campuses': dataLazy('data/campuses.js', 'MCD_CAMPUSES'),
+    /* V8 (docs/V8_SPEC.md §3.7, HEALTH_SPEC §11.1): Kesehatan's facilities (2,3 MB); never on Data & Privasi */
+    'health-facilities': dataLazy('data/health-facilities.js', 'MCD_HEALTH_FACILITIES')
   };
   /** A v6 data file: present() = its global is on the page; init() checks only that the file is usable (rows is an
       array, meta.generated is set) and returns the global untouched (no transformation; adapters live in the lanes). */
@@ -1186,7 +1288,8 @@
     });
   }
 
-  var ICONS = { overview: 'sec-overview', merchants: 'sec-merchants', schools: 'sec-schools', campus: 'sec-campus', property: 'sec-property', data: 'sec-data' };
+  var ICONS = { overview: 'sec-overview', merchants: 'sec-merchants', schools: 'sec-schools', campus: 'sec-campus', property: 'sec-property',
+    health: 'sec-health', wealth: 'sec-wealth', position: 'sec-position', data: 'sec-data' };   /* V8 §3.7: three new sprite symbols */
 
   /* ----------------------------------------------------------- top bar */
 
@@ -1257,16 +1360,39 @@
     // Data contoh (decision 7, D6): in the band, off at every sign-in; on phones inside the ☰ menu
     t.demo = demoSwitchEl('tb-demo');
     t.danantara = danantaraLockup('tb-danantara');
-    var right = h('div', { class: 'tb-right' }, [t.revealBadge, t.palette, t.theme, t.demo, t.help, t.unsaved, t.lock, t.menu, t.danantara]);
+    /* V8 §2.4: Rencana kunjungan (always; a 40 px icon with a count badge at ≤ 1440 px, shell.css) and Leads (only while
+       MCD.leadsUi.available()), both before Bantuan; syncPlanLeads keeps their words and counts */
+    t.plan = h('button', { type: 'button', class: 'tb-ctl tb-plan', 'aria-keyshortcuts': 'R', 'aria-label': T.plan, title: T.plan + ' (R)' }, [
+      icon('plan'), h('span', { class: 'tb-ctl__l tb-plan__l', text: T.plan }), h('span', { class: 'tb-count tb-plan__n', 'aria-hidden': 'true', hidden: true })
+    ]);
+    t.plan.addEventListener('click', function () { openPlan('button'); });
+    t.leads = h('button', { type: 'button', class: 'tb-ctl tb-leads', hidden: true, 'aria-label': T.leadsTitle, title: T.leadsTitle }, [
+      icon('leads'), h('span', { class: 'tb-ctl__l', text: T.leads })
+    ]);
+    t.leads.addEventListener('click', function () { var LU = MCD.leadsUi; if (LU && typeof LU.open === 'function') safe(LU.open, LU, [{}]); });
+    var right = h('div', { class: 'tb-right' }, [t.revealBadge, t.palette, t.theme, t.demo, t.plan, t.leads, t.help, t.unsaved, t.lock, t.menu, t.danantara]);
     clear(top);
     append(top, h('div', { class: 'tb' }, [brand, right]));
     syncThemeSwitch();
   }
 
-  /** ☰ Menu on phones (< 600 px): Terang/Gelap, Data contoh, Bantuan, Kunci (D6). */
+  /** V8 M13: a phone turned sideways (short landscape, coarse pointer) hides the section row; the ☰ menu lists them. */
+  var LAND_MQ = '(orientation: landscape) and (max-height: 500px) and (pointer: coarse)';
+  function phoneLand() { return mq(LAND_MQ); }
+  /** ☰ Menu on phones (< 600 px): Terang/Gelap, Data contoh, Bantuan, Kunci (D6); V8 M13: the sections first in short
+      landscape, and the plan. */
   function openPhoneMenu(anchor) {
     openMenu(anchor, function () {
-      return [
+      var secs = [];
+      if (phoneLand()) {
+        secs.push({ kind: 'title', label: T.sectionsAria });
+        S.nav.forEach(function (n) {
+          secs.push({ kind: 'radio', label: n.label, checked: !!(S.cur && S.cur.id === n.id), run: function () { closePopover(); navigate(n.id); } });
+        });
+        if (MCD.plan && typeof MCD.plan.open === 'function') secs.push({ kind: 'action', label: T.planRow(planCount()), run: function () { openPlan('menu'); } });
+        secs.push({ kind: 'sep' });
+      }
+      return secs.concat([
         { kind: 'action', label: S.theme === 'day' ? T.night : T.day, run: function () { setThemeChoice(S.theme === 'day' ? 'night' : 'day'); } },
         // The menu closes after the switch: the demo banner that appears (or goes) above the band confirms the state, and
         // an open menu would stay anchored to where the band was before the banner moved it.
@@ -1275,7 +1401,7 @@
         { kind: 'action', label: T.search, run: function () { openPalette(); } },
         { kind: 'action', label: T.help, run: function () { openHelp(); } },
         { kind: 'action', label: T.lock, run: function () { lock(); } }
-      ];
+      ]);
     }, { label: T.menu, align: 'right', kind: 'menu-phone' });
   }
 
@@ -1310,8 +1436,9 @@
     var asOf = MCD.data && MCD.data.asOf;
     t.status.classList.toggle('is-empty', !any && !DEMO.on);
     t.status.classList.toggle('is-demo', DEMO.on);
-    t.status.querySelector('.tb-status__t').textContent = DEMO.on ? T.demoStatus : (any ? T.asOfLead + F().date(asOf || cfg().asOfDemo) : T.noData);
-    t.status.title = DEMO.on ? T.demoTagTitle : (any ? T.asOfLead + F().date(asOf || cfg().asOfDemo) + ' · ' + (cfg().asOfTimeLabel || '08.00 WIB') : T.noDataTitle);
+    var lead = asOfLead();
+    t.status.querySelector('.tb-status__t').textContent = DEMO.on ? T.demoStatus : (any ? lead + F().date(asOf || cfg().asOfDemo) : T.noData);
+    t.status.title = DEMO.on ? T.demoTagTitle : (any ? lead + F().date(asOf || cfg().asOfDemo) + ' · ' + (cfg().asOfTimeLabel || '08.00 WIB') : T.noDataTitle);
     var p = st().privacy;
     t.veil.classList.toggle('is-on', !!p.veil);
     t.veil.setAttribute('aria-pressed', p.veil ? 'true' : 'false');
@@ -1322,9 +1449,49 @@
     doc.body.classList.toggle('is-veil', !!p.veil);
     doc.body.classList.toggle('is-reveal', !!p.reveal);
     if (t.unsaved) {
-      var un = unsavedDatasets().length > 0;
+      var un = unsavedAny();
       if (t.unsaved.hidden === un) { t.unsaved.hidden = !un; doc.body.classList.toggle('has-unsaved', un); }
     }
+    syncPlanLeads();
+  }
+
+  /**
+   * V8 §2.4: "Rencana kunjungan" (always on ≥ 600 px; with stops "Rencana kunjungan (3)"; at ≤ 1440 px the 40 px icon
+   * with a count badge, CSS) and "Leads" (only while MCD.leadsUi.available(), never on phones). Phones: the plan icon
+   * shows in the band only while the plan holds stops; the Lainnya slot carries a count dot.
+   */
+  function planCount() {
+    var P = MCD.plan;
+    var n = P && typeof P.count === 'function' ? +safe(P.count, P) : 0;
+    return isFinite(n) && n > 0 ? Math.round(n) : 0;
+  }
+  function syncPlanLeads() {
+    var t = S.top;
+    if (!t || !t.plan) return;
+    var P = MCD.plan, n = planCount();
+    t.plan.hidden = !(P && typeof P.open === 'function');
+    t.plan.classList.toggle('has-stops', n > 0);
+    var l = t.plan.querySelector('.tb-plan__l'), b = t.plan.querySelector('.tb-plan__n');
+    if (l) l.textContent = T.planCount(n);
+    if (b) { b.textContent = n ? String(n) : ''; b.hidden = !n; }
+    t.plan.setAttribute('aria-label', T.planAria(n));
+    t.plan.title = T.planAria(n) + ' (R)';
+    var LU = MCD.leadsUi;
+    var av = !!(LU && typeof LU.available === 'function' && safe(LU.available, LU)) && !mq('(max-width: 599px)');
+    if (t.leads) t.leads.hidden = !av;
+    doc.body.classList.toggle('has-leads', av);
+    doc.body.classList.toggle('has-plan-stops', n > 0);
+    if (S.tabMore) {
+      S.tabMore.setAttribute('aria-label', T.lainnyaAria(n));
+      var dot = S.tabMore.querySelector('.tabbar__dot');
+      if (dot) dot.hidden = !n;
+    }
+    if (S.lainnya && S.lainnya.planRow) setText(S.lainnya.planRow, T.planRow(n));
+  }
+  function openPlan(from) {
+    var P = MCD.plan;
+    if (!P || typeof P.open !== 'function') return false;
+    return !!safe(P.open, P, [{ from: from || 'button' }]);
   }
 
   /** Real datasets imported in this session and not yet written to an encrypted copy (A-11). */
@@ -1350,6 +1517,7 @@
     host.setAttribute('aria-label', T.sectionsAria);
     var list = h('ol', { class: 'nav' });
     var bar = h('ol', { class: 'tabbar__list' });
+    var lastGroup = null;
     S.nav.forEach(function (n) {
       var b = h('button', { type: 'button', class: 'nav__btn', id: 'tab-' + n.id, 'data-section': n.id,
         'aria-keyshortcuts': n.key, title: n.label + ' · ' + T.keyHint(n.key) }, [
@@ -1357,19 +1525,36 @@
         h('span', { class: 'nav__label' }, [h('span', { class: 'nav__long', text: n.label }), h('span', { class: 'nav__short', text: n.short })])
       ]);
       b.addEventListener('click', function () { navigate(n.id); });
-      list.appendChild(h('li', { class: 'nav__item' }, [b]));
-      // phones (< 600 px): the same six sections in a fixed bottom tab bar (A-15; v6: six columns, short labels)
-      var tb2 = h('button', { type: 'button', class: 'tabbar__btn', 'data-section': n.id, title: n.label }, [
-        icon(ICONS[n.id] || 'target'), h('span', { class: 'tabbar__l', text: n.id === 'data' ? n.short : n.label })
+      /* V8 §2.2 (D42): a hairline between the market group (pasar) and the branch group (cabang); never a tab stop */
+      var grp = (n.cfg && n.cfg.group) || 'pasar';
+      if (lastGroup && grp !== lastGroup) list.appendChild(h('li', { class: 'nav__sep', role: 'presentation', 'aria-hidden': 'true' }));
+      lastGroup = grp;
+      list.appendChild(h('li', { class: 'nav__item', 'data-group': grp }, [b]));
+    });
+    /* phones (< 600 px), V8 D43 (§2.3): six fixed slots, the first five shown ids of MCD.config.PHONE_ORDER and
+       "Lainnya", which opens the app sheet "Bagian lain" (the other sections and Rencana kunjungan) */
+    S.phoneBar = phoneBarIds();
+    S.phoneBar.slots.forEach(function (id) {
+      var n = S.byId[id];
+      if (!n) return;
+      var lab = n.label.length > 9 ? n.short : n.label;
+      var tb2 = h('button', { type: 'button', class: 'tabbar__btn', 'data-section': n.id, title: n.label, 'aria-label': n.label }, [
+        icon(ICONS[n.id] || 'target'), h('span', { class: 'tabbar__l', 'aria-hidden': 'true', text: lab })
       ]);
-      tb2.addEventListener('click', function () { navigate(n.id); });
+      tb2.addEventListener('click', function () { closeLainnya(true); navigate(n.id); });
       bar.appendChild(h('li', null, [tb2]));
     });
+    S.tabMore = h('button', { type: 'button', class: 'tabbar__btn tabbar__more', 'data-section': 'lainnya', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+      'aria-label': T.lainnya, title: T.lainnyaTitle }, [
+      icon('more'), h('span', { class: 'tabbar__l', 'aria-hidden': 'true', text: T.lainnya }), h('span', { class: 'tabbar__dot', 'aria-hidden': 'true', hidden: true })
+    ]);
+    S.tabMore.addEventListener('click', function () { if (S.lainnya) closeLainnya(); else openLainnya(); });
+    bar.appendChild(h('li', null, [S.tabMore]));
     /* item 38: one underline that slides to the chosen section (section row) and one marker per tab-bar column (phones) */
     S.navInk = h('li', { class: 'nav__ink', role: 'presentation', 'aria-hidden': 'true' });
     list.appendChild(S.navInk);
     S.tabInk = h('li', { class: 'tabbar__ink', role: 'presentation', 'aria-hidden': 'true' });
-    S.tabInk.style.width = (100 / Math.max(1, S.nav.length)) + '%';   /* one column per section shown */
+    S.tabInk.style.width = (100 / 6) + '%';                         /* one slot of six (V8 D43) */
     bar.appendChild(S.tabInk);
     clear(host);
     host.appendChild(list);
@@ -1378,7 +1563,10 @@
     var tabbar = doc.getElementById('tabbar') || h('nav', { id: 'tabbar', class: 'tabbar', 'aria-label': T.sectionsAria });
     clear(tabbar);
     tabbar.appendChild(bar);
-    if (!tabbar.parentNode) doc.body.appendChild(tabbar);
+    /* V8 M20: the bar lives in #overlay-root, so on phones it stacks above the details sheet (which ends at the bar and
+       slides down behind it) and below Cari, Bantuan, Lainnya and the dialogs (shell.css) */
+    var barHome = S.overlay || doc.body;
+    if (tabbar.parentNode !== barHome) barHome.appendChild(tabbar);
     S.tabbarEl = bar;
   }
 
@@ -1396,15 +1584,103 @@
       } else b.removeAttribute('aria-current');
     });
     if (S.tabbarEl) Array.prototype.forEach.call(S.tabbarEl.querySelectorAll('.tabbar__btn'), function (b) {
-      if (b.getAttribute('data-section') === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      var sec = b.getAttribute('data-section');
+      /* V8 §2.3: the Lainnya slot is marked while one of its places is open */
+      var on = sec === 'lainnya' ? inLainnya(id) : sec === id;
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
+    if (S.lainnya) paintLainnyaRows(id);
     syncNavInk(false, id);
   }
+  /** {slots: [id × ≤ 5], more: [id]} from MCD.config.phoneBar() (D43); a registry without it: the first five shown. */
+  function phoneBarIds() {
+    var c = cfg(), pb = null;
+    if (typeof c.phoneBar === 'function') pb = safe(c.phoneBar, c);
+    var ids = S.nav.map(function (n) { return n.id; });
+    if (!pb || !Array.isArray(pb.slots)) pb = { slots: ids.slice(0, 5), more: ids.slice(5) };
+    return { slots: pb.slots.filter(function (id) { return !!S.byId[id]; }).slice(0, 5), more: (pb.more || []).filter(function (id) { return !!S.byId[id]; }) };
+  }
+  function inLainnya(id) { return !!(S.phoneBar && id && S.phoneBar.more.indexOf(id) >= 0); }
+
+  /* ------------------------------------------------- Lainnya (phones, V8 §2.3) */
+  /**
+   * The app sheet "Bagian lain": one 48 px row per section of S.phoneBar.more (Calon Prioritas, Posisi cabang, Data &
+   * Privasi; KPR first whenever it is shown), then "Rencana kunjungan · {n} tujuan". The row of the current section
+   * carries aria-current="page". A Back layer of MCD.back ('lainnya'); Esc, the scrim and a row close it.
+   */
+  function openLainnya() {
+    if (S.lainnya) return;
+    closePopover();
+    var opener = doc.activeElement;
+    var rows = h('ul', { class: 'lainnya__list', role: 'list' });
+    var refs = [];
+    (S.phoneBar ? S.phoneBar.more : []).forEach(function (id) {
+      var n = S.byId[id];
+      if (!n) return;
+      var b = h('button', { type: 'button', class: 'lainnya__row', 'data-section': id }, [
+        h('span', { class: 'lainnya__i', 'aria-hidden': 'true' }, [icon(ICONS[id] || 'target')]), h('span', { class: 'lainnya__t', text: n.label }), icon('chev-r', 'lainnya__go')
+      ]);
+      b.addEventListener('click', function () { closeLainnya(true); navigate(id); });
+      refs.push(b);
+      rows.appendChild(h('li', null, [b]));
+    });
+    var planRow = null;
+    if (MCD.plan && typeof MCD.plan.open === 'function') {
+      planRow = h('span', { class: 'lainnya__t', text: T.planRow(planCount()) });
+      var pb = h('button', { type: 'button', class: 'lainnya__row lainnya__row--plan', 'aria-keyshortcuts': 'R' }, [
+        h('span', { class: 'lainnya__i', 'aria-hidden': 'true' }, [icon('plan')]), planRow, icon('chev-r', 'lainnya__go')
+      ]);
+      pb.addEventListener('click', function () { closeLainnya(true); openPlan('lainnya'); });
+      rows.appendChild(h('li', null, [pb]));
+    }
+    var closeB = h('button', { type: 'button', class: 'btn btn--secondary btn--bar lainnya__close' }, [icon('close'), h('span', { text: T.close })]);
+    closeB.addEventListener('click', function () { closeLainnya(); });
+    var scrim = h('div', { class: 'scrim scrim--lainnya' });
+    scrim.addEventListener('click', function () { closeLainnya(); });
+    var box = h('section', { class: 'lainnya', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mcd-lainnya-t' }, [
+      h('header', { class: 'lainnya__head' }, [h('h2', { class: 'lainnya__title', id: 'mcd-lainnya-t', text: T.lainnyaTitle }), closeB]),
+      rows
+    ]);
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeLainnya(); return; }
+      trap(box, e);
+    });
+    append(S.overlay, [scrim, box]);
+    S.lainnya = { box: box, scrim: scrim, rows: refs, planRow: planRow, opener: opener };
+    if (S.tabMore) S.tabMore.setAttribute('aria-expanded', 'true');
+    paintLainnyaRows(S.cur && S.cur.id);
+    backOpen('lainnya', function () { closeLainnya(true, true); });
+    var first = refs[0] || box.querySelector('.lainnya__row');
+    if (first) { try { first.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  function paintLainnyaRows(id) {
+    if (!S.lainnya) return;
+    S.lainnya.rows.forEach(function (b) { if (b.getAttribute('data-section') === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  /** closeLainnya(quiet, viaBack): quiet = a row or the bar moves on (no focus return); viaBack = MCD.back closed it. */
+  function closeLainnya(quiet, viaBack) {
+    var x = S.lainnya;
+    if (!x) return false;
+    S.lainnya = null;
+    exitThenRemove(x.scrim); exitThenRemove(x.box);
+    if (S.tabMore) S.tabMore.setAttribute('aria-expanded', 'false');
+    if (!viaBack) backClosed('lainnya');
+    if (!quiet && x.opener && x.opener.isConnected && x.opener.focus) { try { x.opener.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    return true;
+  }
+
+  /* ------------------------------------------------- Back layers (V8 M2, MCD.back) */
+  function backApi() { var B = MCD.back; return B && typeof B.open === 'function' ? B : null; }
+  function backOpen(id, close) { var B = backApi(); if (B) safe(B.open, B, [id, close]); }
+  function backClosed(id) { var B = backApi(); if (B && typeof B.closed === 'function') safe(B.closed, B, [id]); }
+  function backReset(reason) { var B = backApi(); if (B && typeof B.reset === 'function') safe(B.reset, B, [reason || 'section']); }
   /** The section row's underline slides to the chosen section; on phones the tab bar's marker moves one column per step
       (translateX in its own widths: no measuring). The first placing, and a resize (jump), do not move. */
   function syncNavInk(jump, toId) {
     var id = toId || (mountQ.to) || (S.cur && S.cur.id), i = -1;
-    S.nav.forEach(function (n, k) { if (n.id === id) i = k; });
+    /* V8 D43: the marker sits under the section's slot, or under Lainnya (slot 6) for the sections it holds */
+    if (S.phoneBar) { i = S.phoneBar.slots.indexOf(id); if (i < 0 && inLainnya(id)) i = 5; }
+    else S.nav.forEach(function (n, k) { if (n.id === id) i = k; });
     if (S.tabInk && i >= 0) {
       S.tabInk.style.transform = 'translateX(' + (i * 100) + '%)';
       if (!S.tabInkSet) { S.tabInkSet = true; S.tabInk.style.transition = 'none'; void S.tabInk.offsetWidth; S.tabInk.style.transition = ''; }
@@ -1458,7 +1734,14 @@
     if (p.el && p.el.parentNode) exitThenRemove(p.el);
     if (p.anchor) p.anchor.setAttribute('aria-expanded', 'false');
     if (p.onClose) safe(p.onClose);
+    if (!p.viaBack) backClosed('menu:' + (p.kind || 'menu'));
     return true;
+  }
+  /** V8 M2: Back closes an open menu or tip (☰, ⋯, Peta, "?") before anything else. */
+  function backPopover() {
+    var p = S.pop;
+    if (!p) return;
+    backOpen('menu:' + (p.kind || 'menu'), function () { if (S.pop === p) { p.viaBack = true; closePopover(); } });
   }
 
   /** Generic menu popover: items [{label, checked?, kind:'toggle'|'radio'|'action'|'sep'|'title', run}] */
@@ -1489,6 +1772,7 @@
     });
     S.overlay.appendChild(pop);
     S.pop = { kind: opts.kind || 'menu', el: pop, anchor: anchor, update: render };
+    backPopover();
     anchor.setAttribute('aria-expanded', 'true');
     positionPopover(pop, anchor, opts.align);
     var first = pop.querySelector('.popover__item');
@@ -1510,6 +1794,7 @@
     pop.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(); anchor.focus(); } });
     S.overlay.appendChild(pop);
     S.pop = { kind: 'tip', el: pop, anchor: anchor };
+    backPopover();
     anchor.setAttribute('aria-expanded', 'true');
     positionPopover(pop, anchor);
     closeB.focus({ preventScroll: true });
@@ -1541,7 +1826,7 @@
     if (!S.readout || S.flashTimer) return;
     var s = st(), entry = S.byId[s.section] || {}, parts = [entry.title || s.section];
     if (s.filters && s.filters.radiusKm != null) parts.push('dalam ' + s.filters.radiusKm + ' km dari Mabes TNI');
-    var right = DEMO.on ? T.demoStatus : (hasData() ? T.asOfLead + F().date((MCD.data && MCD.data.asOf) || cfg().asOfDemo) : T.noData);
+    var right = DEMO.on ? T.demoStatus : (hasData() ? asOfLead() + F().date((MCD.data && MCD.data.asOf) || cfg().asOfDemo) : T.noData);
     var t = S.readout.text;
     clear(t);
     parts.forEach(function (seg, i) {
@@ -1881,6 +2166,9 @@
     if (opts.view === 'overview' || opts.view === 'deep') patch.view = opts.view;
     S.pendingAction = opts.action ? { id: id, action: String(opts.action), fallback: typeof opts.fallback === 'function' ? opts.fallback : null } : null;
     var same = S.cur && S.cur.id === id && (!patch.view || patch.view === view());
+    /* V8 M2: a section change closes every Back layer first (the sheet, Cari, Bantuan, Lainnya, a menu); state.js then
+       replaces the layer's history entry instead of stacking a new one */
+    if (!S.cur || S.cur.id !== id) { closeLainnya(true); backReset('section'); }
     MCD.state.set(patch, { history: 'push' });
     if (same) runPendingAction(id);
     if (opts.focus) { var hst = S.cur && S.cur.host; if (hst) hst.focus && hst.focus(); }
@@ -2031,7 +2319,7 @@
    * first route of a session needs one camera flight. Off the mount frame (V4 open item 1): after the frame is on
    * screen, then 500 ms, then an idle moment (requestIdleCallback, timeout 2 s; fallback 600 ms). Never on pages.
    */
-  var PRELOAD_IDS = /^(merchants|schools|campus|property)$/;
+  var PRELOAD_IDS = /^(merchants|schools|campus|property|health|wealth)$/;   /* V8: Kesehatan and Calon Prioritas draw routes too */
   var PRE = { t: 0, cancel: null, done: false };
   function schedulePreload(id) {
     var D = MCD.distance;
@@ -2061,7 +2349,7 @@
    * it runs; never on pages. The scope comes from MCD.inst.scope (the shared memory of the switch), else the section's
    * summary().scope, else the section default (5 km since 21 Oct 2026).
    */
-  var OUTER_IDS = /^(schools|campus)$/;
+  var OUTER_IDS = /^(schools|campus|health|wealth)$/;   /* V8 §3.7: outer roads at 30 km in Kesehatan and Calon Prioritas too */
   var OUTER = { t: 0, cancel: null, done: false, queued: '', probedAt: 0 };
   function scopeKm(id, viaSummary) {
     var I = MCD.inst, def = 5, v;
@@ -2458,7 +2746,7 @@
     }, { label: T.more, align: 'right', kind: 'more' });
   }
 
-  /** Breadcrumb "Merchant › Detail › Prioritas kunjungan" and the active filter chips (§2.3, A-09). */
+  /** Breadcrumb "Merchant › Detail › Urutan kecamatan" and the active filter chips (§2.3, A-09). */
   function syncCrumbs() {
     var c = S.cur, pg = c && c.page;
     if (!pg || !pg.crumbs) return;
@@ -2662,7 +2950,10 @@
     /* spec.crumbs === false (V3_REPORT §4.5): no breadcrumb, for a page whose own title already says where it is
        (Ringkasan). The line then shows only when it carries filter chips or the guide's switch. */
     crumbs.hidden = spec.crumbs === false;
+    /* V8 §2.5 (V7 §2.4): "‹ Kembali ke Posisi cabang" above the head after MCD.nav.go (pages, guides and full rails) */
+    var navCrumb = h('div', { class: 'pg-navcrumb', hidden: true });
     var head = h('header', { class: 'pg-head' + (guideHead ? ' pg-head--guide' : '') + (spec.crumbs === false ? ' pg-head--nocrumbs' : '') }, [
+      navCrumb,
       h('div', { class: 'pg-crumbrow' }, [crumbs, chips, guideHead ? tools : null]),
       h('div', { class: 'pg-title-row' }, [h('h1', { class: 'pg-title', id: titleId, text: spec.title || entry.title }), tipBtn, demoPill, guideHead ? null : tools]),
       spec.lede === false ? null : h('p', { class: 'pg-lede', text: spec.lede || entry.help })
@@ -2756,7 +3047,7 @@
     }
     append(host, nodes);
     var api = {
-      el: nodes[0], body: body, head: head, crumbs: crumbs, chips: chips,
+      el: nodes[0], body: body, head: head, crumbs: crumbs, chips: chips, navCrumb: navCrumb,
       update: function (d, keys) {
         fill(keys && (keys.indexOf('theme') >= 0 || keys.indexOf('*') >= 0));
         if (typeof spec.refresh === 'function') safe(spec.refresh, null, [d, keys, custom]);
@@ -2769,7 +3060,25 @@
     custom.hidden = !custom.firstChild;
     fill(true);
     syncCrumbs();
+    paintNavCrumb();
     return api;
+  }
+
+  /**
+   * V8 §2.5: the crumb of MCD.nav in the page head ("‹ Kembali ke Posisi cabang"); the slim rail paints its own short
+   * form (windows.js). A click runs it; Esc on it clears it (V7 §2.4). Repainted on the document event 'mcd:nav'.
+   */
+  function paintNavCrumb() {
+    var pg = S.cur && S.cur.page, slot = pg && pg.navCrumb;
+    if (!slot) return;
+    var N = MCD.nav, c = N && typeof N.crumb === 'function' ? safe(N.crumb, N) : null;
+    clear(slot);
+    slot.hidden = !c;
+    if (!c) return;
+    var b = h('button', { type: 'button', class: 'pg-navcrumb__btn', title: c.title || c.label, 'aria-keyshortcuts': 'Escape' }, [icon('chev-l'), h('span', { text: c.label })]);
+    b.addEventListener('click', function () { safe(c.run); });
+    b.addEventListener('keydown', function (e) { if (e.key === 'Escape' && N && typeof N.clearCrumb === 'function') { e.preventDefault(); e.stopPropagation(); safe(N.clearCrumb, N); } });
+    slot.appendChild(b);
   }
 
   /* ============================================================ RENDER LOOP */
@@ -2931,6 +3240,8 @@
       void d.el.offsetWidth;
     } else sheetLayout(d, wasOpen && refresh && S.sheet ? S.sheet.state : 'peek');   /* another item: back to the peek */
     d.el.classList.add('is-open');
+    /* V8 M2: Back closes the details (phones and tablets; MCD.back decides); another item keeps the one entry */
+    backOpen('sheet', function (o) { closeDrawer(!(o && o.via === 'back')); });
     if (!wasOpen) slideFurniture(function () { doc.body.classList.add('is-drawer-open'); }, true);
     else doc.body.classList.add('is-drawer-open');
     if (!refresh) d.body.scrollTop = 0;
@@ -2955,6 +3266,7 @@
     if (W0 && safe(W0.beforeClose, W0, [silent, o]) === 'pinned') return true;
     var d = S.drawer;
     var wasOpen = !!(d && d.el.classList.contains('is-open'));
+    if (wasOpen) backClosed('sheet');
     if (d) {
       d.el.classList.remove('is-open');
       if (wasOpen) slideFurniture(function () { doc.body.classList.remove('is-drawer-open'); }, false);
@@ -3013,7 +3325,11 @@
     var natural = top + bodyH + (d.foot.hidden ? 0 : (d.foot.offsetHeight || 0));
     var peek = Math.round(Math.max(Math.min(top, full), Math.min(full, natural, (root.innerHeight || full) * SHEET_PEEK)));
     var mini = Math.round(Math.min(peek, top));
-    S.sheet = { on: true, state: SHEET_STATES.indexOf(state) >= 0 ? state : 'peek', full: full, peek: peek, mini: mini,
+    /* V8 M20 (§0.3 default): on phones the sheet ends above the tab bar (shell.css); what lies below it still covers
+       the map, so the cover adds it (the sheet's own box is measured: fixed, so offsetTop is from the viewport) */
+    var below = Math.max(0, Math.round((root.innerHeight || 0) - ((el.offsetTop || 0) + full)));
+    if (!(below < (root.innerHeight || 0) / 3)) below = 0;
+    S.sheet = { on: true, state: SHEET_STATES.indexOf(state) >= 0 ? state : 'peek', full: full, peek: peek, mini: mini, below: below,
       yPeek: Math.max(0, full - peek), yMini: Math.max(0, full - mini) };
     S.sheetReserve = 0;
     clearTimeout(S.sheetReserveT);
@@ -3043,7 +3359,7 @@
     var s = S.sheet;
     if (doc.body.getAttribute('data-layout') === 'page') return 0;               /* Ringkasan, Data & Privasi: no map */
     if (!s || !s.on) return S.sheetReserve || 0;
-    return s.state === 'mini' ? s.mini : s.peek;
+    return (s.state === 'mini' ? s.mini : s.peek) + (s.below || 0);
   }
   /**
    * A new selection on a phone: its details open as a sheet a moment later (a section opens its drawer a task after
@@ -3332,7 +3648,9 @@
      tab with that label (sections build their tabs with ctx.tabs). An optional 4th item is the tab's older label,
      tried when no tab carries the new one (COPY_DECK_ID §5.5 renames). */
   var SEARCH_TABS = [
-    ['merchants', 'Prioritas kunjungan', 'prioritas kunjungan daftar leads ekspor csv belum ada di lvm'],
+    /* V7 D3 (V8 R7): "Urutan kecamatan" (the older label still finds the tab); the word "leads" belongs to the masked
+       lead list now (V7 §2.5) */
+    ['merchants', 'Urutan kecamatan', 'urutan kecamatan urutan kunjungan merchant belum ada di lvm ekspor csv', 'Prioritas kunjungan'],
     ['merchants', 'Kandidat EDC', 'kandidat edc sasaran lvm naik ke edc potensi rating google'],
     ['merchants', 'Kecamatan', 'per kecamatan coverage combo heatmap', 'Per kecamatan'],
     ['merchants', 'Jenis usaha', 'per jenis usaha kategori restoran toko kelontong umkm donut', 'Per jenis usaha'],
@@ -3350,6 +3668,14 @@
     ['campus', 'Merchant sekitar', 'kantin koperasi merchant sekitar kampus qris livin fotokopi'],
     ['campus', 'Tindak lanjut', 'tindak lanjut kampus payroll dosen prospek'],
     ['property', 'Proyek', 'proyek perumahan kpr rumah'],
+    /* V8 (docs/V8_SPEC.md §2.6; HEALTH_SPEC §3.4) */
+    ['health', 'Rumah sakit', 'rs rumah sakit hospital tempat tidur payroll giro kesehatan'],
+    ['health', 'Klinik', 'klinik kesehatan kecantikan estetika pratama utama edc qris'],
+    ['health', 'Kecamatan', 'kesehatan per kecamatan fasilitas'],
+    ['health', 'Jaringan', 'jaringan grup rumah sakit klinik kesehatan'],
+    ['health', 'Tindak lanjut', 'tindak lanjut rumah sakit klinik kesehatan prospek'],
+    ['wealth', 'Daftar tempat', 'calon prioritas daftar tempat sekolah kampus perumahan belanja'],
+    ['wealth', 'Kecamatan', 'calon prioritas kecamatan daya beli'],
     ['data', 'Impor', 'impor file lvm rev upload excel xlsx csv'],
     ['data', 'File dimuat', 'file dimuat hapus data'],
     ['data', 'Simpan & kata sandi', 'simpan vault kata sandi enkripsi'],
@@ -3381,16 +3707,31 @@
     function add(group, label, run, o) { items.push(Object.assign({ group: group, label: label, run: run }, o || {})); }
     var SYN = { overview: 'ringkasan overview beranda target ureg usak coverage', merchants: 'merchant lvm edc livin qris toko usaha', schools: 'sekolah sma smk ma madrasah yayasan',
       campus: 'kampus perguruan tinggi universitas institut sekolah tinggi politeknik akademi desain mahasiswa dosen payroll kantin',
-      property: 'kpr rumah perumahan cicilan kalkulator', data: 'data privasi impor ekspor file vault simpan' };
+      property: 'kpr rumah perumahan cicilan kalkulator', data: 'data privasi impor ekspor file vault simpan kebijakan leads',
+      /* V8 */
+      health: 'kesehatan rs rumah sakit hospital klinik kecantikan estetika',
+      wealth: 'calon prioritas nasabah prioritas kaya biaya sekolah perumahan atas',
+      position: 'posisi cabang kpi target capaian booking dpk casa npl peringkat area' };
 
-    (c.sections || []).forEach(function (s) { add('Bagian', s.title || s.label, function () { navigate(s.id); }, { key: s.key, pin: true, kw: s.label + ' ' + s.id + ' ' + (s.titleFull || '') + ' ' + (SYN[s.id] || '') }); });
+    (c.sections || []).forEach(function (s) { add('Bagian', s.title || s.label, function () { navigate(s.id); }, { key: s.key, pin: true, sec: s.id, kw: s.label + ' ' + s.id + ' ' + (s.titleFull || '') + ' ' + (SYN[s.id] || '') }); });
     SEARCH_TABS.forEach(function (t) {
       var sec = S.byId[t[0]];
       if (!sec) return;
-      add('Tab', sec.label + ' › ' + t[1], function () { navigate(t[0], { view: 'deep', action: 'tablabel:' + t[1] + (t[3] ? '|' + t[3] : '') }); }, { kw: t[2] });
+      add('Tab', sec.label + ' › ' + t[1], function () { navigate(t[0], { view: 'deep', action: 'tablabel:' + t[1] + (t[3] ? '|' + t[3] : '') }); }, { kw: t[2], sec: t[0] });
     });
+    /* V8 final fix (critic, 24 Oct 2026): "omzet", "perkiraan" or "trafik" find the user's ask, the band filter */
+    if (S.byId.merchants && MCD.omzet) add('Tab', S.byId.merchants.label + ' › Perkiraan omzet (filter)', function () { navigate('merchants', { view: 'deep', action: 'merchants:omzet' }); },
+      { kw: 'omzet perkiraan omzet trafik bisnis ramai penjualan pendapatan usaha umkm', sec: 'merchants' });
     if (S.byId.property) add('Tindakan', 'Hitung kemampuan bayar KPR nasabah', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }, { kw: 'kpr kalkulator cicilan gaji dsr' });
     add('Tindakan', T.importData, function () { navigate('data', { view: 'deep', action: 'tablabel:Impor' }); }, { pin: true, kw: 'impor upload file excel xlsx csv rev lvm' });
+    /* V8 (docs/V8_SPEC.md §2.6): the plan, the bank's policy numbers, the lead list (only while available) and the idle
+       EDC list (only after a funding import). Funding and saldo names are never Cari rows (D63). */
+    if (MCD.plan && typeof MCD.plan.open === 'function') add('Tindakan', T.planOpen, function () { openPlan('cari'); }, { key: 'R', kw: 'rencana kunjungan rute hari ini google maps' });
+    if (MCD.policy) add('Tindakan', 'Kebijakan bank', function () { navigate('data', { view: 'deep', action: 'data:policy' }); }, { kw: 'kebijakan bank angka kebijakan ambang prioritas leads' });
+    var LUc = MCD.leadsUi;
+    if (LUc && typeof LUc.available === 'function' && safe(LUc.available, LUc)) add('Tindakan', 'Daftar leads', function () { safe(LUc.open, LUc, [{}]); }, { kw: 'leads daftar leads cif disamarkan calon kpr mendekati prioritas' });
+    var FDc = MCD.funding;
+    if (S.byId.merchants && FDc && typeof FDc.current === 'function' && safe(FDc.current, FDc)) add('Tab', S.byId.merchants.label + ' › EDC tidak bertransaksi', function () { navigate('merchants', { view: 'deep', action: 'tablabel:Status LVM & EDC' }); }, { kw: 'edc tidak bertransaksi aktivasi idle funding merchant' });
     add('Tindakan', 'Ekspor daftar merchant yang belum ada di LVM (CSV)', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }, { kw: 'ekspor export csv leads daftar kunjungan' });
     add('Tindakan', 'Lihat toko LVM yang perlu diaktifkan kembali', function () { navigate('merchants', { view: 'deep', action: 'tablabel:Status LVM & EDC' }); }, { kw: 'reaktivasi diaktifkan kembali tidak aktif inactive' });
     add('Tindakan', 'Lihat target UREG dan USAK per cabang', function () { navigate('overview'); }, { kw: 'ureg usak target realisasi cabang' });
@@ -3462,7 +3803,7 @@
       try { list = SEARCH[id](q); } catch (e) { list = null; }
       (Array.isArray(list) ? list : []).slice(0, 12).forEach(function (r) {
         if (r && r.label && typeof r.run === 'function') {
-          out.push({ group: r.group || 'Hasil', label: String(r.label), sub: r.sub ? String(r.sub) : '', run: r.run, provided: true,
+          out.push({ group: r.group || 'Hasil', label: String(r.label), sub: r.sub ? String(r.sub) : '', run: r.run, provided: true, src: id,
             kw: r.kw ? String(r.kw) : '', alias: Array.isArray(r.alias) ? r.alias.map(function (a) { return norm(a).trim(); }).filter(Boolean) : [] });
         }
       });
@@ -3479,9 +3820,14 @@
       sc += label.indexOf(t) === 0 ? 6 : (new RegExp('(^|[^a-z0-9])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(label) ? 4 : (label.indexOf(t) >= 0 ? 2 : 1));
     }
     if (exactHit(it, toks.join(' '))) sc += 12;
+    /* V8 final fix (critic, 24 Oct 2026): words of health care ("rumah sakit", "rs", "klinik", "kecantikan") lead to
+       Kesehatan: its section and tab rows first, then its facilities, and the public merchant listings that carry
+       such a name ("UMKM lainnya") after them */
+    if (toks.every(function (t) { return HEALTH_WORDS.test(t); })) sc += it.sec === 'health' ? 14 : (it.src === 'health' ? 3 : (it.src === 'merchants' ? -3 : 0));
     /* places first: a kecamatan before a merchant with the same word in its name */
     return sc + (it.group === 'Kecamatan' ? 4 : it.group === 'Kelurahan' ? 2 : (it.provided ? -1 : 0));
   }
+  var HEALTH_WORDS = /^(rs|rsu|rsud|rsia|rumah|sakit|klinik|kecantikan|estetika|kesehatan|hospital|faskes|pratama)$/;
 
   /**
    * The query is the whole name (final fix round, 23 Oct 2026): the label itself, the label without its "(…)", the short
@@ -3503,7 +3849,8 @@
     focusReturn = doc.activeElement;
     var all = paletteItems();
     var scrim = h('div', { class: 'scrim scrim--palette' });
-    var input = h('input', { class: 'palette__input', type: 'text', autocomplete: 'off', spellcheck: 'false', role: 'combobox', 'aria-expanded': 'true',
+    /* V8 M3: the phone keyboard neither capitalises nor "corrects" place names, and shows a search key */
+    var input = h('input', { class: 'palette__input', type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off', enterkeyhint: 'search', inputmode: 'search', role: 'combobox', 'aria-expanded': 'true',
       'aria-controls': 'mcd-pal-list', 'aria-label': T.search, placeholder: T.searchPlaceholder });
     var list = h('div', { class: 'palette__list', id: 'mcd-pal-list', role: 'listbox', 'aria-label': 'Hasil pencarian' });
     var closeB = h('button', { type: 'button', class: 'btn btn--secondary btn--bar' }, [icon('close'), h('span', { text: T.close })]);
@@ -3544,13 +3891,21 @@
       closePalette();
       if (it) safe(it.run);
     }
-    input.addEventListener('input', function () { active = 0; render(); wantCampuses(input.value); });
+    input.addEventListener('input', function () { active = 0; render(); wantCampuses(input.value); wantHealth(input.value); });
     /* v6 (V6_SPEC §6.11, §9.1): a query of 3+ letters loads the campus list once; its names join the results when it lands */
     var tried = false;
     function wantCampuses(q) {
       if (tried || String(q || '').replace(/\s+/g, '').length < 3 || !S.byId.campus || !Object.prototype.hasOwnProperty.call(LAZY, 'campuses') || LAZY.campuses.present()) return;
       tried = true;
       lazy('campuses').then(null, function () { /* Cari keeps working without campus names */ });
+    }
+    /* V8 (HEALTH_SPEC §3.4): 4+ letters load the facility list once, at idle (the file is 2,8 times the campus list) */
+    var triedH = false;
+    function wantHealth(q) {
+      if (triedH || String(q || '').replace(/\s+/g, '').length < 4 || !S.byId.health || !Object.prototype.hasOwnProperty.call(LAZY, 'health-facilities') || LAZY['health-facilities'].present()) return;
+      triedH = true;
+      var run = function () { if (S.booted) lazy('health-facilities').then(null, function () { /* Cari keeps working without facility names */ }); };
+      if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(run, { timeout: 1500 }); else setTimeout(run, 200);
     }
     var onLazy = function () { if (S.palette && S.palette.box === box && input.value.trim()) render(); };
     doc.addEventListener('mcd:lazy', onLazy);
@@ -3563,13 +3918,15 @@
     scrim.addEventListener('click', closePalette);
     append(S.overlay, [scrim, box]);
     S.palette = { scrim: scrim, box: box, input: input, off: function () { doc.removeEventListener('mcd:lazy', onLazy); } };
+    backOpen('palette', function () { closePalette(true); });
     render();
     input.focus();
   }
-  function closePalette() {
+  function closePalette(viaBack) {
     var p = S.palette;
     if (!p) return false;
     S.palette = null;
+    if (viaBack !== true) backClosed('palette');
     if (p.off) p.off();
     exitThenRemove(p.scrim); exitThenRemove(p.box);
     if (focusReturn && focusReturn.focus && focusReturn.isConnected) focusReturn.focus();
@@ -3585,13 +3942,19 @@
     focusReturn = doc.activeElement;
     /* "Saya ingin…": the tasks staff come for (seven since v6: Kampus), each with a button that goes there */
     var tasks = [
-      ['Melihat kecamatan yang perlu dikunjungi', 'Merchant › Detail › Prioritas kunjungan', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
-      ['Menyiapkan daftar merchant untuk dikunjungi', 'Merchant › Detail › Prioritas kunjungan, lalu Ekspor daftar (CSV)', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
+      /* V7 D3 (V8 R7): "Prioritas kunjungan" is now "Urutan kecamatan" */
+      ['Melihat kecamatan yang perlu dikunjungi', 'Merchant › Detail › Urutan kecamatan', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
+      ['Menyiapkan daftar merchant untuk dikunjungi', 'Merchant › Detail › Urutan kecamatan, lalu Ekspor daftar (CSV)', function () { navigate('merchants', { view: 'deep', action: 'merchants:leads' }); }],
       ['Memantau target UREG dan USAK', 'Merchant › Detail › Status LVM & EDC', function () { navigate('merchants', { view: 'deep', action: 'tablabel:Status LVM & EDC' }); }],
       ['Mencari SMA, SMK dan MA di sekitar Mabes TNI', 'Sekolah › Detail › Daftar sekolah', function () { navigate('schools', { view: 'deep', action: 'tablabel:Daftar sekolah|Daftar SMA' }); }],
       /* v6 (V6_SPEC §6.11) */
       ['Mencari kampus untuk payroll dan kantin', 'Kampus › Detail › Daftar kampus', function () { navigate('campus', { view: 'deep', action: 'tablabel:Daftar kampus' }); }],
       S.byId.property ? ['Menghitung kemampuan bayar KPR nasabah', 'KPR › Detail › Kalkulator KPR', function () { navigate('property', { view: 'deep', action: 'property:calculator' }); }] : null,
+      /* V8 (docs/V8_SPEC.md §2.6): Kesehatan, Calon Prioritas, Posisi cabang, Rencana kunjungan */
+      S.byId.health ? ['Mencari rumah sakit dan klinik', 'Kesehatan › Detail › Rumah sakit', function () { navigate('health', { view: 'deep', action: 'tablabel:Rumah sakit' }); }] : null,
+      S.byId.wealth ? ['Mencari calon nasabah Prioritas', 'Calon Prioritas › Detail › Kecamatan', function () { navigate('wealth', { view: 'deep', action: 'tablabel:Kecamatan' }); }] : null,
+      S.byId.position ? ['Melihat posisi KPI cabang', 'Posisi cabang', function () { navigate('position'); }] : null,
+      MCD.plan ? ['Menyusun rencana kunjungan hari ini', 'Rencana kunjungan (tombol R)', function () { openPlan('help'); }] : null,
       ['Mengimpor file LVM bulanan', 'Data & Privasi › Detail › Impor', function () { navigate('data', { view: 'deep', action: 'tablabel:Impor' }); }]
     ].filter(Boolean);                                /* null: a hidden section's task */
     var want = h('ul', { class: 'help__tasks' }, tasks.map(function (t) {
@@ -3616,6 +3979,19 @@
       ['Masukkan data', 'Buka Data & Privasi, lalu tekan Impor file.\nGunakan laporan bulanan Rev LVM atau template permintaan data.\nFile hanya dibaca di komputer ini.'],
       ['Coba data contoh', 'Tekan Data contoh di bagian atas untuk mengisi panel dengan angka ilustrasi.\nSetiap angka contoh bertanda CONTOH.\nData nyata kembali saat Data contoh dimatikan.']
     ];
+    /* V8 (docs/V8_SPEC.md §2.6; HEALTH_SPEC §3.4; V7 §2.5 as trimmed by D39 and D41): the new topics, each shown only
+       while its section or module is on the page; then the keys line and the larger-text line (M14) */
+    steps = steps.concat([
+      S.byId.health ? ['Kesehatan', 'Fasilitas kesehatan dari Kemenkes, Dinas Kesehatan DKI Jakarta dan peta terbuka.\nRumah sakit tanda tambah, klinik lingkaran, klinik kecantikan bintang empat sudut.\nRumah sakit lebih besar dari klinik dan dari lingkaran jumlah klinik.'] : null,
+      S.byId.health ? ['Simbol rumah sakit dan klinik', 'Rumah sakit: tanda tambah. Klinik kesehatan: lingkaran. Klinik kecantikan: bintang empat sudut.\nRumah sakit lebih besar dari klinik. Ukurannya menurut tempat tidur: di bawah 100, 100 sampai 199, 200 atau lebih.\nSimbol kosong: milik pemerintah, TNI atau Polri, tanpa prioritas merchant.'] : null,
+      S.byId.wealth ? ['Calon Prioritas', 'Tempat dengan biaya sekolah tinggi, perumahan atas dan usaha belanja besar.\nSemua angka perkiraan dari data publik dan tidak memuat data penghasilan perorangan.'] : null,
+      S.byId.position ? ['Posisi cabang', 'Capaian cabang dari file KPI bulanan area.\nSetiap kekurangan terhubung ke bagian yang membantu menutupnya.'] : null,
+      MCD.plan ? ['Rencana kunjungan', 'Tambahkan sekolah, kampus, fasilitas kesehatan dan merchant dengan tombol + Rencana kunjungan.\nTekan R untuk membuka rencana.\nTautan Google Maps hanya memuat koordinat.'] : null,
+      MCD.policy ? ['Kebijakan bank dan daftar leads', 'Angka kebijakan bank diisi cabang di Data & Privasi › Kebijakan & leads.\nDaftar leads menyamarkan CIF dan hanya menampilkan kelompok berisi 5 nasabah atau lebih.'] : null,
+      ['Funding merchant dan perkiraan omzet', 'Merchant KCP Cilangkap berasal dari file funding merchant cabang.\nPeta dan kartu menampilkan saldo sebagai rentang. Angka saldo per merchant hanya ada di daftar Saldo merchant.\nPerkiraan omzet berasal dari data publik dan tidak menggunakan data pajak.'],
+      S.byId.health ? ['Tombol bagian', 'Kesehatan kini tombol 6. Calon Prioritas tombol 7, Posisi cabang tombol 8, Data & Privasi tombol 9.'] : null,
+      ['Huruf lebih besar', 'Untuk huruf yang lebih besar, perbesar halaman di pengaturan browser. Di Safari: ikon aA.']
+    ].filter(Boolean));
     var how = h('ol', { class: 'help__steps' }, steps.map(function (s, i) {
       return h('li', { class: 'help__step' }, [h('span', { class: 'help__n', 'aria-hidden': 'true', text: String(i + 1) }), h('span', null, [h('b', { text: s[0] }), h('br'), h('span', { text: s[1] })])]);
     }));
@@ -3667,13 +4043,15 @@
     });
     append(S.overlay, [scrim, box]);
     S.help = { scrim: scrim, box: box };
+    backOpen('help', function () { closeHelp(true); });
     box.scrollTop = 0;
     closeB.focus({ preventScroll: true });
   }
-  function closeHelp() {
+  function closeHelp(viaBack) {
     var x = S.help;
     if (!x) return false;
     S.help = null;
+    if (viaBack !== true) backClosed('help');
     exitThenRemove(x.scrim); exitThenRemove(x.box);
     if (focusReturn && focusReturn.focus && focusReturn.isConnected) focusReturn.focus();
     focusReturn = null;
@@ -3687,6 +4065,10 @@
     if (S.modal || S.palette || S.help) {                    // they own the keyboard while open
       /* focus left the box (a click on plain text inside it moves focus to the page): Esc still closes it */
       if (e.key === 'Escape') { e.preventDefault(); if (S.modal) S.modal.cancel(); else if (S.palette) closePalette(); else closeHelp(); }
+      return;
+    }
+    if (S.lainnya) {                                         // V8: the phone's "Bagian lain" sheet, the same way
+      if (e.key === 'Escape') { e.preventDefault(); closeLainnya(); }
       return;
     }
     var k = String(e.key || '');
@@ -3706,7 +4088,11 @@
     if ((m = /^camera:(.+)$/.exec(action))) { if (S.mapOK && postureDeck()) MCD.map.preset(m[1]); return true; }
     /* "tablabel:<label>": select the tab with that label in the current section (search and Bantuan, A-17/A-18) */
     if ((m = /^tablabel:(.+)$/.exec(action))) return selectTabByLabel(m[1]);
+    /* V8 §2.5: the lead panel over any section (only while MCD.leadsUi.available(); no key opens it) */
+    if ((m = /^leads:open:([A-Za-z]+)$/.exec(action))) { var LUa = MCD.leadsUi; return !!(LUa && typeof LUa.open === 'function' && safe(LUa.open, LUa, [{ rule: m[1] }])); }
     switch (action) {
+      /* V8 §2.6: R opens Rencana kunjungan in every section */
+      case 'plan:open': return openPlan(e ? 'key' : 'action') || !!MCD.plan;
       case 'map:reset': if (postureDeck()) resetMap(); return true;
       case 'palette': openPalette(); return true;
       case 'help': openHelp(); return true;
@@ -3731,7 +4117,7 @@
         var md = S.cur && S.cur.mod;
         if (md && typeof md.onAction === 'function') {
           var done = md.onAction(action, e) === true;
-          if (done && /^(schools|campus):scope:/.test(action)) onScopeChange();   /* v6 §3.6, §6.11 */
+          if (done && /^(schools|campus|health|wealth):scope:/.test(action)) onScopeChange();   /* v6 §3.6, §6.11; V8 */
           return done;
         }
         return false;
@@ -3758,7 +4144,7 @@
    * MCD.gate is unchanged.
    */
   function lock() {
-    if (S.booted && unsavedDatasets().length) {
+    if (S.booted && (unsavedDatasets().length || seamsDirty())) {
       choiceModal({ title: T.lockAskTitle, body: T.lockAskBody, buttons: [
         { label: T.cancel, value: 'cancel' },
         { label: T.lockAskLock, value: 'lock', cls: 'btn--secondary' },
@@ -3846,6 +4232,7 @@
       if (Wz && S.cur) safe(Wz.sync, Wz, [S.cur]);                /* item 43: desk ⇄ tablet ⇄ phone, rail per width */
       applyLayout();
       syncNavInk(true);
+      syncPlanLeads();                                          /* V8: Leads exist from 1024 px only */
       if (S.pop && S.pop.anchor) positionPopover(S.pop.el, S.pop.anchor);
       if (S.cur && S.cur.mod && S.cur.mod.onResize) safe(S.cur.mod.onResize, S.cur.mod);
     }, 120));
@@ -3868,6 +4255,64 @@
       applyLayout();
     });
     S.overlay.appendChild(toggleB);
+  }
+
+  /**
+   * V8 wiring after the first section is on screen (docs/V8_SPEC.md §2.4, §2.7, §3.6; MOBILE_UX_PLAN M2, M6, M11):
+   * the plan and lead buttons follow their modules, the page crumb follows MCD.nav, a funding import or a settled LVM
+   * match re-renders the section with ['data'] (HEALTH §14.2a), the first Back after sign-in stays, the keyboard
+   * lifts the phone bars out of the way, and iOS gets the touch listener that turns on :active.
+   */
+  function wireV8() {
+    var P = MCD.plan, LU = MCD.leadsUi, PO = MCD.policy;
+    var resync = function () { if (S.booted) { syncPlanLeads(); updateTopStatus(); } };
+    if (P && typeof P.on === 'function') safe(P.on, P, [resync]);
+    if (LU && typeof LU.on === 'function') safe(LU.on, LU, [resync]);
+    if (PO && typeof PO.on === 'function') safe(PO.on, PO, [resync]);
+    ['mcd:plan', 'mcd:leads', 'mcd:policy'].forEach(function (ev) { doc.addEventListener(ev, resync); });
+    doc.addEventListener('mcd:nav', function () { if (S.booted) paintNavCrumb(); });
+    /* §3.6 update keys: a funding import (or its removal) and a settled LVM match */
+    doc.addEventListener('mcd:funding', function () { if (S.booted) schedule(['data']); });
+    var L = MCD.lvm;
+    if (L && typeof L.matchAsync === 'function' && !L.matchAsync.__mcdShell) {
+      var orig = L.matchAsync;
+      var wrapped = function () {
+        var p = orig.apply(L, arguments);
+        if (p && typeof p.then === 'function') p.then(function () { if (S.booted) schedule(['data']); }, function () { /* the section reports it */ });
+        return p;
+      };
+      wrapped.__mcdShell = true;
+      L.matchAsync = wrapped;
+    }
+    /* M2: the first Back after sign-in shows the toast and stays; a second one within 3 s leaves (default of §0.3) */
+    var B = backApi();
+    if (B && typeof B.guard === 'function') safe(B.guard, B, [function () { toast(T.backTwice); }]);
+    /* M6: while the on-screen keyboard is up, the phone's bottom bars step aside and the field stays in view */
+    var TYPING_SEL = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), textarea, select';
+    doc.addEventListener('focusin', function (e) {
+      var t = e && e.target;
+      if (!mq('(max-width: 767px)') || !t || typeof t.matches !== 'function' || !t.matches(TYPING_SEL)) return;
+      doc.body.classList.add('is-typing');
+      if (S.drawer && S.drawer.el.contains(t) && S.sheet && S.sheet.on && S.sheet.state !== 'full') setSheetState('full');
+      setTimeout(function () { try { if (doc.activeElement === t) t.scrollIntoView({ block: 'center' }); } catch (x) { /* ignore */ } }, 320);
+    });
+    doc.addEventListener('focusout', function () {
+      setTimeout(function () { var a = doc.activeElement; if (!(a && typeof a.matches === 'function' && a.matches(TYPING_SEL))) doc.body.classList.remove('is-typing'); }, 60);
+    });
+    var vv = root.visualViewport;
+    if (vv && typeof vv.addEventListener === 'function') {
+      var vvSet = function () {
+        var st0 = doc.documentElement.style;
+        st0.setProperty('--vvh', Math.round(vv.height) + 'px');
+        st0.setProperty('--vvt', Math.round(vv.offsetTop) + 'px');
+      };
+      vv.addEventListener('resize', vvSet);
+      vv.addEventListener('scroll', vvSet);
+      vvSet();
+    }
+    /* M11: iOS applies :active only when a touch listener exists */
+    doc.addEventListener('touchstart', function () { /* :active on iOS */ }, { passive: true });
+    syncPlanLeads();
   }
 
   /** mcd:gate-locking — drop app data before the gate reloads the page (§6). */

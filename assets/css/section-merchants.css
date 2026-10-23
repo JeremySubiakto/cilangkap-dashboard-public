@@ -45,7 +45,8 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
 }
-.mx-link:hover, .mx-link:focus-visible { text-decoration-color: var(--text-2); }
+.mx-link:focus-visible { text-decoration-color: var(--text-2); }
+@media (hover: hover) { .mx-link:hover { text-decoration-color: var(--text-2); } }
 
 /* "Buka di Google Maps" (item 22): a secondary link button; icon-only 40 × 40 in list rows */
 .mx-gm { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; text-decoration: none; white-space: nowrap; }
@@ -55,7 +56,7 @@
 
 /* status chip in the drawer */
 .mx-chipstat { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 13px; font: 600 12px/1.2 var(--font-sans); color: var(--status-ink); background: var(--status-none); }
-.mx-chipstat--acquired, .mx-chipstat--lvmOnly { background: var(--status-ok); }
+.mx-chipstat--acquired, .mx-chipstat--lvmOnly, .mx-chipstat--ours { background: var(--status-ok); }
 .mx-chipstat--inactive { background: var(--status-mid); color: var(--status-ink-mid, var(--status-ink)); }
 .mx-chipstat--notYet { background: var(--status-bad); }
 .mx-chipstat--potential { background: var(--status-potential); }
@@ -82,6 +83,8 @@
 .mx-ov { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; container: mxov / inline-size; }   /* v4: fits 1366 × 768 with Data contoh */
 .mx-ov > * { min-width: 0; }
 .mx-ov__scope { margin: 0 0 12px; }                      /* "Cakupan 5 km | 15 km" above the cards */
+.mx-ov__scopenote { margin: 6px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }   /* V8 final fix: what the switch moves */
+.mx-ov__scopenote[hidden] { display: none; }
 .mx-ov__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .mx-ov__grid--n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mx-ov__card { min-width: 0; }
@@ -125,7 +128,7 @@
   display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px 12px;
   min-height: 56px; padding: 6px 4px; border-bottom: 1px solid var(--rule); cursor: pointer;
 }
-.mx-prio__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .mx-prio__row:hover { background: var(--surface-hover); } }
 .mx-prio__row.is-on { background: var(--gold-a10); }
 .mx-prio__n {
   display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--rule-gold);
@@ -169,7 +172,7 @@
   position: relative; flex: none; min-height: 44px; padding: 0 12px; border: 0; background: none; cursor: pointer;
   font: 500 14px/20px var(--font-sans); color: var(--text-2); white-space: nowrap;
 }
-.mx-tab:hover { color: var(--text-1); }
+@media (hover: hover) { .mx-tab:hover { color: var(--text-1); } }
 .mx-tab:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; border-radius: var(--r-ctl); }
 .mx-tab.is-active { font-weight: 600; color: var(--text-1); }
 .mx-tab.is-active::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 2px 2px 0 0; background: var(--grad-accent); }
@@ -238,7 +241,7 @@
   display: grid; align-items: center; gap: 12px; min-height: 48px; padding: 4px 6px;
   border-bottom: 1px solid var(--rule); font: 400 13px/18px var(--font-sans); color: var(--text-2);
 }
-.mx-tr:not(.mx-tr--head):hover { background: var(--surface-hover); }
+@media (hover: hover) { .mx-tr:not(.mx-tr--head):hover { background: var(--surface-hover); } }
 .mx-tr--head { min-height: 36px; font: 600 12px/16px var(--font-sans); color: var(--text-3); }
 .mx-td { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-td__l1, .mx-td__l2 { display: block; overflow: hidden; text-overflow: ellipsis; }
@@ -399,7 +402,8 @@ body.mx-gview-open #map, body.mx-gview-open #map-grid, body.mx-gview-open #map-v
 .mx-gview__attr:empty { display: none; }
 .mx-gview__src { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
 .mx-gr { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; color: var(--text-1); text-decoration: none; white-space: nowrap; font: 500 13px/18px var(--font-sans); }
-.mx-gr:hover .mx-gr__n, .mx-gr:focus-visible .mx-gr__n { text-decoration: underline; }
+.mx-gr:focus-visible .mx-gr__n { text-decoration: underline; }
+@media (hover: hover) { .mx-gr:hover .mx-gr__n { text-decoration: underline; } }
 .mx-gr__star { color: var(--gold-soft); }
 .mx-gr__v { font-weight: 600; font-variant-numeric: tabular-nums; }
 .mx-gr__n { color: var(--text-2); font-variant-numeric: tabular-nums; }
@@ -428,7 +432,7 @@ body.mx-gview-open #map, body.mx-gview-open #map-grid, body.mx-gview-open #map-v
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 4px; border: 0; background: none; cursor: pointer;
   font: 600 14px/20px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-1); text-align: left;
 }
-.mx-nat__btn:hover .mx-nat__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+@media (hover: hover) { .mx-nat__btn:hover .mx-nat__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; } }
 .mx-nat__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--r-ctl); }
 .mx-nat__chev { flex: none; color: var(--text-2); }
 .mx-nat__body { display: grid; gap: 8px; min-width: 0; }
@@ -441,7 +445,7 @@ body.mx-gview-open #map, body.mx-gview-open #map-grid, body.mx-gview-open #map-v
   display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; width: 100%; min-height: 48px; padding: 4px 2px;
   border: 0; background: none; text-align: left; color: inherit; cursor: pointer; font: inherit;
 }
-.mx-kl__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .mx-kl__row:hover { background: var(--surface-hover); } }
 .mx-kl__row:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; border-radius: var(--r-ctl); }
 .mx-kl__n { font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); text-align: right; }
 .mx-kl__main { display: grid; gap: 1px; min-width: 0; }
@@ -534,3 +538,101 @@ body[data-section="merchants"] .dd-blk[data-fold="daftar"] .ws-fold__t { flex: 0
 .mx-saldo__name { max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
 .mx-saldo__d--bad { color: var(--status-bad); }
 .mx-saldo__d--ok { color: var(--status-ok); }
+/* V8 final fix: phones read Saldo merchant as two-line cards (name and status, then saldo and MtD); the table stays
+   for wider sections */
+.mx-saldo__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.mx-saldo__card { display: grid; gap: 2px; padding: 10px 2px; border-bottom: 1px solid var(--rule); }
+.mx-saldo__c1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.mx-saldo__c1 .mx-saldo__name { min-width: 0; max-width: none; white-space: nowrap; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+.mx-saldo__st { flex: none; font: 600 12px/16px var(--font-sans); }
+.mx-saldo__c2 { font: 500 14px/20px var(--font-sans); font-variant-numeric: tabular-nums; }
+.mx-saldo__c3 { font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; }
+@container mx (max-width: 560px) {
+  .mx-saldo__wide { display: none; }
+  .mx-saldo__cards { display: block; }
+}
+
+/* ── V8 (docs/V8_SPEC.md §4.1): funding merchants, Perkiraan omzet, the visit plan ──────────────────── */
+/* the omzet column of the acquisition lists (.has-om only while MCD.omzet is loaded); a band, never a number */
+.mx-table--leads.has-om .mx-tr { grid-template-columns: 32px minmax(150px, 2fr) 104px minmax(110px, 1.1fr) minmax(120px, 0.9fr) 112px 56px; }
+.mx-table--ec.has-om .mx-tr { grid-template-columns: 32px minmax(170px, 2.2fr) 116px 148px minmax(120px, 0.9fr) 108px 56px; }
+.mx-td--om { font-variant-numeric: tabular-nums; color: var(--text-2); }
+/* V8 final fix: in a column the empty band is a dash (its words for screen readers); on its own phone line it reads
+   "Omzet: belum ada perkiraan" */
+.mx-om__pfx { display: none; }
+.mx-om__none { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mx-ec-omnote { margin: 0 0 8px; }
+.mx-ec-omnote[hidden] { display: none; }
+.mx-tr--head .mx-td--om { white-space: normal; color: var(--text-3); }
+/* "{n} merchant KCP Cilangkap tidak masuk daftar ini. Tampilkan" (D47) */
+.mx-ours-slot:empty { display: none; }
+.mx-ours-out { margin: 0; }
+/* the card folds: our merchant's band and directions (neutral chips: a direction is not a status colour) */
+.mx-ours__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mx-trend { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 999px; font: 500 12px/16px var(--font-sans); color: var(--text-1); }
+.mx-idletag { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1px dashed var(--rule-strong); border-radius: 999px; font: 600 12px/16px var(--font-sans); color: var(--text-1); }
+.mx-ours__src, .mx-om__cap { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.mx-ours__src .mx-dd-p { margin: 0; }
+.mx-om__v { font: 600 15px/22px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.mx-om__caption { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.mx-om__tl { margin: 8px 0 0; font: 600 12px/16px var(--font-sans); color: var(--text-3); }
+.mx-tipbox--card { margin: 6px 0 0; white-space: normal; }
+/* the kecamatan card: five small neutral bars of counts (no colour scale, COPY_DECK rule 14) */
+.mx-om-bars { display: grid; gap: 4px; margin: 6px 0; padding: 0; list-style: none; }
+.mx-om-bars__r { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+.mx-om-bars__t { display: block; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.mx-om-bars__f { display: block; height: 100%; border-radius: 3px; background: var(--text-3); }
+.mx-om-bars__n { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-1); }
+/* Status LVM & EDC › "EDC tidak bertransaksi" (D48) and the rank line */
+.mx-table--idle .mx-tr { grid-template-columns: minmax(140px, 2fr) minmax(100px, 1.2fr) minmax(100px, 1fr) 48px minmax(110px, 1fr) minmax(120px, 0.9fr) 176px; }
+.mx-table--idle .mx-tr--head .mx-td { white-space: normal; }
+.mx-table--idle .mx-td--i3, .mx-table--idle .mx-td--i5 { text-align: right; }
+.mx-table--idle .mx-td--i6 { display: flex; justify-content: flex-end; }
+.mx-idle__done { font: 600 13px/18px var(--font-sans); color: var(--text-2); }
+.mx-rank { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.mx-rank__t { margin: 0; font: 500 14px/20px var(--font-sans); color: var(--text-1); }
+/* Sederhana: "Merchant KCP Cilangkap: {n}, {m} dengan EDC tidak bertransaksi" */
+.mx-ov__ours { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.mx-ov__ours .mx-ov__sub { margin: 0; }
+@container mx (max-width: 760px) {
+  .mx-table--leads.has-om .mx-tr { grid-template-columns: 30px minmax(130px, 2fr) 92px minmax(108px, 1fr) 100px 56px; }
+  .mx-table--leads.has-om .mx-td--3 { display: none; }
+  .mx-table--ec.has-om .mx-tr { grid-template-columns: 30px minmax(140px, 2.2fr) 108px minmax(108px, 1fr) 100px 56px; }
+  .mx-table--idle .mx-tr { grid-template-columns: minmax(130px, 2fr) minmax(90px, 1fr) 44px minmax(100px, 1fr) minmax(110px, 1fr) 168px; }
+  .mx-table--idle .mx-td--i1 { display: none; }
+}
+@container mx (max-width: 560px) {
+  .mx-table--leads.has-om .mx-td--om { display: none; }              /* the phone line carries the band */
+  .mx-table--leads.has-om .mx-tr:not(.mx-tr--head) { grid-template-columns: 26px minmax(0, 1fr) 44px; }   /* V8 final fix, as Kandidat EDC */
+  /* V8 final fix: the three phone columns here too (the six-column .has-om rule above won on specificity, so each row
+     was about 610 px wide inside a 252 px table at 360) */
+  .mx-table--ec.has-om .mx-tr:not(.mx-tr--head) { grid-template-columns: 26px minmax(0, 1fr) 44px; grid-template-areas: "n name gm" "n meta gm" "n dist gm" "n om gm"; }
+  .mx-table--ec.has-om .mx-td--om { grid-area: om; font-size: 12px; line-height: 16px; }
+  .mx-table--ec.has-om .mx-om__pfx { display: inline; color: var(--text-3); }
+  .mx-table--ec.has-om .mx-om__dash { display: none; }
+  .mx-table--ec.has-om .mx-om__none { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .mx-table--ec.has-om .mx-tr:not(.mx-tr--head) .mx-td--om { white-space: normal; }   /* "Omzet: belum ada perkiraan" in full */
+  .mx-table--idle .mx-tr--head { display: none; }
+  .mx-table--idle .mx-tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name band" "kec dist" "edc plan"; row-gap: 2px; padding: 8px 4px; }
+  .mx-table--idle .mx-td--i0 { grid-area: name; font-weight: 600; color: var(--text-1); }
+  .mx-table--idle .mx-td--i1 { display: none; }
+  .mx-table--idle .mx-td--i2 { grid-area: kec; color: var(--text-3); }
+  .mx-table--idle .mx-td--i3 { grid-area: edc; text-align: left; }
+  .mx-table--idle .mx-td--i4 { grid-area: band; text-align: right; }
+  .mx-table--idle .mx-td--i5 { grid-area: dist; }
+  .mx-table--idle .mx-td--i6 { grid-area: plan; }
+  .mx-om-bars__r { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+}
+
+/* Print (V7 D28, V8 D46): while Saldo merchant is on screen, print shows one line instead of the page */
+.mx-print { display: none; }
+@media print {
+  body.mx-noprint { background: white !important; }
+  body.mx-noprint > *:not(.mx-print) { display: none !important; }
+  body.mx-noprint > .mx-print { display: block !important; margin: 20mm 16mm; color: black; font: 400 12pt/1.4 var(--font-sans); }
+}
+
+/* M3 (MOBILE_UX_PLAN): the list search on touch screens is 44 px tall (16 px text comes from shell.css) */
+@media (pointer: coarse) {
+  .mx-search { min-height: 44px; }
+}

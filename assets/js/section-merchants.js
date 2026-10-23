@@ -8,11 +8,11 @@
  * solid shape per kecamatan (item 20), coloured by its ranked third: hijau = strongest third,
  * kuning = middle, merah = weakest (go here next). Before the LVM file: potential only, in blue.
  *
- * SEDERHANA (view 'overview')  one short page: 3 number cards, the top-3 "Prioritas kunjungan"
- *           rows, a one-line colour key and ONE primary button ("Lihat prioritas kunjungan", or
+ * SEDERHANA (view 'overview')  one short page: 3 number cards, the top-3 "Urutan kecamatan"
+ *           rows, a one-line colour key and ONE primary button ("Lihat urutan kecamatan", or
  *           "Impor file LVM" before the import, with the "Setelah file LVM diimpor" card).
  * DETAIL    (view 'deep')      summary strip (3 numbers) · 6 tabs (one panel at a time):
- *           Prioritas kunjungan (top 10 kecamatan + the "Belum ada di LVM" list, CSV) · Kandidat EDC (items 32, 35, 37:
+ *           Urutan kecamatan (top 10 kecamatan + the "Belum ada di LVM" list, CSV) · Kandidat EDC (items 32, 35, 37:
  *           "Potensi EDC (perkiraan)", tiers Sasaran EDC / Naik ke EDC / Sasaran LVM from three factors, nilai belanja ×
  *           keramaian × daya beli area, each a level with one plain reason; the list without the map for the live
  *           Google check of item 33) · Kecamatan (combo + kecamatan × jenis usaha heatmap) · Jenis usaha (donut +
@@ -29,6 +29,17 @@
  *           popup (MCD.territory.bind: a click highlights, it never filters), drawers (onSelect, each
  *           with "Buka di Google Maps", item 22, and "Rute di Google Maps", item 36: coordinates only, a new tab;
  *           the route line on the map is MCD.map's, from the selection) and the filters (MCD.sme.setView, memory only).
+ * V8 (docs/V8_SPEC.md §4.1; D3, D44–D49, D63, D64), every module feature-detected:
+ *           The first tab is "Urutan kecamatan" (V7 D3). "+ Rencana kunjungan" (MCD.plan.quick) in a public
+ *           listing's card head and callout link row, never on an LVM-only store. MCD.funding at idle: the ring layer and
+ *           filter "Merchant KCP Cilangkap" (MCD.sme.setOurs), the card fold of that name (bands, directions, EDC tiers),
+ *           our merchants left out of "Belum ada di LVM" and Kandidat EDC with a count line, Status › "EDC tidak
+ *           bertransaksi" (nearest first, plan only through a public listing, no export), the rank line to Posisi cabang,
+ *           the Sederhana line and the kecamatan lines. MCD.omzet: warm() at idle ≥ 2 s after the mount, the band in the
+ *           card, the callout and the list column, the filter group "Perkiraan omzet" once warm, the kecamatan block, the
+ *           "?" with TIP and LEGAL (never a point value, never on the map). Saldo merchant (teammates' list): "Rp •••" and
+ *           initials while veiled, not printed (body.mx-noprint), no export. Landing: merchants:tab:<tab>[:half[:<sort>]],
+ *           merchants:idle.
  * Contract  mount · update · unmount · layout · onAction ('merchants:leads') · onEscape · onSelect · onResize.
  *
  * Shared contracts of the shell (plan §4) are feature-detected: ctx.tabs, ctx.filterChips,
@@ -54,8 +65,9 @@
   /* UI state that survives remounts (view switch); never in the hash or in storage */
   var UI = { tab: 'prio', comboAll: false, heatAll: false, leadShown: PAGE, inactShown: REACT_FIRST, inactOwn: true, q: '', filterOpen: false, scrollTo: null,
     leadSort: 'near', reactSort: 'near', ecTier: 'edc', ecSort: 'score', ecShown: PAGE, ecTip: false, focus: null,
-    natOpen: false, natShown: PAGE, kecSheet: null, explicitNext: false, saldoShow: 'all', saldoSort: 'drop', saldoShown: PAGE };
-  var TABS = [['prio', 'Prioritas kunjungan'], ['edc', 'Kandidat EDC'], ['kec', 'Kecamatan'], ['cat', 'Jenis usaha'], ['status', 'Status LVM & EDC'],
+    natOpen: false, natShown: PAGE, kecSheet: null, explicitNext: false, saldoShow: 'all', saldoSort: 'drop', saldoShown: PAGE,
+    idleSort: 'near', idleShown: PAGE };
+  var TABS = [['prio', 'Urutan kecamatan'], ['edc', 'Kandidat EDC'], ['kec', 'Kecamatan'], ['cat', 'Jenis usaha'], ['status', 'Status LVM & EDC'],
     ['saldo', 'Saldo merchant'], ['info', 'Info & cara hitung']];
   var GM_TIP = 'Buka lokasi ini di Google Maps, di tab baru. Perlu internet.';
   var APPROX_NOTE = 'Titik perkiraan di tengah kelurahan. File LVM tidak memuat koordinat.';
@@ -359,7 +371,7 @@
 
   function prioList(list, opts) {
     opts = opts || {};
-    var ol = h('ol', { class: 'mx-prio' + (opts.compact ? ' mx-prio--compact' : ''), 'aria-label': 'Prioritas kunjungan' });
+    var ol = h('ol', { class: 'mx-prio' + (opts.compact ? ' mx-prio--compact' : ''), 'aria-label': 'Urutan kecamatan' });
     list.forEach(function (p) {
       var name = 'Kec. ' + S().kecName(p.id), tone = bandTone(p.band);
       /* Sederhana: a one-line reason (the coverage % is on the map label); Detail: the full why line */
@@ -399,6 +411,293 @@
     return p;
   }
 
+  /* ============================================================ V8: plan, funding merchants, Perkiraan omzet */
+
+  /* docs/V8_SPEC.md §4.1. Each module is feature-detected: without MCD.plan, MCD.funding or MCD.omzet this section looks
+     as it did in v7. Funding data shows as bands, directions, counts and the rank only (D46), except the Status list
+     "EDC tidak bertransaksi" (names stay in that list and are never exported, D63) and the teammates' Saldo merchant tab
+     (exact amounts, veiled, never printed). Omzet shows as a band only (D49), never on the map as colour or size. */
+  var VEIL = '•••', VEIL_RP = 'Rp •••';
+  var OMZET_WAIT_MS = 2000;                      // warm() starts at idle, at least 2 s after Merchant mounts (§3.4)
+  var OM_SHORT = { b1: 'Di bawah Rp10 jt', b2: 'Rp10–40 jt', b3: 'Rp40–170 jt', b4: 'Rp170–400 jt', b5: 'Rp400 jt ke atas', none: 'Belum ada perkiraan' };
+  var OM_NONE = 'Belum ada perkiraan omzet';
+  var OM_WAIT = 'Menghitung perkiraan omzet…';
+  var OURS_TIP = 'Saldo ditampilkan sebagai rentang. Angka saldo per merchant ada di daftar Saldo merchant.';
+  var FUND_DEMO = 'Funding merchant tidak memiliki data contoh.';
+  var NO_EXPORT = 'Daftar ini memuat data bank dan tidak dapat diekspor.';
+  var PRINT_LINE = 'Halaman ini memuat data bank dan tidak dicetak dari dashboard.';
+  function oursLabel() { return (S() && S().OURS_LABEL) || 'Merchant KCP Cilangkap'; }
+  function veiled() { return privacy() === 'veil'; }
+  /** "Toko Sejahtera Fiktif" → "T.S.F." (names while "Samarkan nama" is on, D64). */
+  function initials(name) {
+    var w = String(name || '').replace(/[^0-9A-Za-zÀ-ÿ\s]/g, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 3);
+    return w.length ? w.map(function (x) { return x.charAt(0).toUpperCase() + '.'; }).join('') : VEIL;
+  }
+  /** A "?" button that shows its lines under it (one idea per line); the box is returned with the button. */
+  function tipToggle(aria, lines, cls) {
+    var box = h('p', { class: 'mx-tipbox mx-tipbox--card' + (cls ? ' ' + cls : ''), role: 'note', hidden: true });
+    setText(box, lines.join('\n'));
+    var b = h('button', { type: 'button', class: 'tipbtn mx-tipbtn', 'aria-expanded': 'false', 'aria-label': aria, title: aria }, [h('span', { 'aria-hidden': 'true', text: '?' })]);
+    b.addEventListener('click', function () { box.hidden = !box.hidden; b.setAttribute('aria-expanded', box.hidden ? 'false' : 'true'); });
+    return { btn: b, box: box };
+  }
+  /** "Impor file funding merchant": Data & Privasi › Impor with the funding card's button focused (DATA lane, data:funding). */
+  function fundImportBtn() {
+    var b = h('button', { type: 'button', class: 'btn btn--secondary mx-btn40' }, [icon('upload'), h('span', { text: 'Impor file funding merchant' })]);
+    b.addEventListener('click', function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:funding' }); });
+    return b;
+  }
+
+  /* ---- "+ Rencana kunjungan" (§4.1.1, V7 D16): a public listing only, never an LVM-only store */
+  function planStop(i) {
+    var info = S().poiInfo(i);
+    return info ? { id: 'poi:' + i, kind: 'merchant', label: S().maskName(info.name, 'masked'), lon: info.pos[0], lat: info.pos[1] } : null;
+  }
+  function planQuick(i) {
+    var P = MCD.plan, st = P && typeof P.quick === 'function' ? planStop(i) : null;
+    return st ? safe(function () { return P.quick(st); }) || null : null;
+  }
+  /** The callout's link row ({label, run}, after the Google links) while the place is not in today's plan. */
+  function planLink(q) {
+    if (!q || q.done || typeof q.run !== 'function') return null;
+    return { label: q.label, title: q.title || null, run: function () { q.run(); } };
+  }
+
+  /* ---- funding merchants (MCD.funding; D44–D48, D63, D64) */
+  function FU() { var F = MCD.funding; return F && typeof F.current === 'function' && typeof F.points === 'function' ? F : null; }
+  var FUND = { ready: false, model: null, t: 0, idle: 0, n: 0, mids: null, idleList: null, noPoint: 0, rank: null };
+  function fundModel() { var F = FU(); return F ? safe(function () { return F.current(); }) : null; }
+  /** The links of the current funding data are computed (at idle; never in a mount frame, §3.1). */
+  function fundReady() { var m = fundModel(); return !!(m && FUND.ready && FUND.model === m); }
+  function fundDate() {
+    var m = FUND.model, F = FU();
+    if (!m || !m.asOf) return null;
+    return (F && typeof F.periodLabel === 'function' ? safe(function () { return F.periodLabel(m.asOf); }) : null) || dateText(m.asOf);
+  }
+  function bandLabel(id) { var F = FU(), b = F && F.BANDS ? F.BANDS.filter(function (x) { return x.id === id; })[0] : null; return b ? b.label : '—'; }
+  function bandRank(id) { var F = FU(), L = (F && F.BANDS) || []; for (var k = 0; k < L.length; k++) if (L[k].id === id) return k; return -1; }
+  function trendWord(id) { var F = FU(), T0 = F && F.TRENDS; return T0 && T0[id] ? T0[id] : null; }
+  function tierWord(kind, id) { var F = FU(), T0 = F && F.TIERS && F.TIERS[kind]; return T0 && T0[id] ? String(T0[id]).toLowerCase() : null; }
+  function balOf(rec) { return rec && rec.bal && rec.bal.band ? rec.bal : ((rec && (rec.cnBal || rec.bal)) || {}); }
+  function bestOf(recs, kind) {
+    var order = kind === 'sv' ? ['nihil', 'kurang', 'hampir', 'optimal'] : ['nihil', 'kurang', 'hampir', 'aktif'], best = -1;
+    recs.forEach(function (r) { var k = order.indexOf(kind === 'sv' ? r.tierSv : r.tierFreq); if (k > best) best = k; });
+    return best >= 0 ? order[best] : null;
+  }
+  function fundCancel() {
+    if (FUND.t) { clearTimeout(FUND.t); FUND.t = 0; }
+    if (FUND.idle) {
+      var id = FUND.idle;
+      FUND.idle = 0;
+      if (typeof W.cancelIdleCallback === 'function') safe(function () { W.cancelIdleCallback(id); }); else clearTimeout(id);
+    }
+  }
+  /** MCD.funding.links() is costly the first time: it runs at idle, then MCD.sme draws the ring and leaves our merchants
+      out of the acquisition lists (D47). Without funding data (or under Data contoh) everything clears. */
+  function fundSchedule(delay) {
+    fundCancel();
+    if (!FU()) return;
+    if (!fundModel()) { fundClear(); return; }
+    FUND.t = setTimeout(function () {
+      FUND.t = 0;
+      var run = function () { FUND.idle = 0; if (host) fundCompute(); };
+      FUND.idle = typeof W.requestIdleCallback === 'function' ? W.requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 0);
+    }, delay == null ? 300 : delay);
+  }
+  function fundCompute() {
+    var F = FU(), m = fundModel();
+    if (!F || !m) { fundClear(); return; }
+    var pts = safe(function () { return F.points(); }) || [], idle = safe(function () { return F.idle(); }) || [];
+    var placed = pts.reduce(function (a, p) { return a + ((p && p.n) | 0); }, 0), t = m.aggregates && m.aggregates.total;
+    FUND.model = m; FUND.ready = true;
+    FUND.n = t && isNum(t.merchants) ? t.merchants : m.merchants.length;
+    FUND.mids = t && isNum(t.mids) ? t.mids : null;
+    FUND.idleList = idle;
+    FUND.noPoint = Math.max(0, m.merchants.length - placed);
+    FUND.rank = safe(function () { return F.rank(); });
+    if (S()) S().setOurs(pts, { noPoint: FUND.noPoint });
+    fundRepaint();
+  }
+  function fundClear() {
+    var had = FUND.ready;
+    FUND.ready = false; FUND.model = null; FUND.idleList = null; FUND.rank = null; FUND.n = 0; FUND.mids = null; FUND.noPoint = 0;
+    if (S() && S().ours && S().ours()) S().setOurs(null);
+    if (had) fundRepaint();
+  }
+  function fundRepaint() {
+    SIG.ov = ''; SIG.leads = ''; SIG.ec = ''; SIG.idle = ''; SIG.filters = ''; SIG.strip = '';
+    paintOursChip();
+    if (!host) return;
+    if (!deep()) paintOverview(true); else paintTab(UI.tab);
+    safe(paintFilterBar);
+    safe(refreshOpenCard);
+    if (ctx) ctx.requestRender(['ext']);
+  }
+  /** Our merchants on public listing i (records), only once the links are computed. */
+  function oursOf(i) {
+    var F = FU();
+    if (!F || !fundReady() || typeof F.ofListing !== 'function') return null;
+    var recs = safe(function () { return F.ofListing(i); });
+    return recs && recs.length ? recs : null;
+  }
+  /** The strongest band of the records on one listing, with its directions (the card shows one line per place). */
+  function oursSummary(recs) {
+    var best = null;
+    recs.forEach(function (r) { var b = balOf(r); if (!best || bandRank(b.band) > bandRank(best.band)) best = b; });
+    var edc = recs.reduce(function (a, r) { return a + ((r.edc | 0)); }, 0);
+    var idle = recs.some(function (r) { return r.tierFreq === 'nihil' && (r.edc | 0) >= 1; });
+    return { band: best ? best.band : null, mom: best ? best.trendMom : null, mtd: best ? best.trendMtd : null, edc: edc, idle: idle, n: recs.length,
+      freq: bestOf(recs, 'freq'), sv: bestOf(recs, 'sv') };
+  }
+  /** Card fold "Merchant KCP Cilangkap" (open; after the status fold). While veiled: band and directions "•••" (D64). */
+  function oursFold(recs) {
+    var o = oursSummary(recs), v = veiled(), kids = [];
+    kids.push(kv('Saldo rata-rata', v ? VEIL : bandLabel(o.band), v ? null : OURS_TIP));
+    var chips = h('p', { class: 'mx-dd-p mx-ours__chips' });
+    [[o.mom, ' dari bulan lalu'], [o.mtd, ' bulan ini']].forEach(function (x) {
+      var w = trendWord(x[0]);
+      if (w) chips.appendChild(h('span', { class: 'mx-trend mx-trend--' + (v ? 'veil' : x[0]), text: v ? VEIL : w + x[1] }));
+    });
+    if (chips.children.length) kids.push(chips);
+    var f = tierWord('freq', o.freq), s = tierWord('sv', o.sv);
+    kids.push(h('p', { class: 'mx-dd-p', text: 'EDC: ' + int(o.edc) + ' terminal' + (f ? ' · transaksi EDC: ' + f : '') }));
+    if (s) kids.push(h('p', { class: 'mx-dd-p', text: 'Nilai transaksi EDC: ' + s }));
+    if (o.idle) kids.push(h('p', { class: 'mx-dd-p' }, [h('span', { class: 'mx-idletag', text: 'EDC tidak bertransaksi' })]));
+    if (o.n > 1) kids.push(h('p', { class: 'mx-dd-p c-2', text: int(o.n) + ' MID' }));
+    var d = fundDate(), tip = tipToggle('Tentang saldo merchant KCP Cilangkap', [OURS_TIP]);
+    kids.push(h('div', { class: 'mx-ours__src' }, [h('p', { class: 'mx-dd-p c-2', text: 'Dari file funding merchant cabang' + (d ? ', posisi ' + d : '') + '.' }), tip.btn]), tip.box);
+    return blk(oursLabel(), kids, { id: 'kcp', open: true, preview: v ? VEIL : 'Saldo rata-rata: ' + bandLabel(o.band) });
+  }
+
+  /* ---- Perkiraan omzet (MCD.omzet; D49) */
+  function OM() { var O = MCD.omzet; return O && typeof O.display === 'function' && typeof O.bandFor === 'function' ? O : null; }
+  var OMZ = { t: 0, idle: 0, busy: false };
+  function omWarm() { var O = OM(); return !!(O && typeof O.isWarm === 'function' && safe(function () { return O.isWarm(); })); }
+  function omStart() {
+    omCancel();
+    var O = OM();
+    if (!O || typeof O.warm !== 'function' || omWarm()) return;
+    OMZ.t = setTimeout(function () {
+      OMZ.t = 0;
+      var run = function () {
+        OMZ.idle = 0;
+        if (!host || !OM()) return;
+        OMZ.busy = true;
+        var p = safe(function () { return O.warm({ sliceMs: 40 }); });
+        Promise.resolve(p).then(function () { OMZ.busy = false; omLanded(); }, function () { OMZ.busy = false; });
+      };
+      OMZ.idle = typeof W.requestIdleCallback === 'function' ? W.requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 0);
+    }, OMZET_WAIT_MS);
+  }
+  function omCancel() {
+    if (OMZ.t) { clearTimeout(OMZ.t); OMZ.t = 0; }
+    if (OMZ.idle) { var id = OMZ.idle; OMZ.idle = 0; if (typeof W.cancelIdleCallback === 'function') safe(function () { W.cancelIdleCallback(id); }); else clearTimeout(id); }
+  }
+  /** Every listing has its band: the filter group opens, the list column fills in; the dots follow a filter already set. */
+  function omLanded() {
+    if (!host) return;
+    SIG.filters = ''; SIG.leads = ''; SIG.ec = '';
+    safe(paintFilterBar);
+    if (deep()) paintTab(UI.tab);
+    if (S() && S().view().om) S().requestMap();
+  }
+  /** The short band of a list row ("Rp10–40 jt"; "—" without an estimate; "…" before the warm-up). V8 final fix: where the
+      cell is a line of its own (phones) it reads "Omzet: Rp10–40 jt" / "Omzet: belum ada perkiraan", since the title of
+      the dash cannot be reached by touch. */
+  function omCell(i, cls) {
+    var O = OM();
+    if (!O) return null;
+    if (!omWarm()) return h('span', { class: 'mx-td ' + cls, role: 'cell', title: OM_WAIT, text: '…' });
+    var b = safe(function () { return O.bandFor(i); }), pfx = h('span', { class: 'mx-om__pfx', text: 'Omzet: ' });
+    return b ? h('span', { class: 'mx-td ' + cls, role: 'cell' }, [pfx, h('span', { text: OM_SHORT[b] || '—' })])
+      : h('span', { class: 'mx-td ' + cls, role: 'cell', title: OM_NONE }, [pfx, h('span', { class: 'mx-om__dash', 'aria-hidden': 'true', text: '—' }),
+        h('span', { class: 'mx-om__none', text: 'belum ada perkiraan' })]);
+  }
+  /** The band id a card shows: the bank's recorded band first (D49), else the estimate's band; null for none. */
+  function omBandOf(d) {
+    if (!d) return null;
+    if (d.kind === 'observed') return d.observed && d.observed.recorded ? d.observed.recorded.band : null;
+    return d.kind === 'estimate' && d.estimate ? d.estimate.band : null;
+  }
+  function omTipLines() { var O = OM(); return (O && O.TIP ? O.TIP.slice() : []).concat(O && O.LEGAL ? [O.LEGAL] : []); }
+  /** Card fold "Perkiraan omzet" (after the funding fold): the band, its lines, the caption and the "?" with TIP and LEGAL. */
+  function omzetFold(i, d0) {
+    var O = OM();
+    if (!O) return null;
+    var d = d0 || safe(function () { return O.display(i); });
+    if (!d) return null;
+    var kids = [], est = d.estimate;
+    if (d.kind === 'none') {
+      kids.push(h('p', { class: 'mx-dd-p mx-om__v', text: OM_NONE }));
+      (d.lines || []).slice(0, 2).forEach(function (t) { kids.push(h('p', { class: 'mx-dd-p c-2', text: t })); });
+    } else {
+      kids.push(h('p', { class: 'mx-dd-p mx-om__v', text: d.primary }));
+      (d.lines || []).forEach(function (t) { kids.push(h('p', { class: 'mx-dd-p', text: t })); });
+      if (d.kind === 'estimate' && est && est.evidence) kids.push(h('p', { class: 'mx-dd-p c-2', text: 'Bukti untuk jenis usaha ini: ' + est.evidence + '.' }));
+    }
+    var tip = tipToggle('Cara menghitung perkiraan omzet', omTipLines());
+    kids.push(h('div', { class: 'mx-om__cap' }, [h('p', { class: 'mx-om__caption', text: d.caption || O.CAPTION }), tip.btn]), tip.box);
+    return blk('Perkiraan omzet', kids, { id: 'omzet', open: true, preview: d.kind === 'none' ? OM_NONE : d.primary });
+  }
+  /** The kecamatan card block "Perkiraan omzet": the total, five small neutral bars of counts (no colour scale), the
+      note, the caption and the area's published restaurant tax under "Pajak restoran". */
+  function kecOmzetBlock(kecId) {
+    var O = OM();
+    if (!O || typeof O.kecSummary !== 'function') return null;
+    /* the summary reads every listing of the kecamatan: only once warm (≤ 30 ms then, §8), never on a cold engine */
+    if (!omWarm()) return blk('Perkiraan omzet', [h('p', { class: 'mx-dd-p c-2', text: OM_WAIT })], { id: 'omzet', open: false, preview: OM_WAIT });
+    var k = safe(function () { return O.kecSummary(kecId); });
+    if (!k || !k.n) return null;
+    var max = 0;
+    (k.bands || []).forEach(function (b) { if (b.n > max) max = b.n; });
+    var bars = h('ul', { class: 'mx-om-bars', 'aria-label': 'Merchant per rentang perkiraan omzet' }, (k.bands || []).map(function (b) {
+      var w = max ? Math.max(2, Math.round(100 * b.n / max)) : 0;
+      return h('li', { class: 'mx-om-bars__r', title: int(b.n) + ' merchant · ' + b.label }, [
+        h('span', { class: 'mx-om-bars__l', text: OM_SHORT[b.id] || b.short }),
+        h('span', { class: 'mx-om-bars__t', 'aria-hidden': 'true' }, [h('span', { class: 'mx-om-bars__f', style: { width: w + '%' } })]),
+        h('span', { class: 'mx-om-bars__n', text: int(b.n) })]);
+    }));
+    var kids = [kv('Jumlah perkiraan', k.totalLabel), bars, h('p', { class: 'mx-dd-p c-2', text: k.note }), h('p', { class: 'mx-om__caption', text: k.caption || O.CAPTION })];
+    if (k.tax && k.tax.lines && k.tax.lines.length) kids.push(h('p', { class: 'mx-om__tl', text: 'Pajak restoran' }), h('p', { class: 'mx-dd-p c-2', text: k.tax.lines.join('\n') }));
+    return blk('Perkiraan omzet', kids, { id: 'omzet', open: false, preview: k.totalLabel });
+  }
+
+  /** The kecamatan card's lines of our funding merchants (MCD.funding.kec: counts only); nothing while veiled (D64). */
+  function kecOursBlock(kecId) {
+    var F = FU();
+    if (!F || typeof F.kec !== 'function' || veiled() || !fundModel()) return null;
+    var k = safe(function () { return F.kec(kecId); });
+    if (!k || !k.merchants) return null;
+    var mom = (k.trend && k.trend.mom) || {};
+    var l1 = oursLabel() + ': ' + int(k.merchants) + ', ' + int(k.idle || 0) + ' dengan EDC tidak bertransaksi';
+    var l2 = 'Saldo naik dari bulan lalu: ' + int(mom.naik || 0) + ' merchant · turun: ' + int(mom.turun || 0) + ' merchant';
+    return blk(oursLabel(), [h('p', { class: 'mx-dd-p', text: l1 }), h('p', { class: 'mx-dd-p', text: l2 })], { id: 'kcp', open: true, preview: l1 });
+  }
+
+  /* ---- the layer chip "Tampilkan merchant KCP Cilangkap" (filter row, only while funding data exists) */
+  function oursChip() {
+    var b = h('button', { type: 'button', class: 'chip mx-chip mx-tog mx-ours-chip', 'aria-pressed': 'true', hidden: true }, [h('span', { class: 'mx-tog__box', 'aria-hidden': 'true' }), h('span', { text: 'Tampilkan merchant KCP Cilangkap' })]);
+    b.addEventListener('click', function () { if (S()) S().setView({ ours: !S().view().ours }); paintOursChip(); });
+    return b;
+  }
+  function paintOursChip() {
+    var b = R.oursChip, o = S() && S().ours ? S().ours() : null;
+    if (!b) return;
+    b.hidden = !o;
+    if (!o) return;
+    b.setAttribute('aria-pressed', S().view().ours ? 'true' : 'false');
+    var t = 'Cincin tebal di peta: ' + oursLabel() + ' (' + int(o.n) + ' titik).';
+    if (o.noPoint) t += '\n' + int(o.noPoint) + ' merchant KCP Cilangkap tanpa titik di peta. Daftarnya ada di Status LVM & EDC.';
+    b.setAttribute('title', t);
+  }
+  /** "{n} merchant KCP Cilangkap tidak masuk daftar ini." with "Tampilkan" (the map's Status filter 'ours'). */
+  function oursOutLine(n) {
+    if (!n) return null;
+    var b = h('button', { type: 'button', class: 'mx-link', text: 'Tampilkan' });
+    b.addEventListener('click', function () { if (S()) S().setView({ status: 'ours', mode: 'merchants' }); });
+    return h('p', { class: 'mx-note mx-ours-out' }, [h('span', { text: int(n) + ' merchant KCP Cilangkap tidak masuk daftar ini. ' }), b]);
+  }
+
   /* ============================================================ SEDERHANA (overview view) */
 
   /** "Cakupan 5 km | 15 km" (MCD.inst.scopeSwitch, section 'merchants'): moves the map and the list (sme.js keeps
@@ -415,12 +714,18 @@
   }
 
   function scopeKmNow() { var I = MCD.inst, v = 5; if (I && I.scope) v = safe(function () { return +I.scope.get('merchants', 5); }) || 5; return v; }
+  /* V8 final fix (critic, 24 Oct 2026): the switch moves the map and the merchant lists (Belum ada di LVM, Kandidat EDC);
+     the number cards, Urutan kecamatan and the charts keep the whole 15 km (design review, 23 Oct 2026). Said in words
+     next to the switch, so a selected "5 km" never sits over a 15 km number without explanation. */
+  var SCOPE_NOTE = 'Cakupan dan filter mengubah peta dan daftar merchant. Kartu angka, urutan kecamatan dan grafik tetap untuk seluruh area 15 km.';
+  function scopeNoteOv() { return scopeKmNow() === 5 ? 'Peta dan daftar merchant: 5 km dari Mabes TNI. Angka dan urutan kecamatan di bawah: seluruh area 15 km.' : ''; }
 
   function renderOverview(body) {
     R.ov = h('div', { class: 'mx-ov' });
     R.ov.appendChild(productStrip(true));
     var sc = scopeCtl();
-    if (sc) R.ov.appendChild(h('div', { class: 'mx-ov__scope' }, [sc]));
+    R.ovScopeNote = h('p', { class: 'mx-ov__scopenote', hidden: true });
+    if (sc) R.ov.appendChild(h('div', { class: 'mx-ov__scope' }, [sc, R.ovScopeNote]));
     R.ovCards = h('div', { class: 'mx-ov__grid', role: 'list', 'aria-label': 'Angka utama' });
     R.ovSub = h('p', { class: 'mx-ov__sub' });
     R.ovMore = h('div', { class: 'mx-ov__more' });
@@ -446,9 +751,10 @@
   function paintOverview(force) {
     var m = model();
     if (!m || !R.ov) return;
-    var sig = [m.ver, demoOn(), ctx.theme(), S().view().kec].join('|');
+    var sig = [m.ver, demoOn(), ctx.theme(), S().view().kec, scopeKmNow(), fundReady() ? 'f' + FUND.n + '.' + (FUND.idleList || []).length : '-'].join('|');
     if (!force && SIG.ov === sig) return;
     SIG.ov = sig;
+    if (R.ovScopeNote) { var sn = scopeNoteOv(); R.ovScopeNote.textContent = sn; R.ovScopeNote.hidden = !sn; }
     var t = m.totals || { potential: 0, offMap: { all: 0 }, byCategory: { grocery: {}, restaurant: {}, other: {} } };
     var sum = lvmSummary() || {};
     clear(R.ovSub);
@@ -458,7 +764,7 @@
       bigCards(R.ovCards, [{ label: 'Merchant dalam 15 km', value: t.potential, status: 'potential', statusLabel: 'Potensi',
         note: 'Toko kelontong ' + int(by.grocery.potential) + ' · restoran ' + int(by.restaurant.potential) + ' · UMKM lainnya ' + int(by.other.potential) }], R.bn);
       R.ovSub.hidden = true;
-      var seeAll = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-ov__link' }, [h('span', { text: 'Lihat prioritas kunjungan' }), icon('chev-r')]);
+      var seeAll = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-ov__link' }, [h('span', { text: 'Lihat urutan kecamatan' }), icon('chev-r')]);
       seeAll.addEventListener('click', function () { if (ctx) ctx.navigate(ID, { view: 'deep', action: 'merchants:leads' }); });
       R.ovMore.appendChild(h('section', { class: 'mx-after', 'aria-labelledby': 'mx-after-t' }, [
         h('p', { class: 'mx-after__t', id: 'mx-after-t', text: 'Yang tampil setelah file LVM diimpor' }),
@@ -480,12 +786,23 @@
       if (m.demo && ctx && ctx.demoTag) safe(function () { ctx.demoTag(R.ovSub, { inline: true }); });
       var top = S().priorityKec(3);
       R.ovMore.appendChild(h('section', { class: 'mx-ov__prio', 'aria-labelledby': 'mx-ovp-t' }, [
-        h('p', { class: 'mx-ov__h', id: 'mx-ovp-t', text: 'Prioritas kunjungan' }),
+        h('p', { class: 'mx-ov__h', id: 'mx-ovp-t', text: 'Urutan kecamatan' }),
         top.length ? prioList(top, { compact: true, hasLvm: true }) : h('p', { class: 'mx-none', text: 'Belum ada kecamatan yang dapat diurutkan. Impor file LVM atau perluas jarak.' })
       ]));
     }
+    var ol = oursOverviewLine();
+    if (ol) R.ovMore.insertBefore(ol, R.ovMore.firstChild);
     R.ovMore.appendChild(colourKey(m));
     setPrimary(overviewPrimary(m));
+  }
+  /** V8 (§4.1.2): "Merchant KCP Cilangkap: {n}, {m} dengan EDC tidak bertransaksi" and the link to that list (Detail ›
+      Status LVM & EDC). Counts only; nothing while the funding links are not computed yet. */
+  function oursOverviewLine() {
+    if (!fundReady()) return null;
+    var n = (FUND.idleList || []).length;
+    var go = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-ov__link' }, [h('span', { text: 'Lihat EDC tidak bertransaksi' }), icon('chev-r')]);
+    go.addEventListener('click', function () { if (ctx) ctx.navigate(ID, { view: 'deep', action: 'merchants:idle' }); });
+    return h('div', { class: 'mx-ov__ours' }, [h('p', { class: 'mx-ov__sub mx-ov__ours-t', text: oursLabel() + ': ' + int(FUND.n) + ', ' + int(n) + ' dengan EDC tidak bertransaksi' }), n ? go : null]);
   }
   function setPrimary(p) {
     if (!spec0 || !page) return;
@@ -515,10 +832,12 @@
     R.fbtn = h('button', { type: 'button', class: 'btn btn--secondary mx-fbtn', 'aria-expanded': UI.filterOpen ? 'true' : 'false', 'aria-controls': 'mx-filters' },
       [icon('sliders'), h('span', { text: 'Filter' }), R.fcount, icon(UI.filterOpen ? 'chev-u' : 'chev-d', 'mx-fbtn__chev')]);
     R.fbtn.addEventListener('click', function () { UI.filterOpen = !UI.filterOpen; applyFilterOpen(); });
-    R.fnote = h('p', { class: 'mx-fbar__note', text: 'Cakupan dan filter mengubah peta dan daftar. Grafik tetap menampilkan seluruh area 15 km.' });
+    R.fnote = h('p', { class: 'mx-fbar__note', text: SCOPE_NOTE });
     R.fchips = h('div', { class: 'mx-fchips', role: 'group', 'aria-label': 'Filter aktif' });
     R.travel = travelToggles();
-    R.fbar = h('div', { class: 'mx-fbar' }, [scopeCtl(), R.fbtn, R.fchips, R.fnote, R.travel].filter(Boolean));
+    R.oursChip = oursChip();                     /* V8: "Tampilkan merchant KCP Cilangkap", only while funding data exists */
+    R.fbar = h('div', { class: 'mx-fbar' }, [scopeCtl(), R.fbtn, R.fchips, R.fnote, R.travel, R.oursChip].filter(Boolean));
+    paintOursChip();
     root.appendChild(R.fbar);
     R.filters = h('section', { class: 'mx-filters', id: 'mx-filters', 'aria-label': 'Filter peta dan daftar', tabindex: '-1', hidden: !UI.filterOpen });
     root.appendChild(R.filters);
@@ -581,7 +900,7 @@
       get: function () { return UI.tab; }
     };
   }
-  var TAB_PARTS = { prio: ['prio', 'leads'], edc: ['edccand'], kec: ['kec', 'heat'], cat: ['cat'], status: ['stores', 'react', 'kpi', 'edc'], saldo: ['saldo'], info: ['why', 'method'] };
+  var TAB_PARTS = { prio: ['prio', 'leads'], edc: ['edccand'], kec: ['kec', 'heat'], cat: ['cat'], status: ['idle', 'stores', 'react', 'kpi', 'edc'], saldo: ['saldo'], info: ['why', 'method'] };
   function showTab(id, opts) {
     opts = opts || {};
     if (!R.panels || !R.panels[id] || R.switching) return;
@@ -592,6 +911,7 @@
       Object.keys(R.panels).forEach(function (k) { R.panels[k].hidden = k !== id; });
       if (R.tabsApi && R.tabsApi.set && !(opts.fromTabs && !R.localTabs)) safe(function () { R.tabsApi.set(id); });
     } finally { R.switching = false; }
+    if (id !== 'saldo') printGuard(false);
     if (opts.silent) return;
     paintTab(id);
     /* charts drawn while their panel was hidden measure again once it shows */
@@ -607,7 +927,7 @@
       case 'edc': safe(paintEdcCand); break;
       case 'kec': safe(paintKec); safe(paintHeat); break;
       case 'cat': safe(paintCat); break;
-      case 'status': safe(paintStores); safe(paintReact); safe(paintKpi); safe(paintEdc); break;
+      case 'status': safe(paintIdle); safe(paintStores); safe(paintReact); safe(paintKpi); safe(paintEdc); break;
       case 'saldo': safe(paintSaldo); break;
       case 'info': safe(paintMethod); break;
     }
@@ -655,9 +975,11 @@
     /* 5 km is the "Cakupan" switch, not a filter chip */
     if (v.km && v.km !== 5) out.push({ label: 'Dalam ' + v.km + ' km', onClear: function () { S().setView({ km: scopeKmNow() === 5 ? 5 : null }); } });
     if (v.status !== 'all') {
-      var st = S().STATUS_FILTER.filter(function (s) { return s.id === v.status; })[0];
+      var st = S().STATUS_FILTER.concat(S().STATUS_OURS ? [S().STATUS_OURS] : []).filter(function (s) { return s.id === v.status; })[0];
       out.push({ label: 'Status: ' + lcFirst(st ? st.label : v.status), onClear: function () { S().setView({ status: 'all' }); } });
     }
+    /* V8 (§4.1.3): the omzet bands still shown */
+    if (v.om) out.push({ label: 'Perkiraan omzet: ' + (v.om.length ? v.om.map(function (id) { return OM_SHORT[id] || id; }).join(', ') : 'tidak ada'), onClear: function () { S().setView({ om: null }); } });
     if (v.tier && v.tier !== 'all') {
       var tf = S().TIER_FILTER.filter(function (s) { return s.id === v.tier; })[0];
       out.push({ label: tf ? tf.label : v.tier, onClear: function () { S().setView({ tier: 'all' }); } });
@@ -691,12 +1013,14 @@
     R.fbtn.classList.toggle('is-on', n > 0);
     R.fbtn.setAttribute('aria-label', n ? 'Filter, ' + n + ' aktif' : 'Filter');
     paintChips();
+    paintOursChip();
     if (UI.filterOpen) safe(paintFilters);
   }
   function paintFilters() {
     var m = model(), v = S().view();
     if (!R.filters || !m) return;
-    var sig = [m.ver, v.rev, m.hasLvm].join('|');
+    var ow = S().ours ? S().ours() : null;
+    var sig = [m.ver, v.rev, m.hasLvm, ow ? ow.ver : '-', OM() ? (omWarm() ? 'w' : 'c') : '-'].join('|');
     if (SIG.filters === sig) return;
     SIG.filters = sig;
     clear(R.filters);
@@ -729,9 +1053,11 @@
       ty.appendChild(b);
     });
     R.filters.appendChild(frow('Jenis usaha', [ty], m.hasLvm ? 'Angka: merchant yang belum ada di LVM, sesuai filter jarak dan kecamatan.' : 'Angka: merchant sesuai filter jarak dan kecamatan.'));
-    if (m.hasLvm && v.mode === 'merchants') {
+    /* V8 (§4.1.2): "Merchant KCP Cilangkap" joins the Status group while funding data exists (also before an LVM file) */
+    if ((m.hasLvm || ow) && v.mode === 'merchants') {
       var st = h('div', { class: 'mx-chips', role: 'group', 'aria-label': 'Status' });
-      S().STATUS_FILTER.forEach(function (s) {
+      var stOpts = (m.hasLvm ? S().STATUS_FILTER : S().STATUS_FILTER.slice(0, 1)).concat(ow && S().STATUS_OURS ? [S().STATUS_OURS] : []);
+      stOpts.forEach(function (s) {
         var c = h('button', { type: 'button', class: 'chip mx-chip', 'aria-pressed': v.status === s.id ? 'true' : 'false' },
           [s.id !== 'all' ? h('span', { class: 'mx-dot mx-dot--' + s.id, 'aria-hidden': 'true' }) : null, h('span', { text: s.label })]);
         c.addEventListener('click', function () { S().setView({ status: s.id }); });
@@ -747,15 +1073,41 @@
       tg.appendChild(b);
     });
     R.filters.appendChild(frow('Sasaran', [tg], 'Perkiraan dari nilai belanja, keramaian dan daya beli area. Daftarnya ada di tab Kandidat EDC.'));
+    var og = omFilterGroup(v);
+    if (og) R.filters.appendChild(og);
     var clearB = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-clear', hidden: !S().filterCount() }, [icon('close'), h('span', { text: 'Hapus filter' })]);
     clearB.addEventListener('click', function () { S().resetFilters(); });
     R.filters.appendChild(clearB);
+  }
+  /**
+   * V8 (§4.1.3, D49): "Perkiraan omzet": six chips (five bands and "Belum ada perkiraan"), all on, counts in scope; they
+   * wait for MCD.omzet.warm() ("Menghitung perkiraan omzet…") and then filter the dots, the lists and the counts.
+   */
+  function omFilterGroup(v) {
+    if (!OM() || !S().OM_IDS) return null;
+    var warm = omWarm(), cnt = warm && S().omCounts ? S().omCounts() : null, on = v.om || S().OM_IDS;
+    var g = h('div', { class: 'mx-chips', role: 'group', 'aria-label': 'Perkiraan omzet' });
+    S().OM_IDS.forEach(function (id) {
+      /* V8 final fix: a band that holds no merchant under the other filters (e.g. Sasaran EDC: only Rp40–170 jt and
+         "Belum ada perkiraan") is disabled, so the chips do not promise a choice that changes nothing */
+      var empty = !!(cnt && !cnt[id]);
+      var b = h('button', { type: 'button', class: 'chip mx-chip', 'aria-pressed': on.indexOf(id) >= 0 ? 'true' : 'false', disabled: warm && !empty ? null : true,
+        title: empty ? 'Tidak ada merchant dengan rentang ini pada filter sekarang' : null },
+        [h('span', { text: OM_SHORT[id] }), cnt ? h('span', { class: 'chip__count', text: int(cnt[id]) }) : null]);
+      b.addEventListener('click', function () {
+        var cur = S().view().om || S().OM_IDS.slice();
+        cur = cur.indexOf(id) >= 0 ? cur.filter(function (x) { return x !== id; }) : cur.concat([id]);
+        S().setView({ om: cur });
+      });
+      g.appendChild(b);
+    });
+    return frow('Perkiraan omzet', [g], warm ? 'Perkiraan dari jenis usaha dan area, bukan omzet tercatat per usaha, data pajak atau data rekening' : OM_WAIT);
   }
   function frow(label, kids, hint) {
     return h('div', { class: 'mx-frow' }, [h('span', { class: 'mx-flabel', text: label }), h('div', { class: 'mx-fctl' }, kids), hint ? h('p', { class: 'mx-fhint', text: hint }) : null]);
   }
 
-  /* ------------------------------------------------------------- tab 1: Prioritas kunjungan */
+  /* ------------------------------------------------------------- tab 1: Urutan kecamatan (V7 D3) */
 
   function buildPrio(panel) {
     R.prio = exhibit('prio', { cls: 'mx-x--prio' });
@@ -768,7 +1120,8 @@
     R.leadTable = h('div', { class: 'mx-table mx-table--leads', role: 'table', 'aria-label': 'Daftar merchant' });
     R.leadMore = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-more' });
     R.leadMore.addEventListener('click', function () { UI.leadShown += PAGE; SIG.leads = ''; paintLeads(); });
-    [R.leadTable, R.leadMore, R.leadNote].forEach(function (n) { R.leads.body.appendChild(n); });
+    R.leadOurs = h('div', { class: 'mx-ours-slot' });
+    [R.leadOurs, R.leadTable, R.leadMore, R.leadNote].forEach(function (n) { R.leads.body.appendChild(n); });
     panel.appendChild(R.leads.el);
   }
   function paintPrio() {
@@ -780,16 +1133,18 @@
     SIG.prio = sig;
     var list = S().priorityKec(10);
     var top = list.slice(0, 3).map(function (p) { return 'Kec. ' + S().kecName(p.id); });
-    setX(R.prio, top.length ? 'Kunjungi ' + listWords(top) + ' lebih dulu' : 'Prioritas kunjungan',
-      m.hasLvm ? '10 kecamatan teratas, dipilih dari jumlah merchant yang belum ada di LVM dan jaraknya dari Mabes TNI · ' + asOfText(m)
-        : '10 kecamatan teratas, dipilih dari jumlah merchant dan jaraknya dari Mabes TNI · coverage muncul setelah file LVM diimpor',
+    setX(R.prio, top.length ? 'Kunjungi ' + listWords(top) + ' lebih dulu' : 'Urutan kecamatan',
+      m.hasLvm ? '10 kecamatan teratas di seluruh area 15 km, dipilih dari jumlah merchant yang belum ada di LVM dan jaraknya dari Mabes TNI · ' + asOfText(m)
+        : '10 kecamatan teratas di seluruh area 15 km, dipilih dari jumlah merchant dan jaraknya dari Mabes TNI · coverage muncul setelah file LVM diimpor',
       'Sumber: ' + srcPoi() + (m.hasLvm ? ' · ' + srcLvm(m) : '') + '. Urutan menggabungkan jumlah merchant' + (m.hasLvm ? ' yang belum ada di LVM' : '') + ' dan jaraknya. Kecamatan dengan coverage tertinggi tidak masuk daftar.');
     clear(R.prioBody);
     R.prioBody.appendChild(list.length ? prioList(list, {}) : h('p', { class: 'mx-none', text: 'Belum ada kecamatan yang dapat diurutkan.' }));
   }
 
   function buildLeadTools() {
-    R.leadQ = h('input', { type: 'search', class: 'input mx-search', placeholder: 'Cari nama merchant', 'aria-label': 'Cari nama merchant di daftar', value: UI.q });
+    /* M3: the keyboard does not capitalise or "correct" place names, and its Enter key reads "Cari" */
+    R.leadQ = h('input', { type: 'search', class: 'input mx-search', placeholder: 'Cari nama merchant', 'aria-label': 'Cari nama merchant di daftar', value: UI.q,
+      attrs: { enterkeyhint: 'search', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false' } });
     var deb = MCD.util.debounce(function () { UI.q = R.leadQ.value; UI.leadShown = PAGE; SIG.leads = ''; paintLeads(); }, 160);
     R.leadQ.addEventListener('input', deb);
     R.leadCount = h('span', { class: 'mx-count' });
@@ -806,7 +1161,7 @@
     if (!q) return L;
     var idx = [], score = [], P = W.MCD_SME_POIS;
     L.idx.forEach(function (i, k) { if (String(P.rows[i][3] || '').toLowerCase().indexOf(q) >= 0) { idx.push(i); score.push(L.score[k]); } });
-    return { idx: idx, score: score, n: idx.length, potentialOnly: L.potentialOnly };
+    return { idx: idx, score: score, n: idx.length, potentialOnly: L.potentialOnly, oursOut: L.oursOut || 0 };
   }
   /** "187 merchant belum ada di LVM di Kec. Makasar · Restoran" — counted from the filtered list (plan B-03). */
   function scopeTitle(n, m, v) {
@@ -819,10 +1174,15 @@
   function paintLeads() {
     var m = model(), v = S().view();
     if (!m || !R.leads) return;
-    var sig = [m.ver, v.rev, UI.q, UI.leadShown, UI.leadSort, distSig(), privacy(), demoOn()].join('|');
+    var ow = S().ours ? S().ours() : null;
+    var sig = [m.ver, v.rev, UI.q, UI.leadShown, UI.leadSort, distSig(), privacy(), demoOn(), ow ? ow.ver : '-', OM() ? (omWarm() ? 'w' : 'c') : '-'].join('|');
     if (SIG.leads === sig) return;
     SIG.leads = sig;
     var L = filteredLeads();
+    /* V8 D47: our own merchants are not acquisition leads; one line says how many were left out */
+    if (R.leadOurs) { clear(R.leadOurs); var oo = oursOutLine(L.oursOut || 0); if (oo) R.leadOurs.appendChild(oo); }
+    var om = !!OM();
+    R.leadTable.classList.toggle('has-om', om);
     setX(R.leads, scopeTitle(L.n, m, v) + (UI.q ? ' · nama memuat “' + UI.q + '”' : ''),
       (m.hasLvm ? 'Merchant di peta publik yang belum ada di LVM, tanpa sekolah dan tempat yang bukan merchant' : 'Semua merchant di peta publik, tanpa sekolah dan tempat yang bukan merchant (file LVM belum diimpor)') +
         (UI.leadSort === 'near' ? '. Urutan: waktu tempuh dari KCP, terdekat di atas' : '. Urutan: jenis usaha dan kedekatan ke Mabes TNI'),
@@ -831,9 +1191,11 @@
     R.exportBtn.disabled = !L.n;
     if (MCD.demo && MCD.demo.guard) MCD.demo.guard(R.exportBtn);
     clear(R.leadTable);
-    R.leadTable.appendChild(h('div', { class: 'mx-tr mx-tr--head', role: 'row' }, ['#', 'Nama', 'Jenis', 'Kelurahan', distCol(), 'Google Maps'].map(function (t, k) {
+    var lh = ['#', 'Nama', 'Jenis', 'Kelurahan', distCol(), 'Google Maps'].map(function (t, k) {
       return h('span', { class: 'mx-td mx-td--' + k, role: 'columnheader', text: t, title: k === 4 ? S().DIST_TIP : null });
-    })));
+    });
+    if (om) lh.splice(5, 0, h('span', { class: 'mx-td mx-td--om', role: 'columnheader', text: 'Perkiraan omzet', title: 'Perkiraan omzet, bukan data pajak atau data rekening' }));
+    R.leadTable.appendChild(h('div', { class: 'mx-tr mx-tr--head', role: 'row' }, lh));
     if (!L.n) {
       R.leadTable.appendChild(h('p', { class: 'mx-none', text: UI.q ? 'Tidak ada merchant dengan nama “' + UI.q + '”. Kosongkan kolom cari.'
         : 'Tidak ada merchant yang cocok dengan filter ini. Hapus salah satu filter.' }));
@@ -866,9 +1228,17 @@
       h('span', { class: 'mx-td mx-td--2', role: 'cell', text: catShort(cat) }),
       h('span', { class: 'mx-td mx-td--3', role: 'cell' }, [h('span', { class: 'mx-td__l1', text: kel }), h('span', { class: 'mx-td__l2', text: 'Kec. ' + kec })]),
       h('span', { class: 'mx-td mx-td--4 mx-num', role: 'cell' }, [distSpan(r)]),
+      omCell(i, 'mx-td--om'),
       h('span', { class: 'mx-td mx-td--5', role: 'cell' }, [gm]),
-      h('span', { class: 'mx-td mx-td--m', 'aria-hidden': 'true', text: catShort(cat) + ' · Kel. ' + kel + ', Kec. ' + kec + ' · ' + S().distText(r) + ' dari KCP' })
+      h('span', { class: 'mx-td mx-td--m', 'aria-hidden': 'true', text: catShort(cat) + ' · Kel. ' + kel + ', Kec. ' + kec + ' · ' + S().distText(r) + ' dari KCP' + omMeta(i) })
     ]);
+  }
+  /** " · Rp10–40 jt" for the phone line of a row (the omzet column does not fit there); '' before the warm-up. */
+  function omMeta(i) {
+    var O = OM();
+    if (!O || !omWarm()) return '';
+    var b = safe(function () { return O.bandFor(i); });
+    return b && OM_SHORT[b] ? ' · omzet ' + OM_SHORT[b] : ' · omzet belum ada perkiraan';
   }
   function exportLeads() {
     if (MCD.demo && MCD.demo.blocks && MCD.demo.blocks()) return;
@@ -913,7 +1283,8 @@
   function ecTiers(m) { var t = ecTier(m); return t === 'edc' ? ['edc', 'naik-edc'] : [t]; }
   /** The candidates of the current kecamatan and tier, in the chosen order (score, or nearest to KCP). */
   function ecList(m, v) {
-    var list = S().edcCandidates({ kecamatanId: (v && v.kec) || null, limit: 0, tiers: ecTiers(m) });
+    /* V8: an acquisition list: our own funding merchants stay out (D47); the omzet band filter applies (D49) */
+    var list = S().edcCandidates({ kecamatanId: (v && v.kec) || null, km: (v && v.km) || null, limit: 0, tiers: ecTiers(m), notOurs: true, om: true });
     return UI.ecSort === 'near' ? S().nearestFirst(list, function (c) { return S().poiDist(c.idx); }) : list;
   }
   /** The tone of a tier for chips: 'edc' (gold), 'up' (Naik ke EDC), 'lvm' (quiet) or 'nat' (Jaringan nasional, item 42). */
@@ -973,9 +1344,11 @@
     R.ecTable = h('div', { class: 'mx-table mx-table--ec', role: 'table', 'aria-label': 'Kandidat EDC' });
     R.ecMore = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-more' });
     R.ecMore.addEventListener('click', function () { UI.ecShown += PAGE; SIG.ec = ''; paintEdcCand(); });
+    R.ecOurs = h('div', { class: 'mx-ours-slot' });
+    R.ecOmNote = h('p', { class: 'mx-note mx-ec-omnote', hidden: true });
     /* item 42: the national chains, folded under the list ("Jaringan nasional (lewat kantor pusat) · n") */
     R.ecNat = h('section', { class: 'mx-nat', id: 'mx-nat', tabindex: '-1' });
-    [R.ecTipBox, R.ecTierBox, R.ecGoogle, R.ecTable, R.ecMore, R.ecNat].forEach(function (n) { R.ec.body.appendChild(n); });
+    [R.ecTipBox, R.ecTierBox, R.ecGoogle, R.ecOurs, R.ecOmNote, R.ecTable, R.ecMore, R.ecNat].forEach(function (n) { R.ec.body.appendChild(n); });
     panel.appendChild(R.ec.el);
   }
   function paintEdcCand() {
@@ -984,7 +1357,9 @@
     /* the map filter "Sasaran" leads the list; "Jaringan nasional" (item 42) opens the folded group instead */
     if (v.tier === 'nasional') UI.natOpen = true;
     else if (v.tier !== 'all' && v.tier !== UI.ecTier) UI.ecTier = v.tier;
-    var sig = [m.ver, v.kec, v.tier, UI.ecTier, UI.ecSort, UI.ecShown, UI.natOpen, UI.natShown, distSig(), privacy(), demoOn(), placesSig(), S().edcRule ? S().edcRule() : ''].join('|');
+    var ow = S().ours ? S().ours() : null;
+    var sig = [m.ver, v.kec, v.km, v.tier, UI.ecTier, UI.ecSort, UI.ecShown, UI.natOpen, UI.natShown, distSig(), privacy(), demoOn(), placesSig(), S().edcRule ? S().edcRule() : '',
+      ow ? ow.ver : '-', v.om ? v.om.join() : '', OM() ? (omWarm() ? 'w' : 'c') : '-'].join('|');
     if (SIG.ec === sig) return;
     SIG.ec = sig;
     /* kecamatan (the section's kecamatan filter, so the map and the chips follow) */
@@ -997,7 +1372,9 @@
       });
     }
     R.ecKec.value = v.kec || '';
-    var cnt = S().edcTierCounts({ kecamatanId: v.kec || null }), tip = ecTip();
+    /* V8 final fix: the first option follows the "Cakupan" switch too ("Semua kecamatan (5 km)" over a 5 km list) */
+    if (R.ecKec.options && R.ecKec.options[0]) R.ecKec.options[0].textContent = v.km ? 'Semua kecamatan (' + v.km + ' km)' : 'Semua kecamatan dalam 15 km';
+    var cnt = S().edcTierCounts({ kecamatanId: v.kec || null, km: v.km || null, notOurs: true, om: true }), tip = ecTip();
     if (R.ecTipBox.textContent !== tip) R.ecTipBox.textContent = tip;
     clear(R.ecTierBox);
     var opts = EC_TIERS.filter(function (t) { return m.hasLvm || t[0] !== 'naik-edc'; }).map(function (t) {
@@ -1007,7 +1384,7 @@
     var cur = ecTier(m);
     /* the list's choice is also the map filter "Sasaran", so the dots show the same merchants */
     R.ecTierBox.appendChild(seg('Sasaran', opts, cur, function (x) { UI.ecTier = x; UI.ecShown = PAGE; SIG.ec = ''; S().setView({ tier: x }); paintEdcCand(); }, 'mx-ec-seg'));
-    var list = ecList(m, v), where = v.kec ? ' di Kec. ' + S().kecName(v.kec) : ' dalam 15 km';
+    var list = ecList(m, v), where = ecWhere(v);
     R.ecLast = list;
     var title = cur === 'lvm' ? int(cnt.lvm) + ' merchant' + where + ' termasuk Sasaran LVM, usaha kecil dan mikro'
       : (cur === 'naik-edc' ? int(cnt['naik-edc']) + ' merchant LVM' + where + ' dapat naik ke EDC'
@@ -1016,12 +1393,23 @@
       'Sumber: ' + srcPoi() + (W.MCD_SME_EXTRA ? ', kategori dan data usaha' : '') + (W.MCD_AREA_WEALTH ? ' · daya beli area (perkiraan dari data publik)' : '') +
         (m.hasLvm ? ' · ' + srcLvm(m) : '') + '. Perkiraan, tanpa rating Google. Merchant yang telah memiliki EDC Mandiri tidak masuk daftar.');
     paintEcGoogle(list);
+    paintEcOmNote(list);
+    /* V8 D47: "{n} merchant KCP Cilangkap tidak masuk daftar ini." (the tiers of this list only) */
+    if (R.ecOurs) {
+      clear(R.ecOurs);
+      var mine = cnt.ours ? ecTiers(m).reduce(function (a, t) { return a + (cnt.ours[t] || 0); }, 0) : 0, oo = oursOutLine(mine);
+      if (oo) R.ecOurs.appendChild(oo);
+    }
     clear(R.ecTable);
+    var om = !!OM();
+    R.ecTable.classList.toggle('has-om', om);
     var heads = ['#', 'Nama', 'Sasaran', 'Tiga faktor', distCol(), 'Google Maps'];
     function headRow() {
-      return h('div', { class: 'mx-tr mx-tr--head', role: 'row' }, heads.map(function (t, k) {
+      var cells = heads.map(function (t, k) {
         return h('span', { class: 'mx-td mx-td--e' + k, role: 'columnheader', text: t, title: k === 4 ? S().DIST_TIP : (k === 3 ? FX_HEAD_TIP : null) });
-      }));
+      });
+      if (om) cells.splice(5, 0, h('span', { class: 'mx-td mx-td--om', role: 'columnheader', text: 'Perkiraan omzet', title: 'Perkiraan omzet, bukan data pajak atau data rekening' }));
+      return h('div', { class: 'mx-tr mx-tr--head', role: 'row' }, cells);
     }
     R.ecTable.appendChild(headRow());
     safe(function () { paintNat(m, v, cnt, headRow); });
@@ -1056,9 +1444,9 @@
     box.appendChild(body);
     if (!open) return;
     body.appendChild(h('p', { class: 'mx-note', text: T0.title }));
-    var where = v && v.kec ? ' di Kec. ' + S().kecName(v.kec) : ' dalam 15 km';
-    var list = S().nearestFirst(S().edcCandidates({ kecamatanId: (v && v.kec) || null, limit: 0, tiers: ['nasional'] }), function (c) { return S().poiDist(c.idx); });
-    var table = h('div', { class: 'mx-table mx-table--ec', role: 'table', 'aria-label': T0.label + where });
+    var where = ecWhere(v);
+    var list = S().nearestFirst(S().edcCandidates({ kecamatanId: (v && v.kec) || null, km: (v && v.km) || null, limit: 0, tiers: ['nasional'], notOurs: true, om: true }), function (c) { return S().poiDist(c.idx); });
+    var table = h('div', { class: 'mx-table mx-table--ec' + (OM() ? ' has-om' : ''), role: 'table', 'aria-label': T0.label + where });
     if (headRow) table.appendChild(headRow());
     var mode = privacy(), shown = Math.min(list.length, UI.natShown);
     for (var k = 0; k < shown; k++) table.appendChild(ecRow(list[k], k, mode));
@@ -1068,6 +1456,30 @@
       more.addEventListener('click', function () { UI.natShown += PAGE; SIG.ec = ''; paintEdcCand(); });
       body.appendChild(more);
     }
+  }
+  /** " di Kec. Ciracas" · " dalam 5 km dari Mabes TNI" · " dalam 15 km": where the Kandidat EDC lists count (V8 final fix:
+      the "Cakupan" switch applies here as in the Belum ada di LVM list). */
+  function ecWhere(v) {
+    var km = v && v.km ? ' dalam ' + v.km + ' km dari Mabes TNI' : '';
+    return v && v.kec ? ' di Kec. ' + S().kecName(v.kec) + km : (km || ' dalam 15 km');
+  }
+  /**
+   * V8 final fix (critic, 24 Oct 2026): one honest line over the Kandidat EDC list. The omzet band of a candidate follows
+   * its business type and area, not a figure of that business, and most Sasaran EDC listings have no estimate at all
+   * (types without a published figure). "{n} dari {N} kandidat ({p}) belum ada perkiraan omzet."
+   */
+  function paintEcOmNote(list) {
+    if (!R.ecOmNote) return;
+    var O = OM();
+    clear(R.ecOmNote);
+    R.ecOmNote.hidden = true;
+    if (!O || !omWarm() || !list || !list.length) return;
+    var none = 0;
+    list.forEach(function (c) { if (!safe(function () { return O.bandFor(c.idx); })) none++; });
+    var t = 'Perkiraan omzet di daftar ini mengikuti jenis usaha dan area, bukan omzet tercatat per usaha.';
+    if (none) t += ' ' + int(none) + ' dari ' + int(list.length) + ' kandidat (' + fm().pct(none / list.length, 0) + ') belum ada perkiraan omzet.';
+    R.ecOmNote.textContent = t;
+    R.ecOmNote.hidden = false;
   }
   /** ", termasuk 12 Naik ke EDC". Item 42 (v5): national chains are no longer part of Sasaran EDC; they are their own
       folded group under the list (paintNat), so the title counts local merchants only. */
@@ -1094,6 +1506,7 @@
       h('span', { class: 'mx-td mx-td--e2', role: 'cell' }, [tierChip(c.tier)]),
       h('span', { class: 'mx-td mx-td--e3', role: 'cell' }, [factorCell(c.factors)]),
       h('span', { class: 'mx-td mx-td--e4 mx-num', role: 'cell' }, [distSpan(r)]),
+      omCell(c.idx, 'mx-td--om'),
       h('span', { class: 'mx-td mx-td--e5', role: 'cell' }, [gm])
     ]);
   }
@@ -1405,6 +1818,7 @@
   function buildStatusTab(panel) {
     R.statusEmpty = h('div', { class: 'mx-status-empty' });
     panel.appendChild(R.statusEmpty);
+    buildIdle(panel);
     R.stores = exhibit('stores', {});
     R.storesBody = h('div', { class: 'mx-kpi' });
     R.stores.body.appendChild(R.storesBody);
@@ -1433,6 +1847,106 @@
     R.edc.body.appendChild(R.edcBody);
     panel.appendChild(R.edc.el);
   }
+  /* ------------------------------------------------------------- V8 D48: "EDC tidak bertransaksi" (Status LVM & EDC) */
+
+  /* Our funding merchants with at least one EDC and Tier Freq "Nihil": the activation list the user asked for. Names stay
+     in this list (D63: never in Cari, the plan or a CSV); a row goes to the plan only through its public listing. */
+  function buildIdle(panel) {
+    R.idle = exhibit('idle', { cls: 'mx-x--idle' });
+    R.idleSort = seg('Urutan daftar', [['near', NEAR_LABEL, 'Waktu tempuh dari KCP, terdekat di atas. Tanpa titik di peta di bawah.'], ['band', 'Saldo tertinggi', 'Rentang saldo tertinggi di atas']], UI.idleSort,
+      function (v) { UI.idleSort = v; R.idleSort.setValue(v); UI.idleShown = PAGE; SIG.idle = ''; paintIdle(); });
+    R.idle.tools.appendChild(h('div', { class: 'mx-toolbar' }, [R.idleSort]));
+    R.idleBody = h('div', { class: 'mx-idle' });
+    R.idle.body.appendChild(R.idleBody);
+    R.idle.el.hidden = !FU();                    // without MCD.funding the block does not exist
+    panel.appendChild(R.idle.el);
+  }
+  function idleDist(x) { return x.poi != null ? S().poiDist(x.poi) : (x.lvm != null && isNum(x.lon) ? S().lvmDist(x.lvm) : null); }
+  function idleRows() {
+    var list = (FUND.idleList || []).slice();
+    if (UI.idleSort === 'band') {
+      return list.sort(function (a, b) { return bandRank(b.band) - bandRank(a.band) || String(a.name || '').localeCompare(String(b.name || '')); });
+    }
+    return S().nearestFirst(list, function (x) { return isNum(x.lon) ? idleDist(x) : null; });
+  }
+  function paintIdle() {
+    if (!R.idle) return;
+    var F = FU(), v = veiled(), ready = fundReady();
+    var sig = [ready ? FUND.model && FUND.model.asOf : '-', (FUND.idleList || []).length, UI.idleSort, UI.idleShown, distSig(), v ? 1 : 0, demoOn(), F ? 1 : 0, MCD.plan ? 1 : 0].join('|');
+    if (SIG.idle === sig) return;
+    SIG.idle = sig;
+    clear(R.idleBody);
+    R.idle.el.hidden = !F;
+    if (!F) return;
+    R.idleSort.hidden = !ready;
+    if (demoOn()) {
+      setX(R.idle, 'EDC tidak bertransaksi', null, '');
+      R.idleBody.appendChild(h('p', { class: 'mx-none', text: FUND_DEMO }));
+      return;
+    }
+    if (!ready) {
+      setX(R.idle, 'EDC tidak bertransaksi', null, '');
+      if (fundModel()) { R.idleBody.appendChild(h('p', { class: 'mx-none', text: 'Memuat data funding merchant…' })); return; }
+      R.idleBody.appendChild(emptyCard('Impor file funding merchant untuk melihat EDC yang tidak bertransaksi.', [], fundImportBtn()));
+      return;
+    }
+    var rows = idleRows(), d = fundDate();
+    setX(R.idle, 'EDC tidak bertransaksi · ' + int(rows.length) + ' merchant', 'Merchant KCP Cilangkap dengan EDC tanpa transaksi bulan ini. Kunjungi untuk aktivasi.',
+      'Sumber: file funding merchant cabang' + (d ? ', posisi ' + d : '') + '. Hanya merchant KCP Jakarta Cilangkap (12903).');
+    if (!rows.length) R.idleBody.appendChild(h('p', { class: 'mx-none', text: 'Semua EDC merchant KCP Cilangkap bertransaksi bulan ini.' }));
+    else {
+      var table = h('div', { class: 'mx-table mx-table--idle', role: 'table', 'aria-label': 'EDC tidak bertransaksi', attrs: { translate: 'no' } });
+      table.appendChild(h('div', { class: 'mx-tr mx-tr--head', role: 'row' }, ['Merchant', 'Jenis usaha', 'Kecamatan', 'EDC', 'Saldo rata-rata', 'Dari KCP', ''].map(function (t, k) {
+        return h('span', { class: 'mx-td mx-td--i' + k, role: 'columnheader', text: t, title: k === 4 ? OURS_TIP : (k === 5 ? S().DIST_TIP : null) });
+      })));
+      var shown = Math.min(rows.length, UI.idleShown);
+      for (var k = 0; k < shown; k++) table.appendChild(idleRow(rows[k], v));
+      R.idleBody.appendChild(table);
+      if (shown < rows.length) {
+        var more = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-more', text: 'Tampilkan ' + int(Math.min(PAGE, rows.length - shown)) + ' lagi' });
+        more.addEventListener('click', function () { UI.idleShown += PAGE; SIG.idle = ''; paintIdle(); });
+        R.idleBody.appendChild(more);
+      }
+    }
+    R.idleBody.appendChild(h('p', { class: 'mx-note', text: NO_EXPORT }));
+    var rl = rankLine();
+    if (rl) R.idleBody.appendChild(rl);
+  }
+  function idleRow(x, v) {
+    var r = isNum(x.lon) ? idleDist(x) : null, kec = x.kecId ? 'Kec. ' + S().kecName(x.kecId) : 'kecamatan belum diketahui';
+    var what = x.lob || (x.cat && S().CAT[x.cat] ? S().CAT[x.cat].short : '—');
+    var plan = null;
+    if (x.poi != null) {
+      var q = planQuick(x.poi);
+      if (q && q.done) plan = h('span', { class: 'mx-idle__done', text: q.done.label || '✓ Di rencana' });
+      else if (q) {
+        plan = h('button', { type: 'button', class: 'btn btn--secondary mx-btn40 mx-idle__plan', title: q.title || null, text: q.label });
+        plan.addEventListener('click', function () { var res = q.run(); if (res && res.ok) { SIG.idle = ''; paintIdle(); } });
+      }
+    }
+    return h('div', { class: 'mx-tr', role: 'row' }, [
+      h('span', { class: 'mx-td mx-td--i0', role: 'cell', text: v ? initials(x.name) : (x.name || '—') }),
+      h('span', { class: 'mx-td mx-td--i1', role: 'cell', text: what }),
+      h('span', { class: 'mx-td mx-td--i2', role: 'cell', text: kec }),
+      h('span', { class: 'mx-td mx-td--i3 mx-num', role: 'cell', text: int(x.edc) }),
+      h('span', { class: 'mx-td mx-td--i4', role: 'cell', text: v ? VEIL : bandLabel(x.band) }),
+      h('span', { class: 'mx-td mx-td--i5 mx-num', role: 'cell' }, [r ? distSpan(r) : h('span', { class: 'mx-dist', text: 'Tanpa titik di peta' })]),
+      h('span', { class: 'mx-td mx-td--i6', role: 'cell' }, [plan])
+    ]);
+  }
+  /** "CASA merchant EDC cabang: peringkat {r} dari {n} cabang di area" + "Lihat Posisi cabang ›" (rank only, V7 D24). */
+  function rankLine() {
+    var rk = FUND.rank, c = rk && rk.casa;
+    if (!c || !isNum(c.rank) || !isNum(c.of)) return null;
+    var d = fundDate(), go = null, N = MCD.nav;
+    if (N && typeof N.go === 'function' && (typeof N.shown !== 'function' || N.shown('position'))) {
+      go = h('button', { type: 'button', class: 'btn btn--ghost mx-btn40 mx-rank__go' }, [h('span', { text: 'Lihat Posisi cabang' }), icon('chev-r')]);
+      go.addEventListener('click', function () { safe(function () { N.go({ section: 'position' }, { from: 'merchants' }); }); });
+    }
+    return h('div', { class: 'mx-rank', title: 'Peringkat dari file funding merchant' + (d ? ', posisi ' + d : '') + '. Nama cabang lain tidak disimpan.' }, [
+      h('p', { class: 'mx-rank__t', text: 'CASA merchant EDC cabang: peringkat ' + int(c.rank) + ' dari ' + int(c.of) + ' cabang di area' }), go]);
+  }
+
   /** Before the import the LVM parts of this tab collapse into one card (plan B-04). */
   function paintStores() {
     var m = model();
@@ -1692,26 +2206,41 @@
     return r.mtd / (b - r.mtd);
   }
   function signedRp(v) { return isNum(v) ? (v > 0 ? '+' : '') + fm().rp(v) : '—'; }
+  /**
+   * V8 D46 / V7 D28: while the Saldo merchant tab is on screen, printing shows one line instead of the page
+   * (body.mx-noprint and the .mx-print node, section-merchants.css @media print). Off on another tab or a section switch.
+   */
+  function printGuard(on) {
+    var d = W.document, b = d && d.body;
+    if (!b || !b.classList) return;
+    if (on) {
+      if (!R.printEl || !R.printEl.parentNode) { R.printEl = h('div', { class: 'mx-print', attrs: { translate: 'no' } }, [h('p', { text: PRINT_LINE })]); b.appendChild(R.printEl); }
+      b.classList.add('mx-noprint');
+    } else {
+      b.classList.remove('mx-noprint');
+      if (R.printEl && R.printEl.parentNode) R.printEl.parentNode.removeChild(R.printEl);
+      R.printEl = null;
+    }
+  }
   function paintSaldo() {
     if (!R.saldo) return;
     var Sd = MCD.saldo, list = Sd ? Sd.rows() : [], sm = Sd ? Sd.summary() : null, veil = privacy() === 'veil';
     var meta = (MCD.data.meta && MCD.data.meta.saldo) || {};
     var sig = [MCD.data.version, list.length, UI.saldoShow, UI.saldoSort, UI.saldoShown, veil ? 1 : 0].join('|');
+    printGuard(deep() && UI.tab === 'saldo');
     if (SIG.saldo === sig) return;
     SIG.saldo = sig;
     clear(R.saldoTools);
     clear(R.saldoBody);
     if (!sm) {
-      setX(R.saldo, 'Saldo merchant nasabah', 'Saldo per tanggal dan perubahan MtD setiap merchant nasabah cabang', 'Sumber: file saldo merchant (belum diimpor).');
-      var go = h('button', { type: 'button', class: 'btn btn--secondary', text: 'Buka Data & Privasi' });
-      go.addEventListener('click', goImport);
-      R.saldoBody.appendChild(h('p', { class: 'mx-none' }, ['Impor file saldo merchant (misalnya Cilangkap Merchant Area.xlsx) di Data & Privasi › Impor. File dibaca di browser ini; CIF dan nomor rekening tidak disimpan. ', go]));
+      setX(R.saldo, 'Saldo merchant nasabah', 'Saldo per tanggal dan perubahan MtD setiap merchant nasabah cabang', 'Sumber: file funding merchant cabang (belum diimpor).');
+      R.saldoBody.appendChild(emptyCard('Belum ada data saldo merchant. Impor file funding merchant di Data & Privasi.', [], fundImportBtn()));
       return;
     }
     var last = sm.asOf;
     setX(R.saldo, int(sm.drop) + ' dari ' + int(sm.n) + ' merchant nasabah turun saldonya bulan ini',
-      'Saldo per ' + dateText(last) + ' · total ' + fm().rp(sm.total) + ' · ' + int(sm.growth) + ' naik, ' + int(sm.drop) + ' turun (MtD)',
-      'Sumber: ' + (sm.demo ? 'data contoh (ilustrasi)' : 'file saldo merchant' + (meta.file ? ' (' + meta.file + ')' : '')) + ' · dibaca di browser ini; CIF, nomor rekening dan nama resmi tidak disimpan.');
+      'Saldo per ' + dateText(last) + ' · total ' + (veil ? VEIL_RP : fm().rp(sm.total)) + ' · ' + int(sm.growth) + ' naik, ' + int(sm.drop) + ' turun (MtD)',
+      sm.demo ? 'Sumber: data contoh (ilustrasi).' : 'Dari file funding merchant cabang, data per ' + dateText(last) + '. Hanya merchant KCP Jakarta Cilangkap (12903).');
     R.saldoTools.appendChild(seg('Tampilkan', [['all', 'Semua'], ['drop', 'Turun'], ['growth', 'Naik']], UI.saldoShow,
       function (v) { UI.saldoShow = v; UI.saldoShown = PAGE; paintSaldo(); }));
     R.saldoTools.appendChild(seg('Urutkan', [['drop', 'Turun terbanyak'], ['bal', 'Saldo terbesar'], ['name', 'Nama']], UI.saldoSort,
@@ -1725,22 +2254,36 @@
     var head = ['Merchant', 'EDC', 'Produk', 'Saldo ' + fm().date(last), 'MtD', 'MtD %', 'MoM', 'Status'];
     var tb = h('tbody', {});
     shown.forEach(function (r) {
-      var k = list.indexOf(r) + 1, pct = saldoPct(r, last), tone = r.flagMtd === 'drop' ? 'bad' : (r.flagMtd === 'growth' ? 'ok' : 'none');
+      var pct = saldoPct(r, last), tone = r.flagMtd === 'drop' ? 'bad' : (r.flagMtd === 'growth' ? 'ok' : 'none');
       tb.appendChild(h('tr', {}, [
-        h('td', { class: 'mx-saldo__name', title: veil ? null : (r.dba && r.dba !== r.name ? r.dba : null), text: veil ? 'Merchant ' + k : r.name }),
+        h('td', { class: 'mx-saldo__name', title: veil ? null : (r.dba && r.dba !== r.name ? r.dba : null), text: veil ? initials(r.name) : r.name }),
         h('td', { class: 'num', text: isNum(r.edc) ? int(r.edc) : (r.hasEdc === false ? '0' : '—') }),
         h('td', { text: r.product || '—' }),
-        h('td', { class: 'num', text: fm().rp(r.balances[last]) }),
-        h('td', { class: 'num mx-saldo__d mx-saldo__d--' + tone, text: signedRp(r.mtd) }),
+        h('td', { class: 'num', text: veil ? VEIL_RP : fm().rp(r.balances[last]) }),
+        h('td', { class: 'num mx-saldo__d mx-saldo__d--' + tone, text: veil ? VEIL_RP : signedRp(r.mtd) }),
         h('td', { class: 'num mx-saldo__d mx-saldo__d--' + tone, text: isNum(pct) ? (pct > 0 ? '+' : '') + fm().pct(pct, 1) : '—' }),
-        h('td', { class: 'num', text: signedRp(r.mom) }),
+        h('td', { class: 'num', text: veil ? VEIL_RP : signedRp(r.mom) }),
         h('td', {}, [h('span', { class: 'map-dot map-dot--' + tone, 'aria-hidden': 'true' }), ' ', r.flagMtd === 'drop' ? 'Turun' : (r.flagMtd === 'growth' ? 'Naik' : '—')])
       ]));
     });
-    var table = h('table', { class: 'tbl tbl--36 mx-saldo__tbl' }, [
+    var table = h('table', { class: 'tbl tbl--36 mx-saldo__tbl', attrs: { translate: 'no' } }, [
       h('thead', {}, [h('tr', {}, head.map(function (t, i) { return h('th', { scope: 'col', class: i === 0 || i === 2 || i === 7 ? null : 'num', text: t }); }))]), tb]);
-    R.saldoBody.appendChild(h('div', { class: 'tbl-wrap' }, [table]));
-    var foot = h('div', { class: 'tbl-foot' }, [h('span', { text: int(shown.length) + ' dari ' + int(rows.length) + ' merchant' })]);
+    R.saldoBody.appendChild(h('div', { class: 'tbl-wrap mx-saldo__wide' }, [table]));
+    /* V8 final fix (critic, phones): under 560 px of the section the 8-column table hid the balance, MtD and status
+       behind a sideways swipe; there each merchant is a two-line card instead (CSS shows one of the two) */
+    R.saldoBody.appendChild(h('ul', { class: 'mx-saldo__cards', 'aria-label': 'Saldo merchant nasabah', attrs: { translate: 'no' } }, shown.map(function (r) {
+      var pct = saldoPct(r, last), tone = r.flagMtd === 'drop' ? 'bad' : (r.flagMtd === 'growth' ? 'ok' : 'none');
+      var word = r.flagMtd === 'drop' ? 'Turun' : (r.flagMtd === 'growth' ? 'Naik' : '—');
+      var l2 = (veil ? VEIL_RP : fm().rp(r.balances[last])) + ' · MtD ' + (veil ? VEIL_RP : signedRp(r.mtd)) + (isNum(pct) ? ' (' + (pct > 0 ? '+' : '') + fm().pct(pct, 1) + ')' : '');
+      var l3 = 'EDC ' + (isNum(r.edc) ? int(r.edc) : (r.hasEdc === false ? '0' : '—')) + ' · ' + (r.product || '—') + ' · MoM ' + (veil ? VEIL_RP : signedRp(r.mom));
+      return h('li', { class: 'mx-saldo__card' }, [
+        h('span', { class: 'mx-saldo__c1' }, [h('span', { class: 'mx-saldo__name', title: veil ? null : (r.dba && r.dba !== r.name ? r.dba : null), text: veil ? initials(r.name) : r.name }),
+          h('span', { class: 'mx-saldo__st mx-saldo__d--' + tone }, [h('span', { class: 'map-dot map-dot--' + tone, 'aria-hidden': 'true' }), ' ' + word])]),
+        h('span', { class: 'mx-saldo__c2 mx-saldo__d--' + tone, text: l2 }),
+        h('span', { class: 'mx-saldo__c3', text: l3 })
+      ]);
+    })));
+    var foot = h('div', { class: 'tbl-foot' }, [h('span', { text: int(shown.length) + ' dari ' + int(rows.length) + ' merchant · ' + NO_EXPORT })]);
     if (rows.length > shown.length) {
       var more = h('button', { type: 'button', class: 'btn btn--ghost', text: 'Tampilkan lebih banyak' });
       more.addEventListener('click', function () { UI.saldoShown += PAGE; paintSaldo(); });
@@ -1800,7 +2343,7 @@
       ['Hasil', m.hasLvm ? int(t.matched) + ' dari ' + int(t.inFocus) + ' toko LVM dalam 15 km ditemukan di peta publik (' + pct(t.matchRate) + '). ' + int(t.outside) + ' toko berada di luar area peta.' : 'Muncul setelah file LVM diimpor.'],
       ['Coverage', 'Coverage adalah porsi merchant yang telah tergarap.\nRumusnya: toko LVM ÷ (merchant publik + toko LVM yang tidak ada di peta publik).\nPorsi merchant publik saja tidak disebut coverage.'],
       ['Warna', 'Kecamatan yang separuh wilayahnya atau lebih dalam 15 km dibandingkan menurut coverage.\nSepertiga tertinggi diberi titik hijau, sepertiga tengah kuning, sepertiga terendah merah.\nJika coverage masih hampir sama, berlaku batas tetap.\nBatas tetap: hijau 50% atau lebih, kuning 20–50%, merah di bawah 20%.'],
-      ['Prioritas kunjungan', 'Kecamatan dalam 15 km diurutkan dengan rumus berikut.\nMerchant belum ada di LVM ÷ (1 + jarak dari Mabes TNI ÷ 3 km).\nSebelum file LVM diimpor, rumus menggunakan jumlah merchant publik.\nKecamatan di sepertiga tertinggi tidak masuk daftar.'],
+      ['Urutan kecamatan', 'Kecamatan dalam 15 km diurutkan dengan rumus berikut.\nMerchant belum ada di LVM ÷ (1 + jarak dari Mabes TNI ÷ 3 km).\nSebelum file LVM diimpor, rumus menggunakan jumlah merchant publik.\nKecamatan di sepertiga tertinggi tidak masuk daftar.'],
       /* the travel-time line only when travel times are loaded (item 27); otherwise no time is shown anywhere */
       ['Jarak', 'Jarak 15 km diukur dari pusat Mabes TNI, sekitar 0,6 km dari KCP Cilangkap.' + (hasTravel() ? '\nJarak dan waktu tempuh dari KCP adalah perkiraan jalan, lalu lintas normal.' : '')],
       ['Lokasi toko LVM', 'File Rev LVM tidak memuat koordinat.\nToko ditempatkan di jalannya dari alamat toko, di browser ini, tanpa internet.\nJika jalannya tidak ditemukan, titiknya di pusat kelurahan atau kecamatan.\nAlamat tidak disimpan. Titik jalan masih perkiraan, belum titik bangunan.'],
@@ -1835,8 +2378,11 @@
     return el;
   }
   function kv(k, v, tip) { return h('div', { class: 'dd-kv', title: tip || null }, [h('span', { class: 'dd-kv__k', text: k }), h('span', { class: 'dd-kv__v', text: v == null || v === '' ? '—' : String(v) })]); }
-  var STATUS_WORDS = { potential: 'Potensi', notYet: 'Belum ada di LVM', acquired: 'Sudah diakuisisi', inactive: 'Sudah diakuisisi, tidak aktif', lvmOnly: 'Toko LVM' };
-  var STATUS_TONE = { potential: 'potential', notYet: 'bad', acquired: 'ok', inactive: 'mid', lvmOnly: 'ok' };
+  /* V8 final fix: 'ours' = a public listing linked to a funding merchant of KCP Cilangkap while no LVM file is loaded
+     (it was labelled "Potensi", a prospect the branch already serves) */
+  var STATUS_WORDS = { potential: 'Potensi', notYet: 'Belum ada di LVM', acquired: 'Sudah diakuisisi', inactive: 'Sudah diakuisisi, tidak aktif', lvmOnly: 'Toko LVM',
+    ours: 'Merchant KCP Cilangkap' };
+  var STATUS_TONE = { potential: 'potential', notYet: 'bad', acquired: 'ok', inactive: 'mid', lvmOnly: 'ok', ours: 'ok' };
   function statusChip(status) {
     return h('span', { class: 'mx-chipstat mx-chipstat--' + status, text: STATUS_WORDS[status] || status });
   }
@@ -1996,9 +2542,15 @@
     /* item 37: the tier and the three factors first (the sheet opens this fold first); then the status and where it is,
        with the route (item 36) */
     var body = [sasaranBlock(i, info, ec, f, note)];
-    body.push(blk('Status', [h('p', { class: 'mx-dd-p', text: S().WORDS[info.status] + '.' }),
+    /* V8 (§4.1.2, §4.1.3): "Merchant KCP Cilangkap" (our funding merchants on this listing), then "Perkiraan omzet" */
+    var ours = oursOf(i), O = OM(), od = O ? safe(function () { return O.display(i); }) : null, ob = omBandOf(od);
+    var st0 = ours && info.status === 'potential' ? 'ours' : info.status;
+    body.push(blk('Status', [h('p', { class: 'mx-dd-p', text: st0 === 'ours' ? 'Telah menjadi merchant KCP Cilangkap (file funding merchant cabang). Bukan prospek akuisisi.' : S().WORDS[info.status] + '.' }),
       info.status === 'notYet' ? note('mx-notyet-name', S().WORDS.notYetNote) : null,
-      info.status === 'potential' ? note('mx-import-status', 'Impor file LVM untuk melihat status merchant.') : null], { id: 'status', open: true, preview: STATUS_WORDS[info.status] }));
+      info.status === 'potential' ? note('mx-import-status', st0 === 'ours' ? 'Impor file LVM untuk melihat status Livin’ Merchant.' : 'Impor file LVM untuk melihat status merchant.') : null], { id: 'status', open: true, preview: STATUS_WORDS[st0] }));
+    if (ours) body.push(oursFold(ours));
+    var omF = omzetFold(i, od);
+    if (omF) body.push(omF);
     body.push(blk('Lokasi', [kv('Kecamatan', info.kecamatanId ? S().kecName(info.kecamatanId, true) : '—'), kv('Kelurahan', S().kelName(info.kelurahanId)),
       distKv('poi', i), kv('Jarak dari Mabes TNI', fm().km(info.km)), mode === 'veil' ? null : kv('Koordinat', fm().coord(info.pos[1], info.pos[0], 5)),
       routeRow(info.pos[0], info.pos[1])], { id: 'lokasi', preview: 'Kec. ' + kecTxt + ' · ' + dist }));
@@ -2017,22 +2569,31 @@
     body.push(h('div', { class: 'mx-dd-actions' }, [zoom, kecB]));
     var tid = ec ? ec.tier : null, T0 = tid ? S().TIERS[tid] : null, trail = trailOf(sel, info.kecamatanId);
     var rUrl = mode === 'veil' || !S().directionsUrl ? null : S().directionsUrl(info.pos[0], info.pos[1]);
+    /* v5 (item 43): the callout's key numbers ("5,8 km" over "± 19 menit dari KCP", Kecamatan), its chips (status, tier)
+       and the three-factor line; V8: "Merchant KCP Cilangkap" takes the second chip */
+    var brief = {
+      numbers: [distNum(r, dist), { label: 'Kecamatan', value: kecTxt }],
+      chips: [{ text: STATUS_WORDS[st0], tone: STATUS_TONE[st0], title: st0 === 'ours' ? OURS_TIP : null },
+        ours ? (st0 === 'ours' ? null : { text: oursLabel(), tone: 'none', title: OURS_TIP }) : (T0 ? { text: tid === 'nasional' ? T0.short : T0.label, tone: tierTone(tid), title: T0.title } : null)].filter(Boolean),
+      primary: phoneRoute(rUrl, 'Rute di Google Maps', ROUTE_TIP),
+      note: f ? { text: factorsLine(f) } : null
+    };
+    /* the callout holds ≤ 3 numbers: our merchant's balance band first (bank data), else the omzet band */
+    if (ours) { var os = oursSummary(ours); brief.numbers.push({ label: 'Saldo rata-rata', value: mode === 'veil' ? VEIL : bandLabel(os.band), title: mode === 'veil' ? null : OURS_TIP }); }
+    else if (ob && OM_SHORT[ob]) brief.numbers.push({ label: 'Perkiraan omzet', value: OM_SHORT[ob], title: O.CAPTION || null });
+    if (O && O.LEGAL) hints.push({ id: 'mx-omzet-legal', node: h('p', { class: 'mx-dd-p c-2', text: O.LEGAL }) });
+    var pq = planQuick(i), pl = planLink(pq);
     return withGmaps({
       eyebrow: (S().CAT[info.category].short + ' · ' + (S().GROUP_LABEL[info.group] || '')).toUpperCase(),
       title: S().maskName(info.name, mode),
-      sub: [statusChip(info.status), info.status === 'acquired' || info.status === 'inactive' ? lvmBadge() : null].filter(Boolean),
+      sub: [statusChip(st0), info.status === 'acquired' || info.status === 'inactive' ? lvmBadge() : null].filter(Boolean),
       body: body,
       prov: 'Sumber: ' + srcPoi() + (m && m.hasLvm ? ' · ' + srcLvm(m) : ''),
-      /* v5 (item 43): the callout's key numbers ("5,8 km" over "± 19 menit dari KCP", Kecamatan), its chips (status, tier)
-         and the three-factor line */
       kind: 'poi', key: 'mxPoi:' + i, anchor: info.pos.slice(0, 2), demo: !!(m && m.demo && m.hasLvm),
-      brief: {
-        numbers: [distNum(r, dist), { label: 'Kecamatan', value: kecTxt }],
-        chips: [{ text: STATUS_WORDS[info.status], tone: STATUS_TONE[info.status] },
-          T0 ? { text: tid === 'nasional' ? T0.short : T0.label, tone: tierTone(tid), title: T0.title } : null].filter(Boolean),
-        primary: phoneRoute(rUrl, 'Rute di Google Maps', ROUTE_TIP),
-        note: f ? { text: factorsLine(f) } : null
-      },
+      brief: brief,
+      /* V8 (§4.1.1): "+ Rencana kunjungan" in the card head (two quick actions at most, MCD.windows.QUICK_MAX) */
+      quick: pq ? [pq] : [],
+      links: pl ? [pl] : [],
       crumb: trail ? crumbTo(trail) : null,
       hints: hints
     }, S().gmapsFor('mxPoi', i));
@@ -2150,6 +2711,8 @@
     if (rec && isNum(rec.distKm)) rows.push(kv('Jarak dari Mabes TNI', fm().km(rec.distKm)));
     if (k.kota) rows.push(kv('Kota', k.kota));
     var numsBlk = blk('Angka kecamatan', rows, { id: 'angka', open: !listFirst, preview: int(pot) + ' merchant · ' + int(cnt.edcAll) + ' Sasaran EDC' });
+    /* V8 (§4.1.2, §4.1.3): our funding merchants in this kecamatan (counts only, hidden while veiled) and its omzet block */
+    var extra = [kecOursBlock(id), kecOmzetBlock(id)].filter(Boolean);
     var tb = kecBounds(id);
     var numbers = m.hasLvm && a ? [{ label: 'Coverage', value: isNum(cov) ? pct(cov) : '—', big: true, tone: bandTone(band), title: BAND_WORDS[band] || null },
       { label: 'Merchant', value: int(pot) }, { label: 'Belum ada di LVM', value: int(a.notYet), tone: 'bad' }]
@@ -2161,7 +2724,7 @@
       eyebrow: ('Kecamatan' + (k.kota ? ' · ' + S().kotaShort(k.kota) : '')).toUpperCase(),
       title: name,
       sub: [],
-      body: listFirst ? [listBlk, numsBlk] : [numsBlk, listBlk],
+      body: (listFirst ? [listBlk, numsBlk] : [numsBlk, listBlk]).concat(extra),
       prov: 'Sumber: ' + srcPoi() + (m.hasLvm ? ' · ' + srcLvm(m) : '') + '. Sasaran adalah perkiraan dari data publik.',
       kind: 'kec', key: 'kec:' + id, listFirst: listFirst, demo: !!(m.demo && m.hasLvm),
       anchor: tb ? { bbox: tb, label: rec && rec.label ? rec.label.slice(0, 2) : [(tb[0][0] + tb[1][0]) / 2, (tb[0][1] + tb[1][1]) / 2] } : null,
@@ -2262,7 +2825,7 @@
   function shows() {
     return ['Semua toko kelontong, restoran dan UMKM dalam 15 km, per kecamatan di peta',
       'Status Sudah diakuisisi atau Belum ada di LVM untuk setiap merchant.\nCoverage per kecamatan, setelah laporan bulanan Rev LVM diimpor.',
-      'Prioritas kunjungan: kecamatan dan daftar merchant yang belum ada di LVM, dapat diekspor ke CSV',
+      'Urutan kecamatan: kecamatan dan daftar merchant yang belum ada di LVM, dapat diekspor ke CSV',
       'Toko LVM yang perlu diaktifkan kembali, serta UREG dan USAK cabang terhadap target',
       'Merchant EDC Mandiri yang terpasang dan aktif per kecamatan, setelah sheet 2_edc diimpor'];
   }
@@ -2274,7 +2837,7 @@
     return 'Sumber: ' + srcPoi() + (m.hasLvm ? ' · ' + srcLvm(m) : ' · file LVM belum diimpor') + ' · hanya di komputer ini';
   }
   function overviewPrimary(m) {
-    return m && m.hasLvm ? { label: 'Lihat prioritas kunjungan', icon: 'target', run: function () { if (ctx) ctx.navigate(ID, { view: 'deep', action: 'merchants:leads' }); } }
+    return m && m.hasLvm ? { label: 'Lihat urutan kecamatan', icon: 'target', run: function () { if (ctx) ctx.navigate(ID, { view: 'deep', action: 'merchants:leads' }); } }
       : { label: 'Impor file LVM', icon: 'upload', run: goImport };
   }
   function spec() {
@@ -2306,7 +2869,7 @@
   }
   function onViewChange(v, changed) {
     if (!host) return;
-    if (!deep()) { if (changed.indexOf('kec') >= 0) { SIG.ov = ''; if (ctx) ctx.requestRender(['ext']); } return; }
+    if (!deep()) { if (changed.indexOf('kec') >= 0 || changed.indexOf('km') >= 0) { SIG.ov = ''; if (ctx) ctx.requestRender(['ext']); } return; }
     SIG.filters = '';
     safe(paintFilterBar);
     if (changed.indexOf('kec') >= 0) { SIG.heat = ''; SIG.prio = ''; }
@@ -2333,7 +2896,7 @@
   function commands(c) {
     c.registerCommands(function () {
       var cmds = [
-        { label: 'Merchant: prioritas kunjungan', run: function () { goTab(c, 'prio'); }, kw: 'prioritas kunjungan kecamatan leads target' },
+        { label: 'Merchant: urutan kecamatan', run: function () { goTab(c, 'prio'); }, kw: 'urutan kecamatan kunjungan leads target' },
         { label: 'Merchant: kandidat EDC', run: function () { goTab(c, 'edc'); }, kw: 'kandidat edc potensi naik ke edc rating google mesin kartu' },
         { label: 'Merchant: peta per kecamatan', run: function () { S().setView({ mode: 'territory' }); }, kw: 'kecamatan coverage peta' },
         { label: 'Merchant: titik merchant di peta', run: function () { if (!deep()) c.setView('deep'); S().setView({ mode: 'merchants' }); }, kw: 'titik status diakuisisi' },
@@ -2445,8 +3008,16 @@
       headerIcon();
       /* the shared travel toggles (MCD.distance) fire 'mcd:distance' */
       if (W.addEventListener) { W.addEventListener('mcd:distance', onDistance); cleanups.push(function () { W.removeEventListener('mcd:distance', onDistance); }); }
+      /* V8: the funding links at idle (never in this frame) and after each funding change; the omzet warm-up ≥ 2 s later */
+      var Fx = FU();
+      if (Fx && typeof Fx.on === 'function') {
+        var offF = safe(function () { return Fx.on(function (e) { if (e && (e.reason === 'clear' || e.reason === 'demo')) fundClear(); fundSchedule(0); }); });
+        if (typeof offF === 'function') cleanups.push(offF);
+      }
+      fundSchedule(600);
+      omStart();
       refresh(['*']);
-      if (deep()) { applyPendingScroll(); applyPendingFocus(); }
+      if (deep()) { applyPendingScroll(); applyPendingFocus(); if (UI.halfNext) { UI.halfNext = false; openListDrawer(); } }
     },
     update: function (d, keys) {
       if (!page) return;
@@ -2454,12 +3025,17 @@
       /* the trail ends when nothing is selected any more (Tutup, Esc); the rail split follows the workspace */
       if (keys && (keys.indexOf('selection') >= 0 || keys.indexOf('*') >= 0) && ctx && ctx.state && ctx.state.get && !ctx.state.get().selection) endTrail();
       wsCheck();
+      /* V8 §3.6: an LVM or funding import, Data contoh and a settled LVM match send 'data' / 'demo': the links and the
+         omzet bands are computed again at idle */
+      if (keys && (keys.indexOf('data') >= 0 || keys.indexOf('demo') >= 0)) { SIG.idle = ''; fundSchedule(); omStart(); }
+      if (keys && (keys.indexOf('privacy.veil') >= 0 || keys.indexOf('privacy.reveal') >= 0)) { SIG.idle = ''; SIG.saldo = ''; }
       page.update(d, keys);
       /* Saldo merchant follows an import, a vault load and "Samarkan nama" */
       if (UI.tab === 'saldo' && R.saldo) safe(paintSaldo);
     },
     unmount: function () {
       gvClose(true);                            // Google results never outlive the list view
+      fundCancel(); omCancel(); printGuard(false);
       Object.keys(CH).forEach(function (k) { safe(function () { CH[k].destroy(); }); });
       (R.bn || []).forEach(function (x) { safe(function () { if (x.chart) x.chart.destroy(); }); });
       (R.edcCards || []).concat(R.storeCards || []).forEach(function (x) { safe(function () { x.destroy(); }); });
@@ -2491,7 +3067,35 @@
         scrollToPart(lk ? 'leads' : 'prio', 160);
         return true;
       }
+      /* V8 final fix: Cari "Merchant › Perkiraan omzet (filter)": Detail with the filter row open at the band chips */
+      if (a === 'merchants:omzet') {
+        UI.filterOpen = true;
+        if (!ctx) return true;
+        if (!deep()) { ctx.setView('deep'); return true; }
+        safe(applyFilterOpen);
+        if (R.filters) safe(function () { R.filters.scrollIntoView({ block: 'start' }); R.filters.focus({ preventScroll: true }); });
+        return true;
+      }
+      /* V8 §2.5 landing grammar: merchants:tab:<tab>[:half[:<sort>]] (Posisi cabang: 'edc' Kandidat EDC, 'prio' Urutan
+         kecamatan); an unknown tab opens the first one, an unknown part is ignored */
       if ((mm = /^merchants:tab:(prio|edc|kec|cat|status|saldo|info)$/.exec(a))) { if (ctx) goTab(ctx, mm[1]); return true; }
+      if ((mm = /^merchants:tab:([A-Za-z-]+)((?::[A-Za-z0-9_-]*)*)$/.exec(a))) {
+        var tabId = TABS.some(function (t) { return t[0] === mm[1]; }) ? mm[1] : 'prio';
+        var half = mm[2].split(':').indexOf('half') >= 0;
+        if (!ctx) return true;
+        if (!deep() && half) UI.halfNext = true;
+        goTab(ctx, tabId);
+        if (deep() && half) openListDrawer();
+        return true;
+      }
+      /* V8 D48: Sederhana "Lihat EDC tidak bertransaksi" → Detail › Status LVM & EDC, at the block */
+      if (a === 'merchants:idle') {
+        if (!ctx) return true;
+        if (!deep()) UI.halfNext = true;
+        goTab(ctx, 'status', 'idle');
+        if (deep()) openListDrawer();
+        return true;
+      }
       if ((mm = /^merchants:kec:(\d\d\.\d\d\.\d\d)$/.exec(a))) { showKecOnMap(mm[1]); return true; }
       if ((mm = /^merchants:poi:(\d+)$/.exec(a))) { openPoi(+mm[1]); return true; }
       /* Ringkasan "Sasaran LVM" / "Sasaran EDC" (item 35): the Kandidat EDC tab and the map filtered to that tier,
@@ -2570,6 +3174,9 @@
     summary: summary,
     cardFor: cardFor,
     kecList: function (kecId) { return kecId ? safe(function () { return kecModel(String(kecId), { listFirst: true }); }) : null; },
+    /* V8 test hooks (tests/places-v8.test.mjs): run the idle steps now; not a public API */
+    _v8: { fundCompute: function () { fundCompute(); }, omLanded: function () { omLanded(); }, fundReady: function () { return fundReady(); },
+      OMZET_WAIT_MS: OMZET_WAIT_MS, OM_SHORT: OM_SHORT, tab: function () { return UI.tab; } },
     /* test hooks of the list view without the map (tests/merchants-v3.test.mjs); not a public API */
     _gview: { open: gvOpen, close: gvClose, check: gvCheck, mapHidden: gvMapHidden, el: function () { return GV.el; }, results: function () { return GV.res; } }
   };

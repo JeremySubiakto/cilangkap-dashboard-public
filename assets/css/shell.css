@@ -64,7 +64,7 @@ body[data-view="overview"] .tb-deep { display: none; }
   transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), box-shadow var(--dur-hover) var(--ease-standard);
 }
 .vswitch__opt .icon { width: 18px; height: 18px; }
-.vswitch__opt:hover { color: var(--text-1); background: var(--surface-hover); }
+@media (hover: hover) { .vswitch__opt:hover { color: var(--text-1); background: var(--surface-hover); } }
 .vswitch__opt[aria-checked="true"] {
   background: var(--surface-solid); color: var(--text-1);
   box-shadow: inset 0 0 0 1px var(--metal-rule), 0 1px 0 var(--hairline-hi), var(--shadow-panel);
@@ -84,7 +84,7 @@ body[data-view="overview"] .tb-deep { display: none; }
   font: 500 14px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
   transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
 }
-.nav__btn:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .nav__btn:hover { background: var(--surface-hover); color: var(--text-1); } }
 .nav__icon { display: inline-grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 4px; background: var(--surface-raised); color: var(--text-2); }
 .nav__icon .icon { width: 18px; height: 18px; }
 .nav__text { display: grid; gap: 3px; text-align: left; }
@@ -130,7 +130,7 @@ body[data-view="overview"] #map-vignette { display: none; }
   transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
 }
 .mapctl__btn .icon { width: 16px; height: 16px; color: var(--text-2); }
-.mapctl__btn:hover { background: var(--glass-card-hover); border-color: var(--metal-rule); }
+@media (hover: hover) { .mapctl__btn:hover { background: var(--glass-card-hover); border-color: var(--metal-rule); } }
 .mapctl__btn--icon { width: 40px; padding: 0; }
 .mapctl__btn--icon .icon { color: var(--text-1); }
 .mapctl__btn[aria-pressed="true"] { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); }
@@ -179,14 +179,15 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
 }
 /* on a card the glass ring disappears (white on white in Terang): a visible ring shows it is a button */
 .exhibit .tipbtn { border-color: var(--rule-strong); }
-.tipbtn:hover, .tipbtn[aria-expanded="true"] { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); }
+.tipbtn[aria-expanded="true"] { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); }
+@media (hover: hover) { .tipbtn:hover { border-color: var(--metal-rule); background: var(--gold-a10); color: var(--gold-soft); } }
 .pg-lede { margin-top: 8px; font: 400 15px/22px var(--font-sans); color: var(--text-2); max-width: 64ch; }
 .pg-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .pg-tab {
   height: 40px; padding: 0 14px; border-radius: var(--r-ctl);
   border: 1px solid var(--rule-strong); font: 600 14px/1 var(--font-sans); color: var(--text-2);
 }
-.pg-tab:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .pg-tab:hover { background: var(--surface-hover); color: var(--text-1); } }
 .pg-tab[aria-selected="true"] { background: var(--gold-a10); border-color: var(--metal-rule); color: var(--gold-soft); }
 
 .pg-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
@@ -204,7 +205,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
 .pg-card__explain { font: 400 13px/18px var(--font-sans); color: var(--text-2); }
 .pg-card__src { font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
 .pg-card--link { cursor: pointer; transition: border-color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard); }
-.pg-card--link:hover { border-color: var(--metal-rule); background: var(--glass-card-hover); }
+@media (hover: hover) { .pg-card--link:hover { border-color: var(--metal-rule); background: var(--glass-card-hover); } }
 .pg-card__go { justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font: 600 12px/1 var(--font-sans); color: var(--gold-soft); }
 
 .pg-foot { flex: none; display: grid; gap: 10px; padding: 14px 22px 16px; border-top: 1px solid var(--rule); background: var(--glass-card-flat); }
@@ -270,7 +271,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; width: 100%; padding: 10px 12px; text-align: left;
   border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); color: var(--text-1);
 }
-.dd-list__row:hover { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+@media (hover: hover) { .dd-list__row:hover { background: var(--glass-card-hover); border-color: var(--rule-strong); } }
 .dd-list__name { font: 600 14px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dd-list__meta { grid-column: 1; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-3); }
 .dd-list__score { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 500 12px/1 var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text-2); }
@@ -323,6 +324,10 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   body.is-sheet-away .guide { transform: translateY(calc(100% - 64px)); }
   body[data-posture="guide"] .map-toggle { display: inline-flex; bottom: auto; top: calc(var(--stage-t) + 8px); }
   .mapctl { bottom: auto; top: var(--stage-t); }
+}
+/* V8 final fix: tablets only. On phones (< 600 px) the rail flows under the half-screen map (layout.css 'top: auto');
+   this rule used to win there by load order and pushed every Detail rail 112 px down (M5). */
+@media (min-width: 600px) and (max-width: 1023px) {
   .rail--l { top: var(--stage-t); }
 }
 @media (max-width: 719px) {
@@ -393,7 +398,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   border: 1px solid var(--demo-ink-rule); border-radius: var(--r-ctl); background: transparent;
   font: 600 12.5px/1 var(--font-sans); color: var(--demo-ink);
 }
-.demo-banner__off:hover { background: var(--demo-ink-a10); }
+@media (hover: hover) { .demo-banner__off:hover { background: var(--demo-ink-a10); } }
 .demo-banner__off:focus-visible { outline: 2px solid var(--demo-ink); outline-offset: 1px; }
 
 .demo-switch {
@@ -403,7 +408,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   font: 600 13px/1 var(--font-sans); color: var(--text-2); white-space: nowrap; cursor: pointer;
   transition: border-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard), background-color var(--dur-hover) var(--ease-standard);
 }
-.demo-switch:hover { color: var(--text-1); border-color: var(--rule-strong); }
+@media (hover: hover) { .demo-switch:hover { color: var(--text-1); border-color: var(--rule-strong); } }
 .demo-switch__track {
   position: relative; flex: none; width: 30px; height: 18px; border-radius: 9px;
   background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--rule-strong);
@@ -479,13 +484,13 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
 
 .brand-band .vswitch { background: var(--band-ctl); border-color: var(--band-rule); box-shadow: none; }
 .brand-band .vswitch__opt { color: var(--band-ink-2); }
-.brand-band .vswitch__opt:hover { color: var(--band-ink); background: var(--band-ctl-hover); }
+@media (hover: hover) { .brand-band .vswitch__opt:hover { color: var(--band-ink); background: var(--band-ctl-hover); } }
 .brand-band .vswitch__opt[aria-checked="true"] { background: var(--band-on); color: var(--band-on-ink); box-shadow: var(--band-shadow); }
 .brand-band .vswitch__opt[aria-checked="true"] .icon { color: var(--band-on-ink); }
 .brand-band .btn--secondary { background: var(--band-ctl); border-color: var(--band-rule); color: var(--band-ink); }
-.brand-band .btn--secondary:hover:not(:disabled) { background: var(--band-ctl-hover); }
+@media (hover: hover) { .brand-band .btn--secondary:hover:not(:disabled) { background: var(--band-ctl-hover); } }
 .brand-band .demo-switch { background: var(--band-ctl); border-color: var(--band-rule); color: var(--band-ink-2); }
-.brand-band .demo-switch:hover { color: var(--band-ink); border-color: var(--band-ink-3); }
+@media (hover: hover) { .brand-band .demo-switch:hover { color: var(--band-ink); border-color: var(--band-ink-3); } }
 .brand-band .demo-switch__track { background: var(--band-ctl-hover); box-shadow: inset 0 0 0 1px var(--band-rule); }
 .brand-band .demo-switch__knob { background: var(--band-ink); }
 .brand-band .demo-switch[aria-checked="true"] { background: var(--demo-bg); border-color: var(--demo-bg); color: var(--demo-ink); }
@@ -507,7 +512,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   background: var(--glass-card); border-color: var(--glass-border-card); color: var(--text-1);
   box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
 }
-.nav__btn:not([aria-current="page"]):hover { background: var(--glass-card-flat); }
+@media (hover: hover) { .nav__btn:not([aria-current="page"]):hover { background: var(--glass-card-flat); } }
 .nav__btn[aria-current="page"]::after {
   content: ""; position: absolute; left: 6px; right: 6px; bottom: -6px; height: 3px; border-radius: 2px;
   background: var(--grad-accent);
@@ -572,7 +577,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
 .errtoast__icon .icon { width: 16px; height: 16px; }
 .errtoast__t { flex: 1 1 auto; margin: 0; font: 500 13.5px/19px var(--font-sans); }
 .errtoast__close { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--r-ctl); color: var(--text-2); }
-.errtoast__close:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .errtoast__close:hover { background: var(--surface-hover); color: var(--text-1); } }
 @media (prefers-reduced-motion: reduce) { .errtoast { transition: none; } }
 
 
@@ -627,7 +632,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
 
 /* Help tip, Overview tabs and the demo switch inside glass */
 .pg-tab { border-color: var(--glass-border-card); background: var(--glass-card-flat); border-radius: 10px; }
-.pg-tab:hover { background: var(--glass-card-hover); }
+@media (hover: hover) { .pg-tab:hover { background: var(--glass-card-hover); } }
 .demo-switch { border-radius: 10px; }
 
 /* Phones (< 600 px): the page scrolls over the fixed map hero. The flowing panels drop the blur
@@ -667,7 +672,7 @@ body.is-view-switching #map { opacity: .6; transition-duration: var(--dur-fast);
   border-radius: 999px; cursor: pointer;
   transition: background-color var(--dur-hover) var(--ease-standard);
 }
-.legend__toggle:hover { background: var(--glass-card-hover); }
+@media (hover: hover) { .legend__toggle:hover { background: var(--glass-card-hover); } }
 .legend__toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: -3px; box-shadow: none; }
 .legend__icon { width: 16px; height: 16px; color: var(--text-2); }
 .legend__title { font: 600 13px/1 var(--font-sans); color: var(--text-1); }
@@ -704,7 +709,8 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 @media (max-width: 599px) {
   .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
     position: fixed; left: 8px; top: auto; right: auto;
-    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px);
+    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px);
+    bottom: calc(100dvh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px);   /* V8 M9: the current viewport */
     z-index: var(--z-rails);                       /* under the panels that scroll over the map hero */
     max-width: calc(100vw - 16px);
     max-height: calc(var(--map-h-xs) - 72px);      /* stays below the map controls at the top of the map */
@@ -738,7 +744,7 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
   background: var(--band-ctl); color: var(--band-ink); font: 500 14px/1 var(--font-sans); white-space: nowrap;
   transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
 }
-.tb-search:hover, .tb-ctl:hover { background: var(--band-ctl-hover); }
+@media (hover: hover) { .tb-search:hover, .tb-ctl:hover { background: var(--band-ctl-hover); } }
 .tb-search { justify-content: flex-start; width: clamp(240px, 22vw, 340px); padding: 0 8px 0 12px; color: var(--band-ink-2); font-weight: 400; }
 .tb-search .icon, .tb-ctl .icon, .tb-unsaved .icon { width: 16px; height: 16px; flex: none; }
 .tb-search__t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
@@ -750,7 +756,7 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 .tb-menu { display: none; }
 .tb-unsaved { background: var(--status-mid); border-color: transparent; color: var(--status-ink-mid); font-weight: 600; }
 .tb-unsaved[hidden] { display: none; }
-.tb-unsaved:hover { filter: brightness(1.06); }
+@media (hover: hover) { .tb-unsaved:hover { filter: brightness(1.06); } }
 .brand-band .demo-switch { height: 40px; border-radius: 10px; font-size: 14px; }
 .brand-band .badge--reveal { height: 32px; font: 600 12px/1 var(--font-sans); }
 .brand-band .badge--reveal .badge__more { display: none; }
@@ -818,6 +824,13 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
 .tb-status.is-demo { color: var(--status-mid-text); border-color: var(--demo-tag-rule); }
 @media (max-width: 1279px) { .navrow__end { display: flex; } .tb-status { display: inline-flex; } }
 @media (max-width: 1023px) { .navrow__end { display: none; } }
+/* V8 integration (V8_SPEC §2.2, X2): with eight sections the row has no room for the data status words below 1366 px
+   (1024 px: 1.083 px of content; 1280 px with a bank file: 1.317 px). The pill keeps its dot and its title; the words
+   stay in the accessibility tree. */
+@media (min-width: 1024px) and (max-width: 1365px) {
+  .tb-status { width: 32px; padding: 0; gap: 0; justify-content: center; }
+  .tb-status__t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+}
 
 /* Demo banner: one 32 px line */
 .demo-banner { gap: 8px; }
@@ -847,7 +860,8 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
   border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); box-shadow: var(--glass-hl-card);
   font: 600 20px/1 var(--font-sans); color: var(--text-1);
 }
-.pg-more:hover, .pg-more[aria-expanded="true"] { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+.pg-more[aria-expanded="true"] { background: var(--glass-card-hover); border-color: var(--rule-strong); }
+@media (hover: hover) { .pg-more:hover { background: var(--glass-card-hover); border-color: var(--rule-strong); } }
 .pg-lede { font: 400 14px/20px var(--font-sans); }
 /* Sederhana guide: breadcrumb left, Sederhana | Detail and ⋯ right on one 40 px line, then the title */
 .pg-head--guide .pg-crumbrow { min-height: 40px; margin-bottom: 4px; }
@@ -862,7 +876,7 @@ body[data-view="deep"] .legend { bottom: calc(var(--free-b) + var(--credits-h, 2
   position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
   border-radius: 8px 8px 0 0; font: 500 14px/1 var(--font-sans); color: var(--text-2); white-space: nowrap;
 }
-.pg-tabs__tab:hover { color: var(--text-1); background: var(--surface-hover); }
+@media (hover: hover) { .pg-tabs__tab:hover { color: var(--text-1); background: var(--surface-hover); } }
 .pg-tabs__tab[aria-selected="true"] { color: var(--text-1); font-weight: 600; }
 .pg-tabs__tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 2px; background: var(--grad-accent); }
 .pg-tabs__tab:focus-visible { outline: 2px solid var(--glass-focus); outline-offset: -2px; }
@@ -1001,9 +1015,9 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--glass-solid); border-top: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-sm);
   }
-  /* v6: one column per section shown (teammates' 0ef909e, 22 Oct 2026: KPR hidden, so five: 78 px per tab at 390, 72 at
-     360; six were 65 and 60 px); labels stay 12 px and never overflow */
-  .tabbar__list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
+  /* V8 D43 (docs/V8_SPEC.md §2.3): six fixed slots, the first five shown sections of PHONE_ORDER and "Lainnya" (60 px
+     per slot at 360, 65 at 390; replaces the per-section columns of 0ef909e); labels stay 12 px and never overflow */
+  .tabbar__list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); height: var(--tabbar-h); margin: 0; padding: 0; list-style: none; }
   .tabbar__btn {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     width: 100%; height: var(--tabbar-h); padding: 0 2px; font: 500 12px/14px var(--font-sans); color: var(--text-2);
@@ -1026,7 +1040,7 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
   .pg-title { font-size: 24px; line-height: 30px; }
   .pg-head__tools:has(.pg-vswitch) { width: 100%; margin-left: 0; justify-content: space-between; }
   .pg-vswitch { flex: 1 1 auto; }
-  .pg-vswitch .vswitch__opt { flex: 1 1 0; height: 40px; }
+  .pg-vswitch .vswitch__opt { flex: 1 1 0; height: 44px; }   /* V8 M7: 44 px on phones */
   .pg-more { width: 44px; height: 44px; }
   /* pinned to the map hero like the legend: the furniture host flows here (position: static), so an absolute column
      would sit below the hero, behind the panel (found in the v4 QA at 390 px) */
@@ -1045,9 +1059,10 @@ body[data-layout="page"] #map .maplibregl-control-container, body[data-layout="p
   .toast.is-on { transform: translate(0, 0); }
   .demo-banner__t { white-space: normal; overflow: visible; font-size: 12px; line-height: 16px; }
   .popover.menu .popover__item { min-height: 44px; }
-  .errtoast { bottom: calc(var(--tabbar-h) + 16px); }
+  .errtoast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px); }   /* V8 M8: above the home indicator too */
   .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
-    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px);
+    bottom: calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px);
+    bottom: calc(100dvh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px);
   }
 }
 
@@ -1080,7 +1095,7 @@ body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) 
 .nav.has-ink .nav__btn[aria-current="page"]::after { opacity: 0; }
 /* phones: the tab bar's marker moves one column per step (its own width = one column) */
 .tabbar__list { position: relative; }
-/* width: one column of six here; app.js sets it to 100% / (sections shown) inline (0ef909e) */
+/* width: one slot of six (V8 D43; app.js sets the same inline) */
 .tabbar__ink { position: absolute; left: 0; top: 0; width: calc(100% / 6); height: 3px; list-style: none; pointer-events: none; opacity: 0; transition: transform var(--dur-base) var(--ease-out); }
 .tabbar__ink::before { content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 3px; border-radius: 0 0 2px 2px; background: var(--grad-accent); }
 .tabbar__list.has-ink .tabbar__ink { opacity: 1; }
@@ -1120,10 +1135,12 @@ body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) 
     top: calc(var(--bars-h) + 8px); left: 8px; right: 8px; bottom: 0; width: auto;
     border-bottom: 0; border-radius: var(--r-glass) var(--r-glass) 0 0;
     transform: translateY(calc(var(--sheet-y, 45vh) + 32px));
+    transform: translateY(calc(var(--sheet-y, 45svh) + 32px));
   }
-  .drawer.is-open { transform: translateY(var(--sheet-y, 45vh)); }
-  .drawer.is-sheet.is-mini { transform: translateY(calc(var(--sheet-y-mini, 60vh) + 32px)); }
-  .drawer.is-sheet.is-mini.is-open { transform: translateY(var(--sheet-y-mini, 60vh)); }
+  /* V8 M9: the fallback offsets before app.js measures are in the small viewport (svh) */
+  .drawer.is-open { transform: translateY(var(--sheet-y, 45vh)); transform: translateY(var(--sheet-y, 45svh)); }
+  .drawer.is-sheet.is-mini { transform: translateY(calc(var(--sheet-y-mini, 60vh) + 32px)); transform: translateY(calc(var(--sheet-y-mini, 60svh) + 32px)); }
+  .drawer.is-sheet.is-mini.is-open { transform: translateY(var(--sheet-y-mini, 60vh)); transform: translateY(var(--sheet-y-mini, 60svh)); }
   .drawer.is-sheet.is-expanded { transform: translateY(32px); }
   .drawer.is-sheet.is-expanded.is-open { transform: none; }
   .drawer.is-sheet.is-dragging { transition: none; }
@@ -1151,12 +1168,282 @@ body[data-layout="page"] #map { opacity: 0; transition: opacity var(--dur-fast) 
 
 /* ── 14 · Phones: the Keterangan pill keeps above the bottom sheet (item 43) ──────────────────────────────────────
  * app.js writes --sheet-cover (the px of the screen bottom the details sheet covers: its peek or mini height, 0 when
- * closed). The pill stays where it was unless the sheet would cover it; then it sits 8 px above the sheet's edge. */
+ * closed). The pill stays where it was unless the sheet would cover it; then it sits 8 px above the sheet's edge.
+ * V8 M5 option B: the guide overlaps the hero by 24 px, so the pill sits 32 px above the hero's edge (8 above the guide). */
 @media (max-width: 599px) {
   .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend {
-    bottom: max(calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 8px), calc(var(--sheet-cover, 0px) + 8px));
+    bottom: max(calc(100vh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px), calc(var(--sheet-cover, 0px) + 8px));
+    bottom: max(calc(100dvh - var(--banner-h) - var(--topbar-h) - var(--map-h-xs) + 32px), calc(var(--sheet-cover, 0px) + 8px));
   }
 }
 @media (min-width: 600px) and (max-width: 767px) {
   .legend, body[data-view="deep"] .legend { bottom: max(calc(var(--free-b) + var(--credits-h, 20px) + 4px), calc(var(--sheet-cover, 0px) + 8px)); }
 }
+
+/* ── 15 · V8 (docs/V8_SPEC.md §2.2–§2.4, §4.9, D42, D43, D58; docs/MOBILE_UX_PLAN.md M1–M20, the SHELL part) ─────────
+ * Each phone rule lives in the sheet that owns its selector (D58): this block holds the shell's own (the band, the
+ * section row, the tab bar and Lainnya, the page crumb, the phone layer of the details sheet, the keyboard, safe
+ * areas, focus rings, the short-landscape layer); windows.css and components.css hold theirs.                    */
+
+/* Section row: a hairline between the market group (1–7) and the branch group (8–9); never a tab stop (D42) */
+.nav__sep { flex: none; align-self: center; width: 1px; height: 24px; margin: 0 12px; padding: 0; list-style: none; background: var(--rule-strong); pointer-events: none; }
+/* eight sections: the short labels below 1280 px (Ringkasan · Merchant · Sekolah · Kampus · Kesehatan · Prioritas ┊
+   Posisi · Data), the full names from 1280 px */
+@media (min-width: 600px) and (max-width: 1279px) {
+  .nav__long { display: none; }
+  .nav__short { display: inline; }
+  .nav__sep { margin: 0 8px; }
+}
+
+/* Top band (§2.4): Rencana kunjungan and Leads before Bantuan; at ≤ 1440 px 40 px icons, the plan with a count badge */
+.tb-plan, .tb-leads { position: relative; }
+.tb-plan[hidden], .tb-leads[hidden] { display: none; }
+.tb-count {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--btn-primary-bg); color: var(--btn-primary-ink); font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
+}
+.tb-count[hidden] { display: none; }
+/* the band never runs under the branch name (X2, measured at 1280–1920 px with Data contoh, "Data belum disimpan", the
+   plan count and Leads): the two buttons are 40 px icons below 1680 px (§2.4 says ≤ 1440; their words take 200 px, which
+   1441–1679 px do not have), their words stay in title and aria-label; with "Data belum disimpan" Terang | Gelap turns
+   into its icon at ≤ 1535 px and Bantuan too at ≤ 1365 px (both keep their aria-label and title) */
+@media (min-width: 1680px) { .tb-plan .tb-count { display: none; } }   /* the words already say "(3)" */
+@media (max-width: 1679px) {
+  .tb .tb-plan .tb-ctl__l, .tb .tb-leads .tb-ctl__l { display: none; }
+  .tb-plan, .tb-leads { width: 40px; min-width: 40px; padding: 0; }
+  .tb-plan .tb-count { position: absolute; top: -6px; right: -6px; box-shadow: 0 0 0 2px var(--band-bg, var(--canvas)); }
+}
+@media (max-width: 1535px) {
+  body.has-unsaved .tb .tb-theme .tb-ctl__l { display: none; }
+  body.has-unsaved .tb-theme { width: 40px; min-width: 40px; padding: 0; }
+}
+@media (max-width: 1365px) {
+  body.has-unsaved .tb .tb-help .tb-ctl__l { display: none; }
+  body.has-unsaved .tb-help { width: 40px; min-width: 40px; padding: 0; }
+}
+@media (max-width: 599px) {
+  .tb-leads { display: none !important; }                                   /* never on phones (D17) */
+  .tb-plan { display: none; }
+  body.has-plan-stops .tb-plan:not([hidden]) { display: inline-flex; width: 44px; min-width: 44px; height: 44px; }
+}
+
+/* Page crumb after MCD.nav.go: "‹ Kembali ke Posisi cabang" above the head (§2.5) */
+.pg-navcrumb { margin: 0 0 8px; }
+.pg-navcrumb[hidden] { display: none; }
+.pg-navcrumb__btn {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px 0 6px; border-radius: 8px;
+  border: 1px solid var(--rule-strong); background: transparent; color: var(--text-1); font: 600 13px/18px var(--font-sans);
+}
+.pg-navcrumb__btn .icon { width: 14px; height: 14px; }
+@media (hover: hover) { .pg-navcrumb__btn:hover { background: var(--surface-hover); } }
+
+/* Phone bar (§2.3, D43): six slots; the Lainnya slot's count dot while the plan holds stops; below 350 px only the
+   selected slot keeps its label (M14), the others keep their aria-label and title */
+.tabbar__more { position: relative; }
+.tabbar__dot { position: absolute; top: 8px; left: calc(50% + 7px); width: 8px; height: 8px; border-radius: 50%; background: var(--btn-primary-bg); box-shadow: 0 0 0 2px var(--glass-solid); }
+.tabbar__dot[hidden] { display: none; }
+@media (max-width: 349px) {
+  .tabbar__btn:not([aria-current="page"]) .tabbar__l { display: none; }
+}
+/* V8 final fix (critic, 24 Oct 2026): at 350–374 px (Galaxy A at 360) the selected "Ringkasan" and "Kesehatan" were cut
+   to "Ringkas…" / "Kesehat…" at weight 600 (57,5 px of text in a 56 px box). Below 375 px the selected label keeps
+   weight 500 (the bar's accent and the text colour still mark it) and each slot gives the label 1 px more per side. */
+@media (min-width: 350px) and (max-width: 374px) {
+  .tabbar__btn { padding: 0 1px; }
+  .tabbar__btn[aria-current="page"] { font-weight: 500; }
+  .tabbar__l { letter-spacing: -0.005em; }
+}
+
+/* Lainnya: the app sheet "Bagian lain" from the bottom, one 48 px row per place */
+.scrim--lainnya { z-index: var(--z-modal); }
+.lainnya {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-modal);
+  max-height: calc(100vh - var(--topbar-h) - 8px); max-height: calc(100dvh - var(--topbar-h) - 8px);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 4px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-radius: var(--r-glass) var(--r-glass) 0 0; background: var(--glass-solid); border-top: 1px solid var(--glass-border);
+  box-shadow: var(--glass-hl), var(--glass-shadow);
+  animation: mo-rise-in var(--dur-base) var(--ease-out) backwards;
+}
+.lainnya__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+.lainnya__title { margin: 0; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.lainnya__close { min-height: 44px; }
+.lainnya__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lainnya__row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px; text-align: left;
+  border: 1px solid var(--glass-border-card); border-radius: 10px; background: var(--glass-card-flat); color: var(--text-1);
+  font: 500 15px/20px var(--font-sans);
+}
+.lainnya__row[aria-current="page"] { border-color: var(--metal-rule); font-weight: 600; box-shadow: inset 3px 0 0 var(--btn-primary-bg); }
+.lainnya__i { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; color: var(--text-2); }
+.lainnya__i .icon { width: 18px; height: 18px; }
+.lainnya__t { flex: 1 1 auto; min-width: 0; }
+.lainnya__go { flex: none; width: 14px; height: 14px; color: var(--text-3); }
+@media (hover: hover) { .lainnya__row:hover { background: var(--glass-card-hover); } }
+@media (prefers-reduced-motion: reduce) { .lainnya { animation: none; } }
+
+/* M1: no pull to refresh on phones and tablets (a reload locks the dashboard and drops files not saved yet) */
+@media (max-width: 1023px), (pointer: coarse) {
+  html, body { overscroll-behavior-y: none; }
+}
+
+/* M3: 16 px fields on touch screens, so iOS never zooms on focus (no maximum-scale in the viewport meta) */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select, textarea, .input, .select, .palette__input, .pl-select { font-size: 16px !important; }
+  .pp-money--big .pp-money__in { font-size: 20px !important; }      /* keeps its larger size */
+  .input, .select { min-height: 44px; }
+}
+
+/* M5 option B (§0.3): the guide overlaps the map hero by 24 px with a grip, so the swipe that scrolls the page starts
+   higher; one finger on the map moves the map (no cooperativeGestures) */
+@media (max-width: 599px) {
+  body:not([data-layout="page"]) #section-root { margin-top: calc(var(--banner-h) + var(--topbar-h) + var(--map-h-xs) - 24px); }
+  body:not([data-layout="page"]) #section-root > .section-host:not(.section-host--furniture) > :first-child { border-radius: 16px 16px var(--r-panel) var(--r-panel); }
+  body:not([data-layout="page"]) #section-root > .section-host:not(.section-host--furniture) > :first-child::before {
+    content: ""; position: relative; display: block; left: auto; right: auto; top: auto; z-index: auto;
+    width: 40px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--rule-strong); opacity: 1;
+  }
+}
+
+/* M6: while the keyboard is up (app.js body.is-typing) the bottom bars step aside */
+@media (max-width: 767px) {
+  body.is-typing #tabbar, body.is-typing .pg-foot:has(.pg-actions:not([hidden])) { display: none; }
+}
+
+/* M7: 44 px touch targets in the shell on phones */
+@media (max-width: 767px) {
+  .drawer__grab { height: 36px; }
+}
+@media (max-width: 599px) {
+  .tb-search, .tb-menu, .legend__toggle { height: 44px; }
+  .mapctl__btn--icon { min-width: 44px; }
+}
+
+/* M8: safe areas (notch, Dynamic Island, home indicator, a Home Screen web app's status bar) */
+@media (min-width: 600px) {
+  .tb, .nav, .demo-banner { padding-left: max(var(--inset), env(safe-area-inset-left, 0px)); padding-right: max(var(--inset), env(safe-area-inset-right, 0px)); }
+}
+#tabbar { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+@media (max-width: 599px) {
+  :root { --topbar-h: calc(var(--topbar-h-xs) + env(safe-area-inset-top, 0px)); }
+  #topbar { padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
+  .tb { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+  .mapctl, .mapctl.is-compact { right: calc(8px + env(safe-area-inset-right, 0px)); }
+  .legend, body[data-view="deep"] .legend, body.is-map-narrow .legend { left: calc(8px + env(safe-area-inset-left, 0px)); }
+  .toast { left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); }
+}
+@media (min-width: 600px) and (max-width: 767px) {
+  .drawer.is-sheet .drawer__body { padding-bottom: calc(var(--s-4) + env(safe-area-inset-bottom, 0px)); }
+  .drawer.is-sheet:not(.is-expanded) .drawer__body { padding-bottom: calc(var(--s-4) + var(--sheet-pad, 0px) + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* M9: Bantuan on a phone is a sheet from the bottom whose end (and Tutup) stays in the visible viewport */
+@media (max-width: 599px) {
+  .modal--help {
+    top: auto; bottom: 0; left: 0; width: 100%; transform: none;
+    max-height: calc(100vh - var(--topbar-h) - 8px); max-height: calc(100dvh - var(--topbar-h) - 8px);
+    border-radius: var(--r-glass) var(--r-glass) 0 0; padding-bottom: calc(var(--s-6) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* M10 (items 1, 2, 6): no blur nobody sees on phones; the light glass all the time; no fixed background */
+@media (max-width: 767px) and (pointer: coarse) {
+  #tabbar { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root, :root[data-theme="day"] {
+    --glass-blur: var(--glass-blur-lite); --glass-bg: var(--glass-bg-lite); --glass-bg-bar: var(--glass-bg-lite); --glass-bg-chip: var(--glass-bg-lite);
+  }
+  html, body { background-attachment: scroll; }
+}
+
+/* M11: no grey or blue flash on a tap, no double-tap zoom on controls, a pressed state on touch (app.js adds the
+   touchstart listener iOS needs for :active); every :hover above sits inside @media (hover: hover) */
+html { -webkit-tap-highlight-color: transparent; }
+button, a[href], [role="button"], [role="tab"], .chip, .seg__opt, .tabbar__btn, .mapctl__btn, .pg-card--link { touch-action: manipulation; }
+@media (hover: none) {
+  .btn:active, .chip:active, .seg__opt:active, .vswitch__opt:active, .tabbar__btn:active, .mapctl__btn:active,
+  .pg-card--link:active, .dd-list__row:active, .legend__toggle:active, .pg-tabs__tab:active, .lainnya__row:active,
+  .tb-ctl:active, .tb-search:active, .pg-navcrumb__btn:active { background: var(--surface-hover); }
+  .btn--primary:active { background: var(--btn-primary-hover); }
+}
+
+/* M14: controls that hold text grow with it on phones (page zoom, larger text) instead of clipping */
+@media (max-width: 599px) {
+  .btn, .chip { height: auto; }
+}
+
+/* M15: a fling inside a scroller never moves the page behind it */
+.drawer__body, .palette__list, .modal--help { overscroll-behavior: contain; }
+
+/* M18: a 2 px focus ring that is not cut off on touch screens with a keyboard */
+@media (pointer: coarse) {
+  :focus-visible { outline-width: 2px; outline-offset: 2px; }
+  .pg-tabs__list :focus-visible, .dp-jump :focus-visible, .tabbar__list :focus-visible { outline-offset: -3px; }
+}
+
+/* M20 (§0.3 default): on phones the details sheet ends above the tab bar, which stays visible and tappable; app.js
+   sheetLayout measures from there and adds the bar to the map's cover */
+@media (max-width: 599px) {
+  .drawer.is-sheet { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
+  /* the sheet slides down by --sheet-y below its own bottom edge: the bar (in #overlay-root, app.js) covers that part;
+     Cari, Bantuan, Lainnya and the dialogs (--z-modal) stay above the bar */
+  #tabbar { z-index: calc(var(--z-drawer) + 2); }
+}
+
+/* M13 (§0.3: built): a phone turned sideways. A 44 px band, no section row (the sections are in the band's ☰ menu),
+   the guide as a left column and the cards in that column (windows.js mode 'phone-land'), so at 844 × 390 at least
+   half the screen is free map. The column is min(300px, 36vw): the spec's min(380px, 46vw) left 45,9 % of 844 × 390
+   free (band, map controls and legend counted); 300 px leaves 51,7 % (measured with MCD.windows._measure). */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  :root { --topbar-h: 44px; --navrow-h: 0px; --readout-h: 0px; }
+  #navrow { display: none !important; }
+  .tb-menu { display: inline-flex; }
+  .tb-search, .tb-ctl, .tb-unsaved, .tb-menu { height: 40px; }
+  .brand-band .brand__logo { height: 20px; }
+  .guide {
+    top: calc(var(--banner-h) + var(--topbar-h)); bottom: 0; left: 0; right: auto; width: min(300px, 36vw);
+    max-height: none; border-radius: 0; transform: none;
+  }
+  body.is-sheet-away .guide { transform: none; }
+  .map-toggle { display: none !important; }
+  .mapctl, .mapctl.is-compact { top: calc(var(--banner-h) + var(--topbar-h) + 8px); right: calc(8px + env(safe-area-inset-right, 0px)); }
+  .drawer {
+    top: calc(var(--banner-h) + var(--topbar-h)); left: 0; right: auto; bottom: 0; width: min(300px, 36vw);
+    border-radius: 0; border-left: 0; transform: translateX(-32px);
+    padding-left: env(safe-area-inset-left, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .drawer.is-open { transform: none; }
+  .legend, body[data-view="deep"] .legend { left: calc(min(300px, 36vw) + 8px); }
+}
+/* V8 integration (M13, T10 at 844 × 390): Merchant's Detail page sheet (posture 'sheet') spanned the whole width
+   (17,3 % free map); it takes the guide's left column (Sekolah's rail: section-schools.css). */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body[data-posture="sheet"] .section-host > .sheet {
+    top: calc(var(--banner-h) + var(--topbar-h)); bottom: 0; left: 0; right: auto; width: min(300px, 36vw); border-radius: 0;
+  }
+}
+
+/* V8 integration (MOBILE_UX_PLAN M7, V8_SPEC X13): the browser check at 360–412 px found controls under 44 px:
+   Perbesar and Perkecil in the compact map column (the pair's flex: 1 1 0 shrank them to 18 px tall), the "?" beside
+   a section title (40 px) and the page tabs of Data & Privasi (40 px). */
+@media (max-width: 599px) {
+  .mapctl__pair .mapctl__btn { flex: none; }
+  .tipbtn { width: 44px; height: 44px; }
+  .pg-tabs__tab { height: 44px; }
+}
+
+/* V8 final fix (COMPLETENESS CRITIC, 24 Oct 2026; MOBILE_UX_PLAN M7): a whole-page scan at 360 px (not only the first
+   screen) still found section rules that win over the 44 px phone rule of layout.css by load order or specificity:
+   Merchant's sort segments and chips (36 px), Sekolah's switches (28 px), "Hapus filter" and "Ekspor" (36 px), the
+   "?" of Ringkasan (32 × 32), the 40 px segments of Ringkasan, Kampus and Calon Prioritas, the text-link buttons of the
+   new sections (16 px) and the guide rows of Data & Privasi. Under 600 px the id lifts this one rule above them. */
+@media (max-width: 599px) {
+  #section-root :is(.btn, .chip, .seg__opt, .toggle, .select, .dp-guide__sum) { min-height: 44px; }
+  #section-root .tipbtn { width: 44px; height: 44px; }
+  #section-root :is(.sk-link, .cp-link, .hf-link, .wl-link) { display: inline-flex; align-items: center; min-height: 44px; }
+  /* list names: the button keeps its display (an inline-flex box lost the ellipsis and widened the rows) */
+  #section-root .mx-table .mx-link { min-height: 44px; }
+  .skip-link { min-height: 44px; }
+}
+

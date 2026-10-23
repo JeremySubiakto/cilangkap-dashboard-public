@@ -12,8 +12,14 @@
  * This module owns the map side and the list maths; section-merchants.js owns the panels.
  *
  *   View state (memory only; mcd.sme.view.v1 keeps ONLY the map mode, plan B-03 / D14):
- *     view() → {mode: 'territory'|'merchants', cats: [], status: 'all'|'notYet'|'acquired'|'inactive',
- *               kec: Kemendagri id | null, km: 1|3|5|10|15|null, tier: 'all'|'edc'|'lvm'|'naik-edc'|'nasional' ("Sasaran", items 35, 42)}
+ *     view() → {mode: 'territory'|'merchants', cats: [], status: 'all'|'notYet'|'acquired'|'inactive'|'ours',
+ *               kec: Kemendagri id | null, km: 1|3|5|10|15|null, tier: 'all'|'edc'|'lvm'|'naik-edc'|'nasional' ("Sasaran", items 35, 42),
+ *               om: null | ['b1'…'b5', 'none'] (V8 "Perkiraan omzet": the bands still shown), ours: the ring layer flag}
+ *   V8 (docs/V8_SPEC.md §4.1.2–§4.1.3; D44, D47, D49): setOurs(MCD.funding.points() | null, {noPoint}) hands over the
+ *     places of our funding merchants (no name, MID or amount): the ring layer 'merchants-ours' "Merchant KCP Cilangkap"
+ *     (under the dot, from zoom 13,5), the Status filter 'ours', and the acquisition lists without them (leads(),
+ *     leadCounts(), edcCandidates / edcTierCounts with {notOurs: true}; leads().oursOut counts them). The omzet band
+ *     filter applies to the dots, the lists and the counts once MCD.omzet is warm (omWarm(); omCounts() per band).
  *     setView(patch, {temporary}?) · onView(fn) → off() · resetFilters()
  *     temporary mode (v5 fixer): setView({mode}, {temporary: true}) shows a mode for one task (the kecamatan card's
  *       points) without storing it; endTempMode() goes back to the stored mode, keepMode() stores the shown one,
@@ -98,6 +104,12 @@
     { id: 'all', label: 'Semua' }, { id: 'edc', label: 'Sasaran EDC' }, { id: 'lvm', label: 'Sasaran LVM' }, { id: 'naik-edc', label: 'Naik ke EDC' },
     { id: 'nasional', label: 'Jaringan nasional' }
   ];
+  /* V8 (docs/V8_SPEC.md §4.1.2, D44): the branch's own funding merchants. One constant names the layer, the chip and the
+     Status filter: "Merchant KCP Cilangkap" (COPY_DECK rule 12 forbids "kita"; the user may prefer "Merchant cabang kita") */
+  var OURS_LABEL = 'Merchant KCP Cilangkap';
+  var STATUS_OURS = { id: 'ours', label: OURS_LABEL };
+  /* V8 (§4.1.3, D49): the omzet band filter "Perkiraan omzet"; 'none' = Belum ada perkiraan. Memory only, like every filter. */
+  var OM_IDS = ['b1', 'b2', 'b3', 'b4', 'b5', 'none'];
   var MODES = [
     { id: 'territory', label: 'Per kecamatan', title: 'Batas kecamatan dan jumlah merchant per kecamatan' },
     { id: 'merchants', label: 'Titik merchant', title: 'Satu titik per merchant. Titik dikelompokkan saat peta diperkecil.' }
@@ -282,7 +294,8 @@
 
   /* Filters (cats, status, kec, km) live in memory only, so a new session starts clean (plan B-03, D14).
      Only the map mode is remembered per browser. Locking reloads the page, which clears the memory. */
-  var V = { mode: 'territory', cats: [], status: 'all', kec: null, km: 5, tier: 'all', rev: 0 };
+  /* V8: om = null (every band) | the band ids still shown; ours = the layer flag "Tampilkan merchant KCP Cilangkap" */
+  var V = { mode: 'territory', cats: [], status: 'all', kec: null, km: 5, tier: 'all', om: null, ours: true, rev: 0 };
   var listeners = [];
   /* The "Cakupan 5 km | 15 km" switch (MCD.inst.scope 'merchants', 21 Oct 2026): 5 km is V.km = 5, 15 km is V.km = null
      (the whole file). It moves the map and the list only; the cards and charts keep the whole 15 km. The other
@@ -301,10 +314,15 @@
     if (!o || typeof o !== 'object') return v;
     if (o.mode === 'territory' || o.mode === 'merchants') v.mode = o.mode;
     if (Array.isArray(o.cats)) { var c = o.cats.filter(function (x, k, a) { return CATS.indexOf(x) >= 0 && a.indexOf(x) === k; }); v.cats = c.length === CATS.length ? [] : c; }
-    if (STATUS_FILTER.some(function (s) { return s.id === o.status; })) v.status = o.status;
+    if (STATUS_FILTER.some(function (s) { return s.id === o.status; }) || o.status === STATUS_OURS.id) v.status = o.status;
     if (TIER_FILTER.some(function (s) { return s.id === o.tier; })) v.tier = o.tier;
     if (has(o, 'kec')) v.kec = typeof o.kec === 'string' && /^\d\d\.\d\d\.\d\d$/.test(o.kec) ? o.kec : null;
     if (has(o, 'km')) v.km = DIST.indexOf(+o.km) >= 0 ? +o.km : null;
+    if (has(o, 'om')) {
+      var om = Array.isArray(o.om) ? OM_IDS.filter(function (id) { return o.om.indexOf(id) >= 0; }) : null;
+      v.om = om && om.length < OM_IDS.length ? om : null;
+    }
+    if (has(o, 'ours')) v.ours = o.ours !== false;
     return v;
   }
   /* read once, on first use after unlock (nothing touches storage at load time); an older stored value that
@@ -331,7 +349,7 @@
       if (keys.length !== 1 || keys[0] !== 'mode') st.set(VIEW_KEY, { mode: V.mode });
     }
   }
-  function view() { loadView(); return { mode: V.mode, cats: V.cats.slice(), status: V.status, kec: V.kec, km: V.km, tier: V.tier, rev: V.rev }; }
+  function view() { loadView(); return { mode: V.mode, cats: V.cats.slice(), status: V.status, kec: V.kec, km: V.km, tier: V.tier, om: V.om ? V.om.slice() : null, ours: V.ours, rev: V.rev }; }
   /* v5 fixer: the mode to go back to while a temporary mode shows (the kecamatan card's points, item 43), else null.
      Memory only: the stored mode never holds a temporary one, so a section switch, a reload or a lock cannot leave
      the map in the point view that only one task asked for. */
@@ -340,8 +358,9 @@
   function setView(patch, opts) {
     loadView();
     var next = cleanView(patch, V), changed = [], temp = !!(opts && opts.temporary);
-    ['mode', 'status', 'kec', 'km', 'tier'].forEach(function (k) { if (next[k] !== V[k]) changed.push(k); });
+    ['mode', 'status', 'kec', 'km', 'tier', 'ours'].forEach(function (k) { if (next[k] !== V[k]) changed.push(k); });
     if (next.cats.join() !== V.cats.join()) changed.push('cats');
+    if ((next.om ? next.om.join() : '') !== (V.om ? V.om.join() : '')) changed.push('om');
     if (!changed.length) return false;
     next.rev = V.rev + 1;
     var modeChanged = next.mode !== V.mode, before = V.mode;
@@ -373,9 +392,89 @@
     return true;
   }
   /** Clears the filters; the distance goes back to the switch (5 km, or the whole 15 km). */
-  function resetFilters() { loadView(); return setView({ cats: [], status: 'all', kec: null, km: scopeView(), tier: 'all' }); }
-  /** Number of active filters (type counts as one), for "Filter (n)". 5 km is the switch, not a filter. */
-  function filterCount() { loadView(); return (V.cats.length ? 1 : 0) + (V.kec ? 1 : 0) + (V.km && V.km !== 5 ? 1 : 0) + (V.status !== 'all' ? 1 : 0) + (V.tier !== 'all' ? 1 : 0); }
+  function resetFilters() { loadView(); return setView({ cats: [], status: 'all', kec: null, km: scopeView(), tier: 'all', om: null }); }
+  /** Number of active filters (type counts as one), for "Filter (n)". 5 km is the switch, not a filter; the omzet bands
+      count once (V8), the ring layer "Tampilkan merchant KCP Cilangkap" is a layer, not a filter. */
+  function filterCount() { loadView(); return (V.cats.length ? 1 : 0) + (V.kec ? 1 : 0) + (V.km && V.km !== 5 ? 1 : 0) + (V.status !== 'all' ? 1 : 0) + (V.tier !== 'all' ? 1 : 0) + (V.om ? 1 : 0); }
+
+  /* ================================================================ V8: our funding merchants and the omzet bands */
+
+  /* OURS: what section-merchants.js hands over at idle from MCD.funding.points() (bands, directions and counts only: no
+     name, MID or amount, D46). poi / lvm: the public listings and LVM stores that carry one of our merchants. */
+  var OURS = { ver: 0, pts: null, poi: null, lvm: null, n: 0, noPoint: 0 };
+  /**
+   * setOurs(points | null, {noPoint}) → boolean: the map ring "Merchant KCP Cilangkap", the Status filter 'ours' and the
+   * acquisition lists without our merchants (D47) read these. A first list after none turns the ring on ("on after an
+   * import"); null clears them and a Status filter 'ours' goes back to 'all'.
+   */
+  function setOurs(list, o) {
+    var had = !!OURS.pts;
+    if (!Array.isArray(list) || !list.length) {
+      if (!had && !OURS.noPoint) return false;
+      OURS = { ver: OURS.ver + 1, pts: null, poi: null, lvm: null, n: 0, noPoint: 0 };
+      LD.key = ''; LCN.key = ''; PT.key = ''; OMC.key = '';
+      if (V.status === STATUS_OURS.id) setView({ status: 'all' }); else requestMap();
+      return true;
+    }
+    var poi = {}, lvm = {}, pts = [];
+    list.forEach(function (p) {
+      if (!p || !isNum(p.lon) || !isNum(p.lat)) return;
+      if (p.src === 'poi' && isNum(p.ref)) poi[p.ref] = 1;
+      else if (p.src === 'lvm' && p.ref != null) lvm[String(p.ref)] = 1;
+      else return;
+      pts.push({ src: p.src, ref: p.src === 'poi' ? p.ref : String(p.ref), lon: p.lon, lat: p.lat, n: p.n | 0 });
+    });
+    OURS = { ver: OURS.ver + 1, pts: pts, poi: poi, lvm: lvm, n: pts.length, noPoint: o && isNum(o.noPoint) ? o.noPoint : 0 };
+    LD.key = ''; LCN.key = ''; PT.key = ''; OMC.key = '';
+    if (!had && !V.ours) setView({ ours: true }); else requestMap();
+    return true;
+  }
+  /** ours() → {n, noPoint, ver} | null: how many places carry one of our merchants (the chip, the legend count). */
+  function ours() { return OURS.pts ? { n: OURS.n, noPoint: OURS.noPoint, ver: OURS.ver } : null; }
+  /** isOurs(i) → listing i carries one of our merchants (D47: left out of the acquisition lists). */
+  function isOurs(i) { return !!(OURS.poi && OURS.poi[i]); }
+  function oursWant() { return V.status === STATUS_OURS.id && !!OURS.pts; }
+  function omApi() { var O = MCD.omzet; return O && typeof O.bandFor === 'function' && typeof O.isWarm === 'function' ? O : null; }
+  /** omWarm() → every listing has its band (MCD.omzet.warm() done): the band filter applies only then. */
+  function omWarm() { var O = omApi(); return !!(O && safe(function () { return O.isWarm(); }, false)); }
+  /** omTest() → null without a band filter (or before the warm-up), else a test of listing row i. */
+  function omTest() {
+    if (!V.om || !omWarm()) return null;
+    var O = omApi(), on = {};
+    V.om.forEach(function (id) { on[id] = 1; });
+    return function (i) { var b = O.bandFor(i); return !!on[b || 'none']; };
+  }
+  function omKey() { return V.om ? V.om.join(',') + (omWarm() ? '#w' : '#c') : ''; }
+  /** An LVM store off the public map has no estimate: it counts as "Belum ada perkiraan". */
+  function omNoneOn() { return !V.om || !omWarm() || V.om.indexOf('none') >= 0; }
+  var OMC = { key: '', val: null };
+  /**
+   * omCounts() → {b1..b5, none, all} | null: the public merchants per band with every other filter applied (Jarak,
+   * Kecamatan, Jenis usaha, Status, Sasaran), so each chip of "Perkiraan omzet" counts what it would show. null until
+   * MCD.omzet is warm.
+   */
+  function omCounts() {
+    var m = model(), O = omApi();
+    if (!m || !O || !omWarm()) return null;
+    var key = [m.ver, V.cats.join(), V.status, V.kec, V.km, V.tier, tierKey(m), V.status === STATUS_OURS.id ? OURS.ver : ''].join('|');
+    if (OMC.key === key && OMC.val) return OMC.val;
+    var R = m.R, X = R.X, ids = m.ids.kec, tt = tierTest(), want = V.status, ow = oursWant(), out = { all: 0 };
+    OM_IDS.forEach(function (id) { out[id] = 0; });
+    for (var i = 0; i < X.n; i++) {
+      if (!X.ok[i]) continue;
+      var c = code(R, i);
+      if (ow) { if (!OURS.poi[i]) continue; }
+      else if (!statusShows(want, c)) continue;
+      if (!catOn(LCATS[X.cat[i]])) continue;
+      if (V.kec && ids[X.kec[i]] !== V.kec) continue;
+      if (V.km && X.dist[i] > V.km) continue;
+      if (tt && !tt(i)) continue;
+      out[O.bandFor(i) || 'none']++;
+      out.all++;
+    }
+    OMC = { key: key, val: out };
+    return out;
+  }
   /** tierShows(i) → whether listing row i passes the "Sasaran" filter (one row; loops use tierTest()). */
   function tierShows(i) {
     if (V.tier === 'all') return true;
@@ -502,27 +601,30 @@
   var PT = { key: '', val: null };
   function catOn(c) { return !V.cats.length || V.cats.indexOf(c) >= 0; }
   function points(m) {
-    var key = [m.ver, V.cats.join(), V.status, V.kec, V.km, V.tier, tierKey(m)].join('|');
+    var key = [m.ver, V.cats.join(), V.status, V.kec, V.km, V.tier, tierKey(m), omKey(), V.status === STATUS_OURS.id ? 'o' + OURS.ver : ''].join('|');
     if (PT.key === key) return PT.val;
-    var R = m.R, X = R.X, ids = m.ids.kec, list = [], codes = [], tt = tierTest();
-    var want = V.status;
+    var R = m.R, X = R.X, ids = m.ids.kec, list = [], codes = [], tt = tierTest(), ot = omTest();
+    var want = V.status, ow = oursWant();
     for (var i = 0; i < X.n; i++) {
       if (!X.ok[i]) continue;
       var c = code(R, i);
       if (want === 'notYet' && c !== 2) continue;
       if (want === 'acquired' && c !== 3 && c !== 4) continue;
       if (want === 'inactive' && c !== 4) continue;
+      if (ow && !OURS.poi[i]) continue;            // V8: "Merchant KCP Cilangkap" only
       if (!catOn(LCATS[X.cat[i]])) continue;
       if (V.kec && ids[X.kec[i]] !== V.kec) continue;
       if (V.km && X.dist[i] > V.km) continue;
       if (tt && !tt(i)) continue;
+      if (ot && !ot(i)) continue;                 // V8: the omzet bands (after MCD.omzet.warm())
       list.push(i); codes.push(c);
     }
     var off = [];
-    if (m.hasLvm && want !== 'notYet' && V.tier === 'all') {
+    if (m.hasLvm && want !== 'notYet' && V.tier === 'all' && omNoneOn()) {
       (MCD.lvm.offMap() || EMPTY).forEach(function (o) {
         if (o.kind !== 'lvm') return;
         if (want === 'inactive' && o.active !== false) return;
+        if (ow && !OURS.lvm[String(o.id)]) return;
         if (!catOn(o.category)) return;
         if (V.kec && o.kecamatanId !== V.kec) return;
         if (V.km && kmFromCentre(o.lon, o.lat) > V.km) return;
@@ -541,10 +643,10 @@
       distance) apply; the status filter does not. */
   function leads() {
     var m = model();
-    if (!m) return { idx: [], score: [], n: 0 };
-    var key = [m.ver, V.cats.join(), V.kec, V.km, V.tier, tierKey(m)].join('|');
+    if (!m) return { idx: [], score: [], n: 0, oursOut: 0 };
+    var key = [m.ver, V.cats.join(), V.kec, V.km, V.tier, tierKey(m), omKey(), OURS.ver].join('|');
     if (LD.key === key) return LD.val;
-    var R = m.R, X = R.X, ids = m.ids.kec, want = m.hasLvm ? 2 : 1, rows = [], tt = tierTest();
+    var R = m.R, X = R.X, ids = m.ids.kec, want = m.hasLvm ? 2 : 1, rows = [], tt = tierTest(), ot = omTest(), op = OURS.poi, out = 0;
     for (var i = 0; i < X.n; i++) {
       if (!X.ok[i] || R.pois.status[i] !== want) continue;
       var c = LCATS[X.cat[i]];
@@ -552,10 +654,12 @@
       if (V.kec && ids[X.kec[i]] !== V.kec) continue;
       if (V.km && X.dist[i] > V.km) continue;
       if (tt && !tt(i)) continue;
+      if (ot && !ot(i)) continue;
+      if (op && op[i]) { out++; continue; }        // V8 D47: never send staff to acquire one of our own merchants
       rows.push({ i: i, s: priority(c, X.dist[i]), d: X.dist[i] });
     }
     rows.sort(function (a, b) { return b.s - a.s || a.d - b.d || a.i - b.i; });
-    LD = { key: key, val: { idx: rows.map(function (r) { return r.i; }), score: rows.map(function (r) { return r.s; }), n: rows.length, potentialOnly: !m.hasLvm } };
+    LD = { key: key, val: { idx: rows.map(function (r) { return r.i; }), score: rows.map(function (r) { return r.s; }), n: rows.length, potentialOnly: !m.hasLvm, oursOut: out } };
     return LD.val;
   }
   function priority(cat, km) { return Math.round(100 * (CAT[cat] ? CAT[cat].weight : 0.6) * (1 - 0.8 * clamp(km / 15, 0, 1))); }
@@ -569,7 +673,7 @@
     var at = {};
     L.idx.forEach(function (i, k) { at[i] = k; });
     var order = nearestFirst(L.idx, poiDist);
-    var val = { idx: order, score: order.map(function (i) { return L.score[at[i]]; }), n: order.length, potentialOnly: L.potentialOnly, sort: 'near' };
+    var val = { idx: order, score: order.map(function (i) { return L.score[at[i]]; }), n: order.length, potentialOnly: L.potentialOnly, sort: 'near', oursOut: L.oursOut || 0 };
     DC.near = { key: key, val: val };
     return val;
   }
@@ -580,14 +684,16 @@
   function leadCounts() {
     var m = model();
     if (!m) return { grocery: 0, restaurant: 0, other: 0, all: 0 };
-    var key = [m.R.key, m.hasLvm, V.kec, V.km, V.tier, m.ver, tierKey(m)].join('|');
+    var key = [m.R.key, m.hasLvm, V.kec, V.km, V.tier, m.ver, tierKey(m), omKey(), OURS.ver].join('|');
     if (LCN.key === key && LCN.R === m.R) return LCN.val;
-    var R = m.R, X = R.X, ids = m.ids.kec, want = m.hasLvm ? 2 : 1, out = { grocery: 0, restaurant: 0, other: 0, all: 0 }, tt = tierTest();
+    var R = m.R, X = R.X, ids = m.ids.kec, want = m.hasLvm ? 2 : 1, out = { grocery: 0, restaurant: 0, other: 0, all: 0 }, tt = tierTest(), ot = omTest(), op = OURS.poi;
     for (var i = 0; i < X.n; i++) {
       if (!X.ok[i] || R.pois.status[i] !== want) continue;
       if (V.kec && ids[X.kec[i]] !== V.kec) continue;
       if (V.km && X.dist[i] > V.km) continue;
       if (tt && !tt(i)) continue;
+      if (ot && !ot(i)) continue;
+      if (op && op[i]) continue;
       out[LCATS[X.cat[i]]]++; out.all++;
     }
     LCN = { key: key, R: m.R, val: out };
@@ -800,7 +906,10 @@
     if (!E || !P || !E.cat || !E.ticketOfCat || !E.sig || E.cat.length !== P.rows.length) return null;
     if (XF.file !== E || XF.pois !== P) {
       XF.file = E; XF.pois = P;
-      XF.ok = typeof E.alignedWith === 'function' ? !!safe(function () { return E.alignedWith(P); }, false) : true;
+      /* V8 fix round (D49 ≤ 50 ms tasks): MCD.lvm checks the same pair for its match and keeps the answer; reusing it
+         saves a second hash over every row (about 55 ms). Any other answer: the file's own check, as before. */
+      var L = MCD.lvm, viaL = L && typeof L.extraFor === 'function' ? safe(function () { return L.extraFor(P); }) : null;
+      XF.ok = viaL === E ? true : (typeof E.alignedWith === 'function' ? !!safe(function () { return E.alignedWith(P); }, false) : true);
     }
     return XF.ok ? E : null;
   }
@@ -890,16 +999,23 @@
   function crowdBase() {
     var key = crowdKey();
     if (CW.key === key && CW.dens) return CW;
+    if (!CWB || CWB.key !== key) CWB = crowdBegin(key);
+    crowdRun(CWB, null);
+    return CW;
+  }
+  /* V8 fix round (D49, docs/V8_SPEC.md §8: no task past 50 ms): the same pass, resumable. crowdRun(B, stop) works until
+     stop() says so (checked every 256 rows) and returns true once CW holds the result; crowdBase() runs it to the end. */
+  var CWB = null;
+  function crowdBegin(key) {
     var P = pois(), E = extraFile(), rows = P ? P.rows : EMPTY, n = rows.length, c = center();
-    var KX = 111.32 * Math.cos(c[1] * D2R), KY = 110.57, CELL = EDC_RULE.denseKm, grid = new Map();
-    var dens = new Uint16Array(n), anc = new Uint8Array(n);
+    var KX = 111.32 * Math.cos(c[1] * D2R), KY = 110.57, CELL = EDC_RULE.denseKm;
+    return { key: key, rows: rows, n: n, E: E, KX: KX, KY: KY, CELL: CELL, grid: new Map(), dens: new Uint16Array(n), anc: new Uint8Array(n),
+      anchors: [], phase: 0, i: 0 };
+  }
+  function crowdRun(B, stop) {
+    var rows = B.rows, n = B.n, E = B.E, KX = B.KX, KY = B.KY, CELL = B.CELL, grid = B.grid, dens = B.dens, anc = B.anc, anchors = B.anchors;
     function cellKey(x, y) { return Math.floor(x / CELL) + ':' + Math.floor(y / CELL); }
-    for (var i = 0; i < n; i++) {
-      var r = rows[i];
-      if (!r || (r[2] | 0) > 11 || !isNum(r[0]) || !isNum(r[1])) continue;
-      var k0 = cellKey(r[0] * KX, r[1] * KY), l = grid.get(k0);
-      if (l) l.push(i); else grid.set(k0, [i]);
-    }
+    function inGrid(r) { return !!r && (r[2] | 0) <= 11 && isNum(r[0]) && isNum(r[1]); }
     /* each point: the scan of the cells within `km`, calling fn(j) for every listing j within that distance */
     function around(lon, lat, km, fn) {
       var x = lon * KX, y = lat * KY, gx = Math.floor(x / CELL), gy = Math.floor(y / CELL), R = Math.ceil(km / CELL), km2 = km * km;
@@ -912,13 +1028,32 @@
         }
       }
     }
-    grid.forEach(function (list) {
-      list.forEach(function (i2) { var cnt = -1; around(rows[i2][0], rows[i2][1], CELL, function () { cnt++; }); dens[i2] = Math.min(65535, cnt); });
-    });
-    /* anchors: malls and markets of the public file (named or by category), campuses, then the research clusters */
-    var L = MCD.lvm, anchors = [];
-    for (var j = 0; j < n; j++) {
-      var rj = rows[j];
+    var cnt = 0;
+    function one() { cnt++; }
+    /* phase 0: the grid */
+    for (; B.phase === 0 && B.i < n; B.i++) {
+      if ((B.i & 255) === 0 && B.i && stop && stop()) return false;
+      var r = rows[B.i];
+      if (!inGrid(r)) continue;
+      var k0 = cellKey(r[0] * KX, r[1] * KY), l = grid.get(k0);
+      if (l) l.push(B.i); else grid.set(k0, [B.i]);
+    }
+    if (B.phase === 0) { B.phase = 1; B.i = 0; }
+    /* phase 1: the listings within 100 m of each row of the grid (the same rows, in file order) */
+    for (; B.phase === 1 && B.i < n; B.i++) {
+      if ((B.i & 255) === 0 && B.i && stop && stop()) return false;
+      var r1 = rows[B.i];
+      if (!inGrid(r1)) continue;
+      cnt = -1;
+      around(r1[0], r1[1], CELL, one);
+      dens[B.i] = Math.min(65535, cnt);
+    }
+    if (B.phase === 1) { B.phase = 2; B.i = 0; }
+    /* phase 2: anchors: malls and markets of the public file (named or by category), campuses */
+    var L = MCD.lvm;
+    for (; B.phase === 2 && B.i < n; B.i++) {
+      if ((B.i & 255) === 0 && B.i && stop && stop()) return false;
+      var j = B.i, rj = rows[j];
       if (!rj || (rj[2] | 0) > 11) continue;
       var cn = E && E.cat[j] >= 0 ? String(E.catNames[E.cat[j]] || '') : '', nm = String(rj[3] || '').toLowerCase();
       var nmo = L && L.nonMerchant ? safe(function () { return L.nonMerchant(j); }) : null;
@@ -926,17 +1061,19 @@
       else if (MALL_CAT[cn] || (nmo && nmo.why === 'kawasan')) anchors.push([1, rj[0], rj[1], 0.15]);
       else if (cn === 'college_university' && /\b(universitas|university|institut|politeknik|akademi|sekolah tinggi|kampus|stie|stikes|stmik)\b/.test(nm)) anchors.push([3, rj[0], rj[1], 0.2]);
     }
+    /* phase 3: the research clusters, then the first anchor that reaches a listing names its reason (fixed order: mal,
+       pasar, kampus, clusters) */
     var C = clustersFile();
     (C ? C.clusters : EMPTY).forEach(function (cl) {
       var a = cl && CLUSTER_ANCHOR[cl.type];
       if (a && isNum(cl.lon) && isNum(cl.lat)) anchors.push([a[0], cl.lon, cl.lat, a[1]]);
     });
-    /* the first anchor that reaches a listing names its reason (fixed order: mal, pasar, kampus, clusters) */
     anchors.forEach(function (a) { around(a[1], a[2], a[3], function (j2) { if (!anc[j2]) anc[j2] = a[0]; }); });
     var bits = E && E.meta && E.meta.sigBits, roadBit = 0;
     if (bits) Object.keys(bits).forEach(function (b) { if (/^(main[_ ]?road|jalan[_ ]?utama)$/i.test(String(bits[b]))) roadBit = +b; });
-    CW = { key: key, dens: dens, anc: anc, roadBit: roadBit, anchors: anchors.length };
-    return CW;
+    CW = { key: B.key, dens: dens, anc: anc, roadBit: roadBit, anchors: anchors.length };
+    if (CWB === B) CWB = null;
+    return true;
   }
   /* v5 fixer (item 42; MERCHANT finding "who counts as a national chain depends on word order"): the data file's bit 32
      comes from brands that must START the name (tools/build-sme-extra.py KNOWN_CHAIN_RE), so "Kalibata XXI" and
@@ -1066,8 +1203,30 @@
     if (!m) return [];
     var key = ecKey(m);
     if (EC.key === key && EC.list) return EC.list;
-    var R = m.R, X = R.X, P = R.pois, out = [], b = branchPt(), ids = m.ids, wcache = {}, cb = crowdBase();
-    for (var i = 0; i < X.n; i++) {
+    if (!ECB || ECB.key !== key || ECB.R !== m.R) ECB = candBegin(m, key);
+    candRun(ECB, null);
+    return EC.list;
+  }
+  /* V8 fix round (D49, docs/V8_SPEC.md §8: no task past 50 ms): the same list, resumable. candRun(B, stop) works until
+     stop() says so (checked every 128 rows) and returns true once EC holds the list; allCandidates() runs it to the end. */
+  var ECB = null;
+  function candBegin(m, key) {
+    return { key: key, m: m, R: m.R, ids: m.ids, b: branchPt(), wcache: {}, cb: null, out: [], i: 0 };
+  }
+  function candRun(B, stop) {
+    if (!B.cb) {
+      var ck = crowdKey();
+      if (!(CW.key === ck && CW.dens)) {
+        if (!CWB || CWB.key !== ck) CWB = crowdBegin(ck);
+        if (!crowdRun(CWB, stop)) return false;
+      }
+      B.cb = CW;
+      if (stop && stop()) return false;
+    }
+    var R = B.R, X = R.X, P = R.pois, out = B.out, b = B.b, ids = B.ids, wcache = B.wcache, cb = B.cb;
+    for (; B.i < X.n; B.i++) {
+      if ((B.i & 127) === 0 && B.i && stop && stop()) return false;
+      var i = B.i;
       if (!X.ok[i] || (P.edc && P.edc[i] >= 0)) continue;           // only merchants (MCD.lvm), none with an EDC Mandiri yet
       var c = code(R, i), onLvm = c === 3 || c === 4;
       var t = ticketOf(i), tl = TICKET_LEVEL_OF[t.cls], cr = crowdOf(i, cb);
@@ -1086,8 +1245,24 @@
     out.sort(function (a, c2) { return tierRank(a.tier) - tierRank(c2.tier) || c2.score - a.score || a.idx - c2.idx; });
     var pos = new Int32Array(X.n).fill(-1);
     out.forEach(function (c2, k) { pos[c2.idx] = k; });
-    EC = { key: key, list: out, pos: pos };
-    return out;
+    EC = { key: B.key, list: out, pos: pos };
+    if (ECB === B) ECB = null;
+    return true;
+  }
+  /**
+   * V8 fix round: warmFactors(ms, now?) → true once factors(i), edcOf(i) and the Sasaran lists read a finished list for
+   * the current data; otherwise works on it for about ms (the crowd pass, then the candidate list) and returns false, so
+   * MCD.omzet.warm() can spread the first build over idle tasks of ≤ 50 ms. now: the caller's clock (performance.now).
+   */
+  function warmFactors(ms, nowFn) {
+    var m = model();
+    if (!m) return true;
+    var key = ecKey(m);
+    if (EC.key === key && EC.list) return true;
+    var clock = typeof nowFn === 'function' ? nowFn : function () { return W.performance && W.performance.now ? W.performance.now() : Date.now(); };
+    var budget = isNum(ms) && ms > 0 ? ms : 40, t0 = clock();
+    if (!ECB || ECB.key !== key || ECB.R !== m.R) ECB = candBegin(m, key);
+    return candRun(ECB, function () { return clock() - t0 >= budget; });
   }
   function factorsOfCand(c) {
     return { ticket: factorObj('ticket', TICKET_LEVELS[c.tl], catWords(c.idx)), crowd: factorObj('crowd', LEVEL3[c.cl], c.cwhy),
@@ -1118,14 +1293,25 @@
    *   all. Without tiers every tier is listed (Jaringan nasional last); the Sasaran lists pass their tiers.
    * name is the public listing name, masked like every list (practitioners, Samarkan nama).
    */
+  /* V8: opts.notOurs leaves out the listings of our funding merchants (D47, the acquisition list Kandidat EDC);
+     opts.om applies the "Perkiraan omzet" band filter (D49, once MCD.omzet is warm); V8 final fix: opts.km keeps the
+     listings within that many km of Mabes TNI (the "Cakupan" switch, as in leads()) */
+  function kmTest(km) {
+    var m = model(), X = m && m.R ? m.R.X : null;
+    return isNum(km) && km > 0 && X && X.dist ? function (i) { return !(X.dist[i] > km); } : null;
+  }
   function edcCandidates(opts) {
     opts = opts || {};
     var list = allCandidates(), kec = opts.kecamatanId || null, tiers = opts.tiers ? [].concat(opts.tiers).map(tierId).filter(Boolean) : null;
     var lim = opts.limit == null ? 50 : (opts.limit > 0 ? opts.limit : Infinity), mode = privacyMode(), out = [];
+    var op = opts.notOurs ? OURS.poi : null, ot = opts.om ? omTest() : null, kt = kmTest(opts.km);
     for (var k = 0; k < list.length && out.length < lim; k++) {
       var c = list[k];
       if (kec && c.kecamatanId !== kec) continue;
+      if (kt && !kt(c.idx)) continue;
       if (tiers && tiers.indexOf(c.tier) < 0) continue;
+      if (op && op[c.idx]) continue;
+      if (ot && !ot(c.idx)) continue;
       out.push({ idx: c.idx, name: maskName(rowName(c.idx), mode), kecamatanId: c.kecamatanId, lon: c.lon, lat: c.lat, score: c.score, tier: c.tier,
         ticketClass: c.ticketClass, why: whyOf(c), kelurahanId: c.kelurahanId, tierLabel: TIERS[c.tier].label, ticketLabel: TICKET_WORDS[c.ticketClass],
         sasaran: TIERS[c.tier].sasaran, factors: factorsOfCand(c), busy: c.busy, established: c.est, largeChain: c.largeChain, onLvm: c.onLvm, category: c.category });
@@ -1141,13 +1327,18 @@
    *   Before an LVM import: edc + lvm + nasional = every merchant within 15 km.
    */
   function edcTierCounts(opts) {
-    var kec = opts && opts.kecamatanId, out = { edc: 0, 'naik-edc': 0, lvm: 0, nasional: 0 }, natEdc = 0;
+    var kec = opts && opts.kecamatanId, out = { edc: 0, 'naik-edc': 0, lvm: 0, nasional: 0 }, natEdc = 0, kt = kmTest(opts && opts.km);
+    var op = opts && opts.notOurs ? OURS.poi : null, ot = opts && opts.om ? omTest() : null, mine = { edc: 0, 'naik-edc': 0, lvm: 0, nasional: 0 };
     allCandidates().forEach(function (c) {
       if (kec && c.kecamatanId !== kec) return;
+      if (kt && !kt(c.idx)) return;
+      if (ot && !ot(c.idx)) return;
+      if (op && op[c.idx]) { mine[c.tier]++; return; }   // V8 D47: counted apart ("{n} merchant KCP Cilangkap tidak masuk daftar ini.")
       out[c.tier]++;
       if (c.tier === 'nasional' && c.q) natEdc++;
     });
     out.nasionalEdc = natEdc;
+    if (op) { mine.edcAll = mine.edc + mine['naik-edc']; out.ours = mine; }
     out.edcAll = out.edc + out['naik-edc'];
     out['edc+lvm'] = out.edc;
     out.edcChain = out.nasional;
@@ -1499,6 +1690,7 @@
       lines.push({ text: info.ownBranch ? 'KCP Cilangkap (12903)' : 'Cabang lain di area' + (info.branchCode ? ' (' + info.branchCode + ')' : '') });
     }
     if (info.edc) lines.push({ text: 'EDC Mandiri terpasang' + (info.edc.active === false ? ' (tidak aktif)' : '') });
+    if (isOurs(i)) lines.push({ text: OURS_LABEL });   /* V8: no band, no amount in a hover text */
     /* item 37: the tier and the three factors, one plain reason each (hover text only; the drawer has the links) */
     var ec = edcOf(i);
     if (ec) {
@@ -1550,6 +1742,32 @@
     var n = (by && k && by[k.id]) || 0;
     if (!n) return k.name;
     return k.name + ' · ' + F().int(n) + (zoom >= 11 ? ' ' + (TIER_UNIT[V.tier] || 'merchant') : '');
+  }
+  /* V8 (§4.1.2, D44): "Merchant KCP Cilangkap", a thick ring in the map's neutral ink (navy in Terang, near-white in Gelap;
+     never a status colour, gold or the selection colour) at 1,5 × the dot, drawn UNDER the dot so its status colour stays
+     readable. Only from the single-dot zoom (13,5) and only around a point the filters show. Not pickable: the dot is. */
+  var OURS_INK = { day: [14, 30, 54, 235], night: [241, 245, 249, 230] };
+  var OV = { key: '', val: null };
+  function oursVisible(pts) {
+    var key = PT.key + '#' + OURS.ver;
+    if (OV.key === key && OV.val) return OV.val;
+    var onPoi = {}, onLvm = {};
+    pts.idx.forEach(function (i) { onPoi[i] = 1; });
+    pts.off.forEach(function (o) { onLvm[String(o.id)] = 1; });
+    OV = { key: key, val: OURS.pts.filter(function (p) { return p.src === 'poi' ? !!onPoi[p.ref] : !!onLvm[p.ref]; }) };
+    return OV.val;
+  }
+  function oursLayer(out, pts, rad, day, ms) {
+    if (!V.ours || !OURS.pts || !OURS.pts.length || !W.deck) return;
+    var data = oursVisible(pts);
+    if (!data.length) return;
+    out.base.push(new W.deck.ScatterplotLayer({
+      id: 'merchants-ours', data: data, getPosition: function (p) { return [p.lon, p.lat]; },
+      /* an LVM store off the public map already wears its own ring (rad + 1): ours sits just outside it */
+      radiusUnits: 'pixels', getRadius: function (p) { return p.src === 'lvm' ? rad * 1.5 + 2 : rad * 1.5; },
+      filled: false, stroked: true, lineWidthUnits: 'pixels', getLineWidth: 2, getLineColor: day ? OURS_INK.day : OURS_INK.night,
+      pickable: false, updateTriggers: { getLineColor: day, getRadius: rad }, beforeId: ms.beforeId
+    }));
   }
   function merchantLayers(out, m, ms) {
     var dk = W.deck, t = T(), z = ms.zoom || 11, pk = pal(ms).key, day = pk === 'day', RGB = statusRGB(ms);
@@ -1604,6 +1822,7 @@
     }
     var rad = zi([[13.5, 2.6], [15, 3.6], [17, 5.2]], z);
     var col = [0, 0, 0, 0];
+    oursLayer(out, pts, rad, day, ms);
     out.base.push(new dk.ScatterplotLayer({
       id: 'merchants-dots', data: pts.idx, getPosition: function (i) { return [X.lon[i], X.lat[i]]; },
       getFillColor: function (i, info) { var c = RGB[pts.codes[info.index]] || RGB.none; col[0] = c[0]; col[1] = c[1]; col[2] = c[2]; col[3] = 225; return col; },
@@ -1725,6 +1944,9 @@
       out.push({ id: 'mx-lvm', title: WORDS.lvmBadge, rows: lrows,
         note: m.demo ? 'Data contoh: titik buatan untuk mencoba dashboard.' : (loc && loc.fromAddress ? 'Lokasi dihitung dari alamat toko, di browser ini. Alamat tidak disimpan.' : 'File LVM tidak memuat koordinat. Titik perkiraan di tengah kelurahan.') });
     }
+    /* V8 (§4.1.2): the ring of our funding merchants, while the layer is on */
+    if (V.ours && OURS.pts && OURS.n) out.push({ id: 'mx-ours', title: OURS_LABEL, rows: [{ glyph: 'ring', rgb: (pk === 'day' ? OURS_INK.day : OURS_INK.night).slice(0, 3),
+      label: 'Cincin tebal: merchant KCP Cilangkap, dari file funding merchant.', count: OURS.n }] });
     if ((ms.zoom || 0) < CLUSTER_Z && V.tier !== 'all' && t && m.terr) out.push({ id: 'mx-tier-chips', title: null, rows: [{ glyph: 'chip', label: 'Label: nama kecamatan · jumlah ' + (TIER_UNIT[V.tier] || 'merchant') }],
       note: 'Perbesar peta untuk melihat setiap merchant.' });
     else if ((ms.zoom || 0) < CLUSTER_Z) out.push({ id: 'mx-cluster', title: null, rows: [{ glyph: 'ring', rgb: RGB.none, label: 'Lingkaran berangka: kelompok merchant, warnanya mengikuti status terbanyak.' }],
@@ -1781,8 +2003,10 @@
     if (V.kec && V.kec !== kid) patch.kec = null;
     if (V.km && X.dist[i] > V.km) patch.km = null;
     if (V.cats.length && V.cats.indexOf(LCATS[X.cat[i]]) < 0) patch.cats = [];
-    if (!statusShows(V.status, code(m.R, i))) patch.status = 'all';
+    if (!statusShows(V.status, code(m.R, i)) || (oursWant() && !OURS.poi[i])) patch.status = 'all';
     if (!tierShows(i)) patch.tier = 'all';
+    var ot = omTest();
+    if (ot && !ot(i)) patch.om = null;
     return setView(patch);
   }
   /** revealLvm(id) → the same for an LVM store (its listing when matched, else its own point). */
@@ -1795,8 +2019,9 @@
     if (V.kec && mm && V.kec !== mm.kecamatanId) patch.kec = null;
     if (V.km && kmFromCentre(l.lon, l.lat) > V.km) patch.km = null;
     if (V.cats.length && mm && V.cats.indexOf(mm.category) < 0) patch.cats = [];
-    if (V.status === 'notYet' || (V.status === 'inactive' && mm && mm.active !== false)) patch.status = 'all';
+    if (V.status === 'notYet' || (V.status === 'inactive' && mm && mm.active !== false) || (oursWant() && !OURS.lvm[String(id)])) patch.status = 'all';
     if (V.tier !== 'all') patch.tier = 'all';
+    if (!omNoneOn()) patch.om = null;
     return setView(patch);
   }
 
@@ -1844,9 +2069,13 @@
     /** item 42 scope switch (read only; docs/EDC_SCORE.md §7) */
     nasionalAll: function () { return NASIONAL_ALL; },
     edcCandidates: edcCandidates, edcTierCounts: edcTierCounts, edcOf: edcOf, edcShare: edcShare, factors: factors, ticketOf: ticketOf, catWords: catWords,
+    warmFactors: warmFactors,
     crowdOf: crowdOf, chainOf: function (i) { return chainOf(+i); }, busyOf: busyOf, wealthAt: wealthAt, wealthOfRow: wealthOfRow, googleRank: googleRank, directionsUrl: directionsUrl,
     // focus (MCD.app.focus → onAction 'focus:poi:<i>' / 'focus:lvm:<id>')
     revealPoi: revealPoi, revealLvm: revealLvm,
+    // V8 (docs/V8_SPEC.md §4.1.2–§4.1.3): our funding merchants (bands and counts only) and the omzet band filter
+    OURS_LABEL: OURS_LABEL, STATUS_OURS: STATUS_OURS, OM_IDS: OM_IDS,
+    setOurs: setOurs, ours: ours, isOurs: isOurs, omWarm: omWarm, omCounts: omCounts,
     /** 'area:merchants' is registered by MCD.lvm (keyed by Kemendagri id); this alias keeps older callers working. */
     areaAggregates: function (st) { return MCD.lvm && MCD.lvm.areaMerchants ? MCD.lvm.areaMerchants(st) : { level: 'kecamatan', areas: {}, ready: false }; },
     requestMap: requestMap, refreshPosture: refreshPosture

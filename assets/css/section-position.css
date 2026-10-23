@@ -1,12 +1,11 @@
 /* ==========================================================================
- * Posisi cabang (assets/js/section-position.js), docs/V7_SPEC.md §6 and §6.8, as changed by D39 (no KSM
- * concentration or limit line).
- * One page, no map: head and goal line, the four gap cards in one fixed order, then (Detail) "Booking per
- * produk" beside "Kredit menurut produk" (60 / 40) and the fold "Semua KPI". 1366×768: the four cards in one
- * row; 1024–1279 and 768–1023: 2 × 2; phones: stacked, one action per row (chips as full-width rows with "›").
- * Glass cards as on Ringkasan (frosted fill, soft highlight, a status rule on top); bars are single-hue
- * gradients on the product tokens (--p-ksm, --p-kpr, --p-kkb, --p-cc, --p-oth). Status is always a word,
- * colour only adds to it. Colours only through tokens, so Terang and Gelap recolour in place. No animation.
+ * Posisi cabang (assets/js/section-position.js), docs/V7_SPEC.md §6 and §6.8, as changed by D39, D41 and D50
+ * (docs/V8_SPEC.md §4.3): no concentration or limit line, no product bars and no share bar.
+ * One page, no map: head and goal line, the four gap cards in one fixed order, then (Detail) the fold "Semua KPI".
+ * 1366×768: the four cards in one row; 1024–1279 and 768–1023: 2 × 2; phones: stacked, one action per row (chips
+ * as full-width rows with "›"). Glass cards as on Ringkasan (frosted fill, soft highlight, a status rule on top).
+ * Status is always a word, colour only adds to it. Colours only through tokens, so Terang and Gelap recolour in
+ * place. No animation. Hover only where a pointer hovers (@media (hover: hover), MOBILE_UX_PLAN M11).
  * Print (D28): while the page is mounted (body.pos-noprint) print shows only the .pos-print line.
  * Every rule is scoped by a .pos- class.
  * ========================================================================== */
@@ -35,7 +34,9 @@
   font: 500 13px/18px var(--font-sans); color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
 }
-.pos-link:hover { text-decoration-color: currentColor; }
+@media (hover: hover) {
+  .pos-link:hover { text-decoration-color: currentColor; }
+}
 
 /* ── Goal line (a KPI card) ───────────────────────────────────────────── */
 .pos-goal {
@@ -80,18 +81,15 @@
 .pos-card__miss { margin-top: 4px; font: 400 13px/18px var(--font-sans); color: var(--text-2); }
 .pos-card__note { margin-top: 4px; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
 
-/* KSM · KPR · KKB under the booking card */
+/* the KPR line under the booking card (D50: the only product line) */
 .pos-sub { display: grid; gap: 0; margin: 3px 0 0; padding: 2px 0 0; list-style: none; border-top: 1px solid var(--rule); }
 .pos-sub__row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
-.pos-sub__go, .pos-sub__line {
+.pos-sub__line {
   display: flex; align-items: baseline; gap: 6px; flex: 1 1 180px; min-width: 0; min-height: 18px; padding: 1px 0;
-  border: 0; background: none; color: var(--text-1); text-align: left; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums;
+  color: var(--text-1); text-align: left; font: 400 12px/16px var(--font-sans); font-variant-numeric: tabular-nums;
 }
-.pos-sub__go { cursor: pointer; }
-.pos-sub__go:hover .pos-sub__t { text-decoration: underline; text-underline-offset: 2px; }
 .pos-sub__k { flex: none; width: 30px; font-weight: 600; }
 .pos-sub__t { flex: 1 1 auto; min-width: 0; color: var(--text-2); }
-.pos-sub__a { flex: none; color: var(--text-2); }
 .pos-sub__row .pos-chips { margin: 0; padding: 0; }
 
 /* chips: a place chip, then a task chip (ids only in data-*) */
@@ -99,51 +97,6 @@
 .pos-chip { min-height: 28px; height: auto; padding: 3px 10px; gap: 4px; font: 500 12px/16px var(--font-sans); white-space: nowrap; }
 .pos-chip__go { display: none; }
 .pos--simple .pos-chip { min-height: 40px; }            /* Sederhana: targets of 40 px */
-
-/* ── Detail: Booking per produk (60) beside Kredit menurut produk (40) ── */
-.pos-panels { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; align-items: start; min-width: 0; }
-.pos-x {
-  display: grid; gap: 8px; min-width: 0; padding: 14px 16px;
-  border: 1px solid var(--glass-border-card, var(--rule)); border-radius: var(--r-card, 12px);
-  background: var(--grad-card, var(--surface-raised)); box-shadow: var(--glass-hl-card, none), var(--glass-shadow-sm, none);
-}
-.pos-x__t { margin: 0; font: 400 var(--fs-section, 18px)/var(--lh-section, 24px) var(--font-serif); color: var(--text-1); }
-.pos-x:focus, .pos-prow:focus { outline: none; }
-.pos-x:focus-visible, .pos-prow:focus-visible { outline: 2px solid var(--signal, currentColor); outline-offset: 2px; }
-.pos-prow { display: grid; gap: 2px; min-width: 0; padding: 8px 0 6px; border-top: 1px solid var(--rule); scroll-margin: 96px; }
-.pos-x__t + .pos-prow { border-top: 0; padding-top: 2px; }
-.pos-prow__h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; }
-.pos-prow__k { font: 600 14px/18px var(--font-sans); }
-.pos-prow__c { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
-.pos-prow__m { font: 400 13px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
-.pos-prow__f { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 4px 12px; min-width: 0; }
-.pos-prow__i { display: grid; gap: 0; flex: 1 1 220px; min-width: 0; }
-.pos-prow .pos-chips { flex: 0 1 auto; justify-content: flex-end; margin: 0; padding: 0; }
-
-.pos-bar {
-  position: relative; height: 12px; margin: 3px 0 4px; border-radius: 6px;
-  background: var(--surface-well, rgba(128, 128, 128, .14)); box-shadow: inset 0 0 0 1px var(--rule);
-}
-.pos-bar__fill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 2px; border-radius: 6px; }
-.pos-bar__tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text-1); }
-/* single-hue glass: the product colour under a soft top highlight */
-.pos-fill--ksm, .pos-fill--kpr, .pos-fill--kkb, .pos-fill--cc, .pos-fill--oth {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 65%);
-}
-.pos-fill--ksm { background-color: var(--p-ksm); }
-.pos-fill--kpr { background-color: var(--p-kpr); }
-.pos-fill--kkb { background-color: var(--p-kkb); }
-.pos-fill--cc { background-color: var(--p-cc); }
-.pos-fill--oth { background-color: var(--p-oth); }
-
-.pos-share {
-  display: flex; height: 16px; margin: 2px 0; border-radius: 8px; overflow: hidden;
-  background: var(--surface-well, rgba(128, 128, 128, .14)); box-shadow: inset 0 0 0 1px var(--rule);
-}
-.pos-share__seg { flex: none; height: 100%; min-width: 2px; box-shadow: inset -1px 0 0 var(--surface-solid, transparent); }
-.pos-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; }
-.pos-legend__i { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.pos-legend__sw { flex: none; width: 10px; height: 10px; border-radius: 2px; }
 
 /* ── Fold "Semua KPI" ─────────────────────────────────────────────────── */
 .pos-all {
@@ -157,6 +110,9 @@
 .pos-fold__i { flex: none; width: 14px; color: var(--text-2); }
 .pos-all__body { padding: 0 0 12px; }
 .pos-tbl__wrap { overflow-x: auto; min-width: 0; }
+.pos-tbl__grp { scroll-margin: 96px; }
+.pos-tbl__grp:focus { outline: none; }
+.pos-tbl__grp:focus-visible { outline: 2px solid var(--signal, currentColor); outline-offset: 2px; }
 .pos-tbl { width: 100%; border-collapse: collapse; font: 400 13px/18px var(--font-sans); font-variant-numeric: tabular-nums; }
 .pos-tbl th, .pos-tbl td { padding: 6px 8px; border-top: 1px solid var(--rule); vertical-align: top; text-align: left; }
 .pos-tbl thead th { border-top: 0; font: 600 12px/16px var(--font-sans); color: var(--text-2); white-space: nowrap; }
@@ -188,9 +144,6 @@
 /* ── Breakpoints (§6.8) ──────────────────────────────────────────────── */
 @media (max-width: 1279px) {
   .pos-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 1023px) {
-  .pos-panels { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
   .pos { gap: 12px; }

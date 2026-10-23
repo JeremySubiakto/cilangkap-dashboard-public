@@ -20,10 +20,10 @@
  * minutes (ties: km). Deterministic: no randomness, ties broken by input position. At most 15 stops.
  *
  * Privacy (item 49), fail closed. Every point (stops, start, link points) must be a public place: its kind must be on
- * PUBLIC_KINDS (cabang, awal, merchant, sekolah, kampus, kpr; or a map alias: kcp, mandiri_branch, poi, mxPoi,
- * smaSchool, project). Anything else, or no kind, refuses the WHOLE request ('invalid-kind'). The kinds satuan and
- * dealer (and the alias tni) were removed with the KSM & KKB section on 22 Oct 2026 (docs/V7_SPEC.md D39); a
- * kesehatan kind comes with the Kesehatan section (D40, docs/HEALTH_SPEC.md), not before.
+ * PUBLIC_KINDS (cabang, awal, merchant, sekolah, kampus, kesehatan, kpr; or a map alias: kcp, mandiri_branch, poi,
+ * mxPoi, smaSchool, project, health, hf). Anything else, or no kind, refuses the WHOLE request ('invalid-kind'). The
+ * kinds satuan and dealer (and the alias tni) were removed with the former TNI credit section on 22 Oct 2026
+ * (docs/V7_SPEC.md D39, D41); the kesehatan kind came with the Kesehatan section (D40, docs/HEALTH_SPEC.md §7, V8).
  * Backstops refuse it as customer data ('private', checked first): a private / isPrivate / sensitive flag; a non-string
  * kind; a customer word (lead, nasabah, customer, cif, debitur, calon, prospek, …) anywhere in kind, type, dataset,
  * source, layer or schema, or at the start of the id; any customer or personal key (cif, nik, noRek, nama, telepon, …)
@@ -35,7 +35,7 @@
  * PURE: no DOM, storage or network. The one outside read is MCD.travel (or opts.travel) for the legs from the branch;
  * it never starts loading the outer grid (only an outer grid that is already loaded is used). UMD wrapper:
  * MCD.visitPlan in the browser (classic script), module.exports in Node (tests/visit-plan.test.mjs). Not yet loaded
- * by index.html (v7 UI lane).
+ * by index.html after distance.js (V8 §3.7).
  *
  * API
  *   plan({stops, start, returnToStart, mode, keepOrder, dwellMin, peakFactor, travel}) → result
@@ -101,11 +101,11 @@
   var EPS = 1e-9;
   // Item 49, fail closed: ONLY these kinds of public place are planned or linked; any other kind, or none, is refused.
   // Lowercase, matched after trim. Aliases are the map's own point kinds for the same public places (assets/js/map.js).
-  var PUBLIC_KINDS = Object.freeze(['cabang', 'awal', 'merchant', 'sekolah', 'kampus', 'kpr']);
+  var PUBLIC_KINDS = Object.freeze(['cabang', 'awal', 'merchant', 'sekolah', 'kampus', 'kesehatan', 'kpr']);
   var KIND_ALIAS = { kcp: 'cabang', mandiri_branch: 'cabang', poi: 'merchant', mxpoi: 'merchant', smaschool: 'sekolah',
-    project: 'kpr' };
+    project: 'kpr', health: 'kesehatan', hf: 'kesehatan' };
   // Backstops, each enough on its own to make a point private (code 'private'):
-  //  · a customer word anywhere in kind, type, dataset, source, layer or schema ('lead-ksm', 'leadKsm', 'calon-nasabah',
+  //  · a customer word anywhere in kind, type, dataset, source, layer or schema ('lead-kpr', 'leadKpr', 'calon-nasabah',
   //    'nasabah-prioritas', type 'lead', dataset 'leads', …), or at the start of the id ('lead:41'); a non-string kind;
   var PRIVATE_RE = /lead|nasabah|customer|cif|debitur|debitor|debtor|calon|prospek|prospect|klien|client|borrower|peminjam/i;
   var PRIVATE_ID_RE = /^(lead|leads|nasabah|customer|cif|debitur|calon|prospek)([^a-z]|$)/i;
@@ -121,9 +121,9 @@
     'telepon', 'telp', 'noTelp', 'noTelepon', 'hp', 'noHp', 'handphone', 'ponsel', 'phone', 'whatsapp', 'email',
     'tanggalLahir', 'tglLahir', 'tempatLahir', 'dob', 'usia', 'umur', 'nrp', 'nip',
     'lead', 'leadId', 'leadRow', 'leadKey', 'nasabah', 'debitur',
-    // assets/js/leads.js FIELDS
+    // assets/js/leads.js FIELDS (and the fields D41 removed from it, kept here as a guard: never shown)
     'segmen', 'kodeSatuan', 'saldo', 'penghasilan', 'sisaTenorKsm', 'kolektibilitas',
-    'tabungan', 'giro', 'deposito', 'ksm', 'kkb', 'kpr', 'kartuKredit', 'livin', 'prioritas',
+    'tabungan', 'giro', 'deposito', 'ksm', 'kkb', 'kpr', 'kartuKredit', 'livin', 'prioritas',   // D41: refused words, a guard only
     // assets/js/leads.js STORED_FIELDS (the rest)
     'key', 'sourceRow', 'fp', 'saldoBand', 'penghasilanBand', 'tenorBand', 'lancar'
   ]);
@@ -334,7 +334,7 @@
 
   var LEAD_TEXT = 'Data nasabah (lead) tidak pernah masuk perencana kunjungan atau tautan Google Maps. ' +
     'Cari nasabah tersebut di sistem bank.';
-  var KIND_TEXT = 'bukan tempat umum yang bisa direncanakan. Yang bisa: cabang, merchant, sekolah, kampus dan proyek KPR.';
+  var KIND_TEXT = 'bukan tempat umum yang dapat direncanakan. Yang dapat: cabang, merchant, sekolah, kampus, fasilitas kesehatan dan proyek KPR.';
 
   /* ------------------------------------------------------------ ordering (pure) */
 

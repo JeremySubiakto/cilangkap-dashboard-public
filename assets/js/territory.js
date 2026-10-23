@@ -42,6 +42,11 @@
  *                                 <id>-labels-rank-dot, <id>-labels-badge, which follow their chips);
  *                                 pick kind 'territory-kec' with id = kecamatanId. The old options tiles, mode,
  *                                 fill, kecFill and glow are accepted and ignored: nothing is ever filled.
+ *                                 V8 (V7_SPEC §5.1, V8_SPEC P4): chipBars(kecId) → 0..3 draws 1 to 3 small bars after the
+ *                                 chip's words, in the chip's own ink (Calon Prioritas: daya beli area rendah · sedang ·
+ *                                 tinggi), never a fill or a colour scale; such chips lead from <id>-labels-bars1..3 (and
+ *                                 <id>-labels-rank-bars1..3), whose prop mcdBars names the count. chipTitle(kecId) →
+ *                                 string adds one line to the chip's hover card (a canvas chip has no DOM title).
  *   hovered() → the kecamatan id under the pointer (sections add it to their layer cache key)
  *   priority(stats, {n}) → [{rank, id, name, kota, potential, notYet, coverage, band, ranked, distKm, why, gmaps}]
  *                                 the ONE "where to go next" ranking (UX fix plan A-06, D4)
@@ -1033,6 +1038,14 @@
   var LABEL_SIZE = 12, LABEL_LH = 4 / 3, PAD_L = 9, PAD_R = 10, PAD_Y = 3, DOT_SLOT = 13, BADGE_W = 16, BADGE_SLOT = 24;
   var CHIP_H = LABEL_SIZE * LABEL_LH + 2 * PAD_Y;
   function padLeft(dot, badge) { return (badge ? BADGE_SLOT : PAD_L) + (dot ? DOT_SLOT : 0); }
+  /* V8 (V7_SPEC §5.1): the chip's bars (option chipBars) sit after the words: 6 px of air, then 1 to 3 bars 3 px wide and
+     2 px apart, 5, 8 and 11 px tall, bottoms on one line, in the chip's name ink */
+  var BAR_W = 3, BAR_GAP = 2, BARS_LEAD = 6, BAR_H = [5, 8, 11];
+  function barsWidth(n) { return n > 0 ? n * BAR_W + (n - 1) * BAR_GAP : 0; }
+  function barsSlot(n) { return n > 0 ? BARS_LEAD + barsWidth(n) : 0; }
+  function padRight(n) { return PAD_R + barsSlot(n); }
+  /** A short stable signature of a string (labels' cache keys stay short). */
+  function sigOf(s) { var x = 5381; for (var i = 0; i < s.length; i++) x = ((x << 5) + x + s.charCodeAt(i)) | 0; return (x >>> 0).toString(36); }
   /* a kecamatan is an area, so a label may move a little inside it when its first place is taken */
   var NUDGE = [[0, 0], [0, -14], [0, 14], [-24, 0], [24, 0], [0, -28], [0, 28], [-24, -14], [24, 14], [24, -14], [-24, 14],
     [-40, 0], [40, 0], [-28, -28], [28, 28], [-28, 28], [28, -28], [0, -42], [0, 42]];
@@ -1060,15 +1073,15 @@
       return (b.potential || 0) - (a.potential || 0) || (a.name < b.name ? -1 : 1);
     });
   }
-  /** declutter(list, zoom, textOf, selected, key, prio, padOf) → the chips that fit, each {…, off, w, pl, cw}. */
-  function declutter(list, zoom, textOf, selected, key, prio, padOf) {
+  /** declutter(list, zoom, textOf, selected, key, prio, padOf, padROf) → the chips that fit, each {…, off, w, pl, cw}. */
+  function declutter(list, zoom, textOf, selected, key, prio, padOf, padROf) {
     var zq = Math.round(zoom * 4) / 4, k = key + '#' + zq + '#' + (selected || '') + '#' + (prio || []).join(',');
     if (DECL.key === k) return DECL.list;
     var W0 = 512 * Math.pow(2, zq), boxes = [], out = [];
     var c0 = (MCD.config && MCD.config.rings && MCD.config.rings.center) || [106.91329, -6.32818];
     var cx0 = (c0[0] + 180) / 360 * W0, sc0 = Math.sin(c0[1] * Math.PI / 180), cy0 = (0.5 - Math.log((1 + sc0) / (1 - sc0)) / (4 * Math.PI)) * W0;
     declutterOrder(list, selected, prio).forEach(function (l) {
-      var w = textWidth(String(textOf(l)), LABEL_SIZE), pl = padOf ? padOf(l) : PAD_L, cw = pl + w + PAD_R, hh = CHIP_H / 2;
+      var w = textWidth(String(textOf(l)), LABEL_SIZE), pl = padOf ? padOf(l) : PAD_L, cw = pl + w + (padROf ? padROf(l) : PAD_R), hh = CHIP_H / 2;
       var x = (l.position[0] + 180) / 360 * W0;
       var sy = Math.sin(l.position[1] * Math.PI / 180), y = (0.5 - Math.log((1 + sy) / (1 - sy)) / (4 * Math.PI)) * W0;
       /* nearest nudges first; at equal distance, the one that moves away from Mabes TNI (out of the crowd) */
@@ -1137,6 +1150,18 @@
     var lw = lineWidth(zoom);
     /* a section may give its own hover card for the shapes and the chips (opts.tooltip(kecId, stats) → model | null) */
     var tipFn = isFn(opts.tooltip) ? opts.tooltip : null;
+    /* V8 (V7_SPEC §5.1): the chip's own title (opts.chipTitle(kecId) → string), one more line on the chip's hover card */
+    var titleFn = isFn(opts.chipTitle) ? opts.chipTitle : null;
+    var withTitle = function (t, o) {
+      if (!t || !titleFn || !o || !o.position || o.polygon) return t;
+      var line = null;
+      try { line = titleFn(o.kec); } catch (e) { line = null; }
+      if (line == null || line === '') return t;
+      var lines = (t.lines || []).slice(), at = lines.length;
+      while (at > 0 && lines[at - 1] && lines[at - 1].kind === 'meta') at--;
+      lines.splice(at, 0, { kind: 'body', text: String(line) });
+      return Object.assign({}, t, { lines: lines });
+    };
     var meta = {
       kind: KIND,
       id: function (o) { return o.kec; },
@@ -1146,8 +1171,8 @@
       },
       tooltip: function (o) {
         if (!o || !o.kec) return null;
-        if (tipFn) { try { var t = tipFn(o.kec, s); if (t) return t; } catch (e) { /* the default card */ } }
-        return tooltip(o.kec, s, Z);
+        if (tipFn) { try { var t = tipFn(o.kec, s); if (t) return withTitle(t, o); } catch (e) { /* the default card */ } }
+        return withTitle(tooltip(o.kec, s, Z), o);
       }
     };
     /* the click and hover target: one invisible shape per kecamatan (never painted, never highlighted) */
@@ -1286,7 +1311,7 @@
       pack = null;
     }
     if (!pack) return null;
-    var sig = theme + '|' + dpr + '|' + side + '|' + items.map(function (it) { return [it.key, it.text, Math.round(it.cw * 10), it.pl, it.dot ? it.dot.join(',') : '', it.badge || '', it.sel ? 1 : 0, it.muted ? 1 : 0].join('~'); }).join('^');
+    var sig = theme + '|' + dpr + '|' + side + '|' + items.map(function (it) { return [it.key, it.text, Math.round(it.cw * 10), it.pl, it.dot ? it.dot.join(',') : '', it.badge || '', it.sel ? 1 : 0, it.muted ? 1 : 0, it.bars || 0].join('~'); }).join('^');
     var hit = CHIP_ATLAS[id];
     if (hit && hit.sig === sig && hit.canvas) return hit;
     var C = CHIP_INK[theme] || CHIP_INK.day, mapping = {}, cv;
@@ -1324,6 +1349,12 @@
         var nw = ctx.measureText(parts[0]).width;
         ctx.font = '500 ' + LABEL_SIZE + 'px ' + FONT_SANS; ctx.fillStyle = C.rest; ctx.fillText(parts[1], tx + nw, cy + 0.5);
       }
+      if (it.bars > 0 && !muted) {
+        /* V8 (V7_SPEC §5.1): 1-3 small bars after the words, in the chip's name ink (no fill, no colour scale) */
+        var bx = x0 + w - PAD_R - barsWidth(it.bars);
+        ctx.fillStyle = C.name;
+        for (var bi = 0; bi < it.bars; bi++) ctx.fillRect(bx + bi * (BAR_W + BAR_GAP), cy + 5.5 - BAR_H[bi], BAR_W, BAR_H[bi]);
+      }
       mapping[it.key] = { x: ox, y: oy, width: Math.min(Math.ceil(widths[i] * dpr), pack.w - ox), height: Math.ceil(hS * dpr),
         anchorX: (CHIP_M + w / 2) * dpr, anchorY: (CHIP_M + h / 2) * dpr, mask: false };
     });
@@ -1357,23 +1388,39 @@
     /* item 30: the outer ring's muted chips (name only), placed after every chip of the focus */
     var ringOn = c.ring && opts.ringLabels !== false;
     if (ringOn) labelData = labelData.concat(wide ? c.g.ringLabels.filter(function (l) { return outerOn || l.kec === selected; }) : c.g.ringLabels);
+    /* V8 (V7_SPEC §5.1): the section's bars per kecamatan (0-3), read once per call; the muted ring chips carry none */
+    var barsBy = {}, barsKey = '';
+    if (isFn(opts.chipBars)) {
+      var bl = [];
+      labelData.forEach(function (l) {
+        if (l.ring || barsBy[l.kec] != null) return;
+        var n = 0;
+        try { n = +opts.chipBars(l.kec); } catch (e) { n = 0; }
+        n = isNum(n) ? clamp(Math.round(n), 0, 3) : 0;
+        barsBy[l.kec] = n;
+        if (n) bl.push(l.kec + ':' + n);
+      });
+      barsKey = bl.length ? 'b' + sigOf(bl.sort().join(',')) : '';
+    }
+    var barsOf = function (l) { return l.ring ? 0 : (barsBy[l.kec] || 0); };
     var textOf = function (l) { return l.ring ? l.name : labelText(recOf(l.kec), s.kecamatan[l.kec], s, c.zoom, opts); };
     var padOf = function (l) { return l.ring ? PAD_L : padLeft(dots, !!rankOfId[l.kec]); };
+    var padROf = function (l) { return padRight(barsOf(l)); };
     var labelKey = [s.key || '', K.key, selected || '', prio.join(','), dots ? 1 : 0, c.zoom >= 11 ? 2 : 1, isFn(opts.labelText) ? (opts.labelKey || '') : '', ringOn ? 'r' : '',
-      wide ? 'k30' + (outerOn ? 'o' : '') : ''].join('#');
-    if (opts.collide !== false) labelData = declutter(labelData, c.zoom, textOf, selected, labelKey + '#' + labelData.length, prio, padOf);
+      wide ? 'k30' + (outerOn ? 'o' : '') : '', barsKey].join('#');
+    if (opts.collide !== false) labelData = declutter(labelData, c.zoom, textOf, selected, labelKey + '#' + labelData.length, prio, padOf, padROf);
     var geomOf = {};
     labelData.forEach(function (l) {
-      var w = isNum(l.w) ? l.w : textWidth(String(textOf(l)), LABEL_SIZE), pl = isNum(l.pl) ? l.pl : padOf(l);
-      geomOf[l.kec] = { w: w, pl: pl, cw: pl + w + PAD_R, off: l.off || [0, 0] };
+      var w = isNum(l.w) ? l.w : textWidth(String(textOf(l)), LABEL_SIZE), pl = isNum(l.pl) ? l.pl : padOf(l), pr = padROf(l);
+      geomOf[l.kec] = { w: w, pl: pl, pr: pr, bars: barsOf(l), cw: pl + w + pr, off: l.off || [0, 0] };
     });
-    var gOf = function (l) { return geomOf[l.kec] || { w: 60, pl: PAD_L, cw: 60 + PAD_L + PAD_R, off: [0, 0] }; };
+    var gOf = function (l) { return geomOf[l.kec] || { w: 60, pl: PAD_L, pr: PAD_R, bars: 0, cw: 60 + PAD_L + PAD_R, off: [0, 0] }; };
     var dotOf = function (l) { return chipDot(s, l.kec, K.theme); };
     var keyOf = function (l) { return l.kec + (l.kec === selected ? '#s' : ''); };
     var atlas = !d.IconLayer ? null : chipAtlas(id, labelData.map(function (l) {
       var gm = gOf(l);
       if (l.ring) return { key: keyOf(l), text: textOf(l), cw: gm.cw, pl: gm.pl, dot: null, badge: null, sel: l.kec === selected, muted: true };
-      return { key: keyOf(l), text: textOf(l), cw: gm.cw, pl: gm.pl, dot: dots ? dotOf(l) : null, badge: rankOfId[l.kec] || null, sel: l.kec === selected };
+      return { key: keyOf(l), text: textOf(l), cw: gm.cw, pl: gm.pl, dot: dots ? dotOf(l) : null, badge: rankOfId[l.kec] || null, sel: l.kec === selected, bars: gm.bars };
     }), K.theme);
     var ringData = labelData.filter(function (l) { return !!l.ring; });
     labelData = labelData.filter(function (l) { return !l.ring; });
@@ -1384,9 +1431,10 @@
        it up to 42 px, so it often lies over a NEIGHBOURING kecamatan; a click on it used to fall through to that
        kecamatan's invisible fill. The chip is the top layer, so its pick (meta.pick → its own kec) wins. */
     var pick = c.pickable !== false && c.meta ? c.meta : null;
-    function chips(suffix, data, pl) {
+    function chips(suffix, data, pl, pr, nb) {
       if (!data.length) return;
       var lid = id + suffix;
+      pr = isNum(pr) ? pr : PAD_R;
       /* the invisible leader: the chip's exact box, for the label layout of map.js */
       out.top.push(new d.TextLayer({
         id: lid, data: data, getPosition: function (l) { return l.position; },
@@ -1394,11 +1442,13 @@
         fontFamily: FONT_SANS, fontWeight: 600, characterSet: 'auto', fontSettings: { sdf: true },
         getColor: atlas ? none : K.text, getTextAnchor: 'start', getAlignmentBaseline: 'center',
         getPixelOffset: function (l) { var gm = gOf(l); return [gm.off[0] - gm.cw / 2 + gm.pl, gm.off[1]]; },
-        background: true, backgroundPadding: [pl, PAD_Y, PAD_R, PAD_Y],
+        background: true, backgroundPadding: [pl, PAD_Y, pr, PAD_Y],
         getBackgroundColor: atlas ? none : K.chip, getBorderColor: atlas ? none : K.chipLine, getBorderWidth: atlas ? 0 : 1,
         updateTriggers: { getText: labelKey, getPixelOffset: labelKey, getColor: K.key + (atlas ? 1 : 0), getBackgroundColor: K.key + (atlas ? 1 : 0) },
         /* without a chip atlas the leader's own background is the chip: then it takes the clicks */
-        pickable: !atlas && !!pick, mcd: !atlas && pick ? pick : undefined, beforeId: beforeId
+        pickable: !atlas && !!pick, mcd: !atlas && pick ? pick : undefined, beforeId: beforeId,
+        /* V8: the bars of these chips (map.js draws them on the focused kecamatan's chip too) */
+        mcdBars: nb > 0 ? nb : undefined
       }));
       if (!atlas) return;
       /* the chip itself: one canvas-drawn sprite per kecamatan, centred on its label point */
@@ -1411,9 +1461,16 @@
         mcdFollow: lid, pickable: !!pick, mcd: pick || undefined, beforeId: beforeId
       }));
     }
-    chips('-labels', plain, padLeft(dots, false));
-    chips('-labels-rank', ranked, padLeft(dots, true));
-    chips('-labels-ring', ringData, PAD_L);
+    /* the leader's right padding holds the bars, so the chips with 1, 2 or 3 bars lead from layers of their own */
+    function chipGroups(suffix, data, pl) {
+      if (!barsKey) { chips(suffix, data, pl, PAD_R, 0); return; }
+      [0, 1, 2, 3].forEach(function (nb) {
+        chips(suffix + (nb ? '-bars' + nb : ''), data.filter(function (l) { return barsOf(l) === nb; }), pl, padRight(nb), nb);
+      });
+    }
+    chipGroups('-labels', plain, padLeft(dots, false));
+    chipGroups('-labels-rank', ranked, padLeft(dots, true));
+    chips('-labels-ring', ringData, PAD_L, PAD_R, 0);
   }
 
   /* ------------------------------------------------------------- names, tooltip, hit-testing */

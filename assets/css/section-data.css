@@ -2,8 +2,11 @@
  * Section 5 · Data & Privasi: a page without a map (UX_FIX_PLAN A-03, C-05, C-06).
  * Sederhana: status line, four colour-coded cards (green = terbaru / tersimpan, amber =
  * perlu diperbarui / belum disimpan / belum dipasang, red = kedaluwarsa, grey = belum
- * diimpor) and one primary button. Detail: four tabs (Impor · File dimuat · Simpan &
- * kata sandi · Pengaturan & sumber) of exhibits (brand.css .exhibit).
+ * diimpor) and one primary button. Detail: five tabs (Impor · File dimuat · Kebijakan &
+ * leads · Simpan & kata sandi · Pengaturan & sumber) of exhibits (brand.css .exhibit).
+ * V8 (docs/V8_SPEC.md §4.2, D58; MOBILE_UX_PLAN M3, M11): the import cards (Funding merchant (cabang), File KPI
+ * bulanan area), the tab Kebijakan & leads (it prints one line only, D28), 44 px fields on touch screens, every
+ * :hover inside @media (hover: hover).
  * File names in Inter Tight 600 roman; text 12 px or larger. Status colours only through --status-*;
  * tokens only, both themes. Prefix .dp-. Shared .dp-block / .dp-p /
  * .dp-actions / .dp-demo live in shell.css.
@@ -21,7 +24,7 @@
   display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 2px;
   font: 600 13px/18px var(--font-sans); color: var(--gold-soft); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule-gold);
 }
-.dp-link:hover { text-decoration-color: currentColor; }
+@media (hover: hover) { .dp-link:hover { text-decoration-color: currentColor; } }
 .dp-actions { align-items: center; }
 .dp-sep { height: 1px; margin: 18px 0 16px; background: var(--rule); }
 .dp-bullets { display: grid; gap: 4px; margin: 10px 0 0; padding-left: 18px; list-style: disc; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
@@ -82,7 +85,8 @@
   transition: background-color var(--dur-hover) var(--ease-standard), border-color var(--dur-hover) var(--ease-standard);
 }
 .dp-drop--big { min-height: 176px; }
-.dp-drop:hover, .dp-drop.is-over { background: var(--gold-a10); border-style: solid; }
+.dp-drop.is-over { background: var(--gold-a10); border-style: solid; }
+@media (hover: hover) { .dp-drop:hover { background: var(--gold-a10); border-style: solid; } }
 .dp-drop__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--gold-a10); color: var(--gold-soft); }
 .dp-drop__line { margin: 2px 0 0; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
 .dp-drop__or { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
@@ -195,7 +199,7 @@
 .dp-ov__log { border-top: 1px solid var(--rule); padding-top: 10px; }
 .dp-ov__log[hidden] { display: none; }
 .dp-ov__log > summary { min-height: 32px; display: flex; align-items: center; font: 600 13px/18px var(--font-sans); color: var(--text-2); cursor: pointer; }
-.dp-ov__log > summary:hover { color: var(--text-1); }
+@media (hover: hover) { .dp-ov__log > summary:hover { color: var(--text-1); } }
 .dp-ov__log .dp-log { margin-top: 6px; }
 .dp-ov__demo { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--rule); border-radius: var(--r-panel); }
 .dp-ov__demo-t { margin: 0; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
@@ -215,7 +219,7 @@
   font: 600 12.5px/1 var(--font-sans); color: var(--text-2);
   transition: background-color var(--dur-hover) var(--ease-standard), color var(--dur-hover) var(--ease-standard);
 }
-.dp-jump__b:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .dp-jump__b:hover { background: var(--surface-hover); color: var(--text-1); } }
 
 .dp-x { margin-top: 16px; container-type: inline-size; scroll-margin-top: 64px; color: var(--text-1); }
 .dp-x__t { color: var(--text-1); }
@@ -381,7 +385,7 @@ body[data-section="data"] .pg-sheet .pg-card__value { font-size: 26px; line-heig
 .dp-ds tr.is-out .dp-ds__src, .dp-ds tr.is-out td.num { color: var(--text-3); }
 .dp-ds__act { text-align: right; width: 1%; }
 .dp-remove { height: 30px; color: var(--neg); }
-.dp-remove:hover:not(:disabled) { color: var(--neg); background: var(--neg-a06); }
+@media (hover: hover) { .dp-remove:hover:not(:disabled) { color: var(--neg); background: var(--neg-a06); } }
 
 .dp-where { display: grid; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
 .dp-where__head { display: flex; align-items: center; gap: 8px; }
@@ -666,3 +670,89 @@ body[data-section="data"] .pg-sheet .pg-card--bad::before { background: var(--st
   .dp-gk__form { grid-template-columns: minmax(0, 1fr); }
   .dp-gk__act { padding-bottom: 0; }
 }
+
+/* ── V8: import cards (docs/V8_SPEC.md §4.2.1, §4.2.3) ──────────────────────
+   "Funding merchant (cabang)" (one row for both bank files, D45) and "File KPI bulanan area". Counts, dates and
+   notes only; never a cell value of the files. */
+.dp-icards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; min-width: 0; }
+.dp-icard {
+  display: grid; gap: 10px; min-width: 0; padding: 16px 18px; scroll-margin-top: 64px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card); color: var(--text-1);
+}
+.dp-icard__t { margin: 0; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.dp-icard__lines { display: grid; gap: 2px; margin: 0; padding-left: 18px; list-style: disc; font: 400 13px/19px var(--font-sans); color: var(--text-2); }
+.dp-icard__now { margin: 0; font: 500 13px/18px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.dp-icard__now[hidden] { display: none; }
+.dp-icard__busy { display: flex; align-items: center; gap: 8px; margin: 0; font: 500 13.5px/20px var(--font-sans); color: var(--text-2); }
+.dp-icard .dp-actions { margin: 0; }
+.dp-icard .dp-fine { margin: 0; }
+.dp-fund__body { display: grid; gap: 10px; min-width: 0; }
+.dp-fund__rep { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-ctl); background: var(--surface-well); }
+.dp-fund__rep .dp-h3 { margin: 0; }
+.dp-fund__files { margin: 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); overflow-wrap: anywhere; }
+.dp-fund__head { margin: 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+.dp-fund__rep .dp-find { margin: 0; }
+.dp-fund__act { margin-top: 4px; }
+.dp-fund__done { margin: 0; }
+.dp-luimp:empty { display: none; }
+.dp-ds__sub { display: block; margin-top: 2px; font: 400 12px/16px var(--font-sans); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.dp-ds__go { height: 30px; }
+
+/* ── V8: tab "Kebijakan & leads" (V7 §8 as trimmed by D41, D51, D52) ──────── */
+.dp-pol__banner:empty { display: none; }
+.dp-callout--mid { align-items: center; flex-wrap: wrap; border-color: var(--status-mid); background: var(--status-mid-a20); }
+.dp-callout--mid > .icon { color: var(--warn); margin-top: 0; }
+.dp-pol__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; min-width: 0; }
+.dp-pol__col { display: grid; gap: 16px; min-width: 0; }
+.dp-pol__col[hidden], .dp-pol__thr[hidden] { display: none; }
+.dp-pol__thr:empty { display: none; }
+@media (min-width: 1280px) { .dp-pol__grid.has-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.dp-pol-card {
+  display: grid; gap: 10px; min-width: 0; padding: 16px 18px; scroll-margin-top: 64px;
+  border: 1px solid var(--glass-border-card); border-radius: var(--r-card); background: var(--glass-card);
+  box-shadow: var(--glass-hl-card), var(--glass-shadow-card);
+}
+.dp-pol-card__t { margin: 0; font: 600 16px/22px var(--font-sans); color: var(--text-1); }
+.dp-pol-card .dp-p { margin: 0; }
+.dp-pol-card .dp-actions { margin: 4px 0 0; }
+.dp-pol__gh { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.dp-pol__gh .dp-h3 { margin: 0; }
+.dp-pol__st { font: 500 12px/16px var(--font-sans); color: var(--warn); }
+.dp-pol__st.is-ok { color: var(--pos); }
+.dp-pol__in { width: 100%; max-width: 280px; }
+.dp-pol__actor { width: 96px; text-transform: uppercase; letter-spacing: .04em; }
+.dp-tag--empty { color: var(--text-2); border-color: var(--rule-strong); background: transparent; }
+.dp-pol__logwrap:empty { display: none; }
+.dp-pol__log { border-top: 1px solid var(--rule); padding-top: 6px; }
+.dp-pol__logsum { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
+.dp-pol__logn { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--surface-raised); font: 600 12px/22px var(--font-sans); color: var(--text-2); text-align: center; }
+.dp-pol__rows { display: grid; gap: 6px; margin: 6px 0 8px; padding: 0; list-style: none; }
+.dp-pol__row { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr); gap: 2px 12px; padding: 6px 0; border-bottom: 1px solid var(--rule); font: 400 13px/19px var(--font-sans); color: var(--text-1); }
+.dp-pol__at { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dp-pol__txt { min-width: 0; overflow-wrap: anywhere; }
+.dp-pol__chg { grid-column: 2; font-size: 12px; color: var(--text-2); }
+.dp-pol__chg > summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; }
+.dp-pol__chg ul { margin: 2px 0 0; padding-left: 18px; }
+.dp-pol__foot { margin: 0; }
+/* D28: the policy tab prints one line only (its values never reach paper or a PDF) */
+.dp-print-line { display: none; }
+@media print {
+  .dp-panel--policy > :not(.dp-print-line) { display: none !important; }
+  .dp-panel--policy > .dp-print-line { display: block !important; margin: 0; font: 400 12px/18px var(--font-sans); color: var(--text-1); }
+}
+@media (max-width: 599px) {
+  .dp-icard, .dp-pol-card { padding: 14px 12px; }
+  .dp-pol__row { grid-template-columns: minmax(0, 1fr); }
+  .dp-pol__chg { grid-column: 1; }
+  .dp-pol__in { max-width: none; }
+}
+
+/* ── V8: phones (MOBILE_UX_PLAN M3; the 16 px rule itself is global, shell.css) ── */
+@media (pointer: coarse) {
+  .dp-select, .dp-select--sm, .dp-in, .dp-date { min-height: 44px; }
+  .dp-remove, .dp-ds__go { min-height: 44px; }
+}
+
+/* V8 integration (MOBILE_UX_PLAN M7, V8_SPEC X13): "Unduh template permintaan data" in Sederhana was 40 px on phones */
+@media (max-width: 599px) { .dp-ov__links .btn { min-height: 44px; } }

@@ -1039,7 +1039,8 @@
       } else rows.push({ shape: SHAPE[k], rgb: k === 'merchant' ? ink.quiet : ink.fill, label: kindDef(k).label });
     });
     var groups = [{ id: 'wealth-kinds', title: Wc.TEXT.targets, rows: rows }];
-    groups.push({ id: 'wealth-bars', title: 'Kecamatan', rows: [{ glyph: 'chip', label: Wc.TEXT.legendBars }] });
+    /* the map legend draws the chip with its three small bars (map.js, V8 V7_SPEC §5.1) */
+    groups.push({ id: 'wealth-bars', title: 'Kecamatan', rows: [{ glyph: 'chip', bars: 3, label: Wc.TEXT.legendBars }] });
     var T = MCD.territory, lines = T && isFn(T.legendGroups) ? (T.legendGroups({ ms: ms, stats: terrStats() }) || []).filter(function (g) { return g.id === 'territory-lines'; })[0] : null;
     if (lines) groups.push(lines);
     return groups;

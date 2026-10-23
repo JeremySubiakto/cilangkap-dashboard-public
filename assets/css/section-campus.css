@@ -19,7 +19,7 @@ body[data-section="campus"] {
   font: inherit; font-weight: 600; color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
 }
-.cp-link:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .cp-link:hover { text-decoration-color: var(--text-1); } }
 .cp-link:focus-visible, .cp-ext:focus-visible, .cp-copy:focus-visible, .cp-morebtn:focus-visible, .cp-unplaced__btn:focus-visible,
 .cp-mini__row:focus-visible, .cp-plist__row:focus-visible, .cp-step:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .cp-note { margin: 6px 0 0; font: 400 12px/17px var(--font-sans); color: var(--text-3); }
@@ -47,7 +47,7 @@ body[data-section="campus"] {
 .cp-rchips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 body[data-section="campus"] .cp-rchips .chip { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: left;
   border-color: var(--rule); background: transparent; color: var(--text-2); font: 500 12.5px/16px var(--font-sans); cursor: pointer; }
-body[data-section="campus"] .cp-rchips .chip:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { body[data-section="campus"] .cp-rchips .chip:hover { background: var(--surface-hover); color: var(--text-1); } }
 body[data-section="campus"] .cp-rchips .chip[aria-checked="true"] { background: var(--signal-a20); border-color: var(--rule-signal); color: var(--text-1); font-weight: 600; cursor: default; }
 .cp-rchips .chip:focus-visible, .cp-seg .seg__opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 body[data-section="campus"] .guide .cp-rchips .chip { min-height: 40px; }
@@ -60,7 +60,7 @@ body[data-section="campus"] .guide .cp-rchips .chip { min-height: 40px; }
 /* external links: host or label, the external icon, a hidden ", terbuka di tab baru" */
 .cp-ext { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; color: var(--text-1); font: 600 13px/18px var(--font-sans);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px; overflow-wrap: anywhere; }
-.cp-ext:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .cp-ext:hover { text-decoration-color: var(--text-1); } }
 .cp-ext .icon { flex: none; width: 12px; height: 12px; color: var(--text-3); }
 .cp-host { font: 400 12px/18px var(--font-sans); color: var(--text-3); }
 
@@ -159,7 +159,7 @@ body[data-section="campus"] .guide .cp-chips .chip { min-height: 40px; }
 .cp-morebtn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 6px 10px;
   border: 1px solid var(--rule); border-radius: var(--r-ctl); background: transparent; cursor: pointer;
   font: 600 13px/18px var(--font-sans); color: var(--text-1); }
-.cp-morebtn:hover { background: var(--surface-hover); }
+@media (hover: hover) { .cp-morebtn:hover { background: var(--surface-hover); } }
 .cp-morebtn .icon { transition: transform var(--dur-fast) var(--ease-out); }
 .cp-morebtn[aria-expanded="true"] .icon { transform: rotate(180deg); }
 .guide .cp-morebtn { min-height: 40px; }
@@ -206,7 +206,7 @@ body[data-section="campus"] .guide .cp-chips .chip { min-height: 40px; }
 .cp-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .cp-mini__row { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; padding: 7px 6px;
   border: 0; border-radius: var(--r-ctl); background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.cp-mini__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .cp-mini__row:hover { background: var(--surface-hover); } }
 .cp-mini__row .cp-sym { margin-top: 1px; }
 .cp-mini__txt { display: grid; gap: 1px; min-width: 0; }
 .cp-mini__name { font: 600 13px/18px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -311,7 +311,7 @@ body[data-section="campus"] .btn--bar { min-height: 36px; }
 .cp-step__li { display: block; min-width: 0; }
 .cp-step { width: 100%; min-height: 32px; display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) 36px; align-items: center; gap: 8px; padding: 4px 6px;
   border: 1px solid transparent; border-radius: var(--r-ctl); background: none; cursor: pointer; text-align: left; color: var(--text-1); }
-.cp-step:hover { background: var(--surface-hover); }
+@media (hover: hover) { .cp-step:hover { background: var(--surface-hover); } }
 .cp-step.is-on { border-color: var(--rule-signal); background: var(--signal-a20); }
 .cp-step__l { font: 500 12.5px/18px var(--font-sans); }
 .cp-step__bar { height: 8px; border-radius: 4px; background: var(--rule); overflow: hidden; }
@@ -327,7 +327,7 @@ body[data-section="campus"] .btn--bar { min-height: 36px; }
 .cp-plist__g { margin: 10px 0 2px; font: 600 12px/16px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .cp-plist__row { display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-left-width: 3px; border-radius: var(--r-ctl);
   background: transparent; cursor: pointer; text-align: left; color: var(--text-1); }
-.cp-plist__row:hover { background: var(--surface-hover); }
+@media (hover: hover) { .cp-plist__row:hover { background: var(--surface-hover); } }
 .cp-plist__row--ok { border-left-color: var(--status-ok); }
 .cp-plist__row--mid { border-left-color: var(--status-mid); }
 .cp-plist__row--bad { border-left-color: var(--status-bad); }
@@ -358,7 +358,7 @@ body[data-section="campus"] .btn--bar { min-height: 36px; }
 .cp-mail { overflow-wrap: anywhere; }
 .cp-copy { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--rule); border-radius: var(--r-ctl);
   background: transparent; cursor: pointer; font: 500 12px/1 var(--font-sans); color: var(--text-2); }
-.cp-copy:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .cp-copy:hover { background: var(--surface-hover); color: var(--text-1); } }
 .cp-copy .icon { width: 12px; height: 12px; }
 
 .cp-rts { display: grid; gap: 2px; }
@@ -453,3 +453,11 @@ body[data-section="campus"] .btn--bar { min-height: 36px; }
 .cp-work.ws-drawer .cp-ex--fill .cp-tools--list { margin-bottom: 2px; }
 /* "Lihat daftar kampus" on a short screen opens the drawer to full height: the list then fills it */
 .cp-work.ws-drawer.is-full .cp-ex--fill .cp-table { height: max(260px, calc(var(--ws-drawer-vis, 0px) - 342px)); }
+
+/* ── V8 phones (MOBILE_UX_PLAN M15; docs/V8_SPEC.md §5.7) ──────────────────────────────────────── */
+@media (max-width: 599px) {
+  .cp-table, .cp-ex--fill .cp-table { height: auto; max-height: 440px; max-height: min(440px, 60svh); overscroll-behavior: contain; }
+}
+@media (pointer: coarse) {
+  .cp-search__in { min-height: 44px; }
+}

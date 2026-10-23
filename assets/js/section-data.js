@@ -52,6 +52,27 @@
  *     scope per tab, the Kampus list view).
  *   No password, key or follow-up entry is ever written, logged or shown by this file.
  *
+ * V8 (docs/V8_SPEC.md §3.2, §4.2; D41, D45, D46, D51, D52, D61; HEALTH_SPEC §8; MOBILE_UX_PLAN M3, M11, M16):
+ *   - Impor › "Funding merchant (cabang)": ONE import row for the branch's merchant balance files (the region report
+ *     "Funding Merchant Mass Retail" and the branch file "Cilangkap Merchant Area"). MCD.funding.importFiles reads one or
+ *     two files and keeps branch 12903 only; its merchant-name sheet goes through the teammates' Saldo schema
+ *     (MCD.importer.parse(sheet, 'saldo')). "Hasil pemeriksaan" shows counts, dates and the module's notes only (never a
+ *     cell value), the dropped columns in words and the two honest lines of D46. Nothing is kept before "Gunakan data
+ *     ini": then MCD.funding.apply (dataset funding_merchant) and MCD.importer.apply('saldo', …), both with the funding
+ *     position date. The raw sheets are emptied as soon as they are read. One "Hapus" in File dimuat clears both.
+ *     A funding or saldo file dropped on the generic Impor zone lands in this row (MCD.funding.detect, or the best schema
+ *     is one with via 'funding'); such schemas, vault-only schemas and 'leads' never appear in the generic type list.
+ *   - Whole-workbook readers are a list (MCD.lvm, MCD.kpi, MCD.funding .workbookReader), asked in that order. The KPI
+ *     workbook of the area is checked here with MCD.kpi.visibleWarnings (D41: notes about the hidden keys never show);
+ *     after "Gunakan data ini" the page offers "Lihat Posisi cabang".
+ *   - Tab "Kebijakan & leads" (V7 §8 as trimmed by D41, D51, D52): the lead card (MCD.leadsUi.settingsCard), the card
+ *     "Ambang daftar leads" only while the lead list is on, the KPR policy card only while KPR is shown, the Riwayat,
+ *     the banner while MCD.policy.dirty(). Fields: no <form>, autocomplete off, spellcheck off, translate="no"; the tab
+ *     prints one line only (D28). "Impor daftar leads" (MCD.leadsUi.importFlow) sits in Impor and shows only while on.
+ *   - Actions data:policy, data:leads, data:kpi, data:funding. Sources, privacy and the browser list gain Kesehatan,
+ *     funding merchant, Perkiraan omzet, the KPI file, the lead list and Rencana kunjungan; "Tindak lanjut di komputer
+ *     ini" counts SMA, Kampus and Kesehatan (health.pipeline).
+ *
  * Colour code (COPY_STYLE_EN item 11) for a file: green = up to date, amber =
  * update due / not saved yet, red = out of date, grey = not imported. The age
  * limits are an assumption for a monthly report and are said in the legend.
@@ -103,6 +124,22 @@
   };
   var KPI_ENTRY = { code: 'lvm_kpi', type: 'lvm_kpi', key: 'lvm_kpi', label: 'KPI cabang (UREG dan USAK)',
     what: 'Pengguna Livin’ Merchant terdaftar (UREG) dan aktif (USAK) per cabang, terhadap target.\nDari sheet UREG dan USAK laporan Rev LVM.' };
+  /* V8 rows of File dimuat that are not columns of a template (D45; V7 §11.2): the funding row also holds the Saldo
+     merchant list (one row, one "Hapus"); the KPI workbook and the masked lead list have rows of their own */
+  /* V8 final fix: the words of the funding and KPI files on the Sederhana cards (the template sheets carry their own) */
+  var V8_CARD = {
+    funding: { unit: ['merchant', 'merchant'], need: 'File funding merchant cabang', brief: 'Laporan region atau file Cilangkap Merchant Area.',
+      use: 'Menunjukkan merchant KCP Cilangkap di peta dan EDC yang tidak bertransaksi.' },
+    kpi: { unit: ['baris', 'baris'], need: 'Laporan KPI area', brief: 'Laporan KPI area bulanan.', use: 'Hasilnya tampil di Posisi cabang.' }
+  };
+  var V8_ENTRY = {
+    funding: { code: 'funding', type: 'funding', label: 'Funding merchant (cabang)', short: 'Funding merchant', sheetText: 'Laporan region atau file cabang',
+      what: 'Laporan Funding Merchant Mass Retail atau file Cilangkap Merchant Area.\nHanya merchant KCP Jakarta Cilangkap (12903) yang disimpan.\nCIF, nomor rekening, nama resmi pemilik dan alamat dihapus saat file dibaca.' },
+    kpi: { code: 'kpi', type: 'kpi', label: 'File KPI bulanan area', short: 'File KPI', sheetText: 'Laporan KPI area',
+      what: 'Laporan KPI area bulanan: DPK, CASA, kredit, booking dan NPL setiap cabang terhadap target.\nHasilnya tampil di Posisi cabang.' },
+    leads: { code: 'leads', type: 'leads', label: 'Daftar leads (CIF disamarkan)', short: 'Daftar leads', sheetText: 'Kebijakan & leads',
+      what: 'Daftar leads dengan CIF disamarkan. Diatur di tab Kebijakan & leads.' }
+  };
 
   // Indonesian names for canonical import columns (the template keeps its Indonesian keys).
   var COL = {
@@ -153,6 +190,7 @@
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
   function str(v) { return v == null ? '' : String(v).trim(); }
   function nInt(x) { return F().int(x); }
+  function cap1(t) { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
   function fm0(x) { return F().int(x); }
   /** Indonesian has no plural: one word for both (the second argument is kept for older call sites). */
   function plural(x, one, many) { return nInt(x) + ' ' + (many && WORD_ID[many] ? WORD_ID[many] : (WORD_ID[one] || one)); }
@@ -352,12 +390,39 @@
   // toRecords(sc), apply(sc, meta), periodLabel(p), summary(sc)}. Null when lvm.js is not loaded.
   function kpiMod() { return (MCD.lvm && MCD.lvm.workbookReader) || null; }
   function kpiKey() { return MCD.data && MCD.data.keyFor ? MCD.data.keyFor('lvm_kpi') : null; }
-  function wbLabel() { var K = kpiMod(); return (K && K.label) || 'Laporan Livin’ Merchant (Rev LVM)'; }
+  function wbLabel(e) { var K = (e && e.reader) || kpiMod(); return (K && K.label) || 'Laporan Livin’ Merchant (Rev LVM)'; }
+  /* V8 §4.2.3: the whole-workbook readers, asked detect() in this order: the Rev LVM report, the KPI workbook of the area
+     (MCD.kpi, V7 §9.2) and the funding merchant report (MCD.funding; handed to the one import row, D45) */
+  function workbookReaders() {
+    return [MCD.lvm && MCD.lvm.workbookReader, MCD.kpi && MCD.kpi.workbookReader, MCD.funding && MCD.funding.workbookReader]
+      .filter(function (R) { return R && typeof R === 'object' && typeof R.detect === 'function'; });
+  }
+  function readerType(R) { return (R && R.TYPE) || 'lvm'; }
+  /** {R, det} for the first reader that knows the workbook (sheet names; the funding reader also reads the sheets), else null. */
+  function detectWorkbook(names, sheets) {
+    var rs = workbookReaders();
+    for (var i = 0; i < rs.length; i++) {
+      var R = rs[i], d = null;
+      try { d = R.detect(readerType(R) === 'funding' ? sheets : names); } catch (e) { d = null; }
+      if (d && d.ok) return { R: R, det: d };
+    }
+    return null;
+  }
 
   function schemasByType() {
     var out = {};
     try { (MCD.importer && MCD.importer.schemas ? MCD.importer.schemas() : []).forEach(function (s) { out[s.type] = s; }); } catch (e) { /* importer missing */ }
     return out;
+  }
+  /** The registered dataset key of a name (MCD.data.keyFor), or null. */
+  function dataKeyAvail(name) { try { return MCD.data && typeof MCD.data.keyFor === 'function' ? MCD.data.keyFor(name) || null : null; } catch (e) { return null; } }
+  /** V8 D45: a type read only through the funding row (schema via 'funding'), as the importer or the module says it. */
+  function viaFunding(type, s) {
+    if (type === 'funding') return true;
+    var via = s && s.via;
+    if (!via && type === 'saldo' && MCD.saldo && MCD.saldo.schema) via = MCD.saldo.schema.via;
+    if (!via && MCD.importer && typeof MCD.importer.lookupSchema === 'function') { try { var ls = MCD.importer.lookupSchema(type); via = ls && ls.via; } catch (e) { via = null; } }
+    return via === 'funding';
   }
   /** Every dataset the importer can fill: template sheets first, the branch KPIs, then the others. */
   function catalog() {
@@ -379,9 +444,15 @@
     Object.keys(by).forEach(function (t) {
       if (seen[t]) return;
       var s = by[t], ex = EXTRA[t];
+      if (viaFunding(t, s) || t === 'leads') return;           // V8: their own rows below, never offered alone
       out.push({ code: t, type: t, key: s.dataKey, label: ex ? ex.label : String(s.label || t).replace(/\s*\([^)]*\)\s*$/, ''),
-        what: ex ? ex.what : (s.description || ''), template: false, primary: ex ? ex.primary : true, schema: s });
+        what: ex ? ex.what : (s.description || ''), template: false, primary: ex ? ex.primary : true, schema: s, pick: !s.vaultOnly });
     });
+    var fk = dataKeyAvail('funding_merchant'), sk = dataKeyAvail('saldo'), kc = dataKeyAvail('kpi_cabang'), lk = dataKeyAvail('leads');
+    var v8 = function (d, key, also) { return Object.assign({}, d, { key: key, also: also || [], template: false, primary: false, schema: null, pick: false }); };
+    if (fk || sk) out.push(v8(V8_ENTRY.funding, fk || sk, fk && sk ? [sk] : []));
+    if (kc) out.push(v8(V8_ENTRY.kpi, kc));
+    if (lk) out.push(v8(V8_ENTRY.leads, lk));
     return out;
   }
   function catalogEntry(type) { return catalog().filter(function (c) { return c.type === type; })[0] || null; }
@@ -399,30 +470,42 @@
     var s = sets[key];
     if (!s || !isRealMeta(s.meta)) return 0;
     if (key === 'sites') return (s.rows || []).filter(function (x) { return x && x.imported; }).length;
+    if (key === 'funding_merchant') return (s.rows || []).filter(function (x) { return x && !x.isMeta; }).length;   // the meta record is not a merchant
     return (s.rows || []).length;
   }
+  /** Rows of a catalogue entry: its own key, else the first key it also holds (the Saldo list in the funding row). */
+  function entryKey(sets, c) {
+    if (realCount(sets, c.key) || !c.also) return c.key;
+    for (var i = 0; i < c.also.length; i++) if (realCount(sets, c.also[i])) return c.also[i];
+    return c.key;
+  }
+  function entryCount(sets, c) { return realCount(sets, entryKey(sets, c)); }
+  function entryMeta(sets, c) { var k = entryKey(sets, c); return (sets[k] && sets[k].meta) || {}; }
   /** Snapshot of the real data: per catalogue entry, totals, the latest data date and the worst freshness. */
   function realStatus() {
     var sets = realSets(), cat = catalog(), loaded = [], keys = {}, rows = 0, asOf = null, primaryN = 0, primaryLoaded = 0, allVault = true, worst = null;
     cat.forEach(function (c) {
-      var n = realCount(sets, c.key), m = (sets[c.key] && sets[c.key].meta) || {};
+      var n = entryCount(sets, c), m = entryMeta(sets, c);
       if (c.primary) primaryN++;
       if (!n) return;
       if (c.primary) primaryLoaded++;
       var f = freshness(n, m);
       loaded.push({ c: c, n: n, meta: m, fresh: f });
       if (c.primary && (!worst || TONE_RANK[f.tone] > TONE_RANK[worst.fresh.tone])) worst = { c: c, fresh: f, meta: m };
-      if (!keys[c.key]) { keys[c.key] = 1; rows += n; }
+      // the masked lead list is never counted into a row total on screen (item 48: groups under 5 stay hidden)
+      if (!keys[c.key]) { keys[c.key] = 1; if (c.type !== 'leads') rows += n; }
       if (m.asOf && (!asOf || m.asOf > asOf)) asOf = m.asOf;
       if (m.source !== 'vault') allVault = false;
     });
     var ex = googleSet(sets), fu = followups(), fuKeep = fu.carry;   // entries or removals (tombstones) to carry
+    var pol = policyKeep();                                          // V8 §3.6: payload.policy and payload.leads
     return { sets: sets, cat: cat, loaded: loaded, rows: rows, asOf: asOf, primaryN: primaryN, primaryLoaded: primaryLoaded,
-      any: loaded.length > 0, allVault: loaded.length > 0 && allVault, worst: worst, extra: ex, fu: fu,
+      any: loaded.length > 0, allVault: loaded.length > 0 && allVault, worst: worst, extra: ex, fu: fu, pol: pol,
       // what "Simpan salinan terenkripsi" writes: the files above plus the Google key and place IDs (items 32-33) and,
-      // since v6, the sealed follow-up lists (V6_SPEC §7.5: saving is allowed when only follow-ups exist)
-      keepAny: loaded.length > 0 || ex.n > 0 || fuKeep,
-      fuOnly: fuKeep && !loaded.length && !ex.n,
+      // since v6, the sealed follow-up lists (V6_SPEC §7.5: saving is allowed when only follow-ups exist); since V8 the
+      // policy numbers, their Riwayat and the lead switch (an unsaved change counts as a change)
+      keepAny: loaded.length > 0 || ex.n > 0 || fuKeep || pol.any,
+      fuOnly: fuKeep && !loaded.length && !ex.n && !pol.any,
       keepVault: (loaded.length > 0 || ex.n > 0) && (!loaded.length || allVault) && (!ex.n || ex.source === 'vault') };
   }
   /** The Google key / place-ID dataset of MCD.places (not a file, never listed as one): {n, source, pending}. */
@@ -436,13 +519,31 @@
     return { n: s.rows.length, source: s.meta.source, pending: s.meta.source === 'import' && (!saved || at > saved) };
   }
   function loadedOf(rs, key) { return rs.loaded.filter(function (x) { return x.c.key === key; })[0] || null; }
+  /* V8 final fix (critic, 24 Oct 2026): every bank file counts on the status lines, not only the three template sheets,
+     so "0 dari 3 file dimuat" never sits over a loaded funding or KPI file. The words of each file in a sentence. */
+  var BANK_WORD = { lvm: 'LVM', edc: 'EDC', sekolah: 'nasabah SMA', funding: 'funding merchant', kpi: 'KPI area' };
+  function bankWord(c) { return BANK_WORD[c.type] || c.short || c.label; }
+  /** {n, names, missing}: the bank files loaded (the LVM KPI sheets ride with the LVM file; the masked lead list is not a
+      bank file here) and the template files still missing, in words. */
+  function bankFiles(rs) {
+    var got = rs.loaded.filter(function (x) { return !x.c.sub && x.c.type !== 'leads'; });
+    return { n: got.length, names: got.map(function (x) { return bankWord(x.c); }),
+      missing: rs.cat.filter(function (c) { return c.primary && !loadedOf(rs, c.key); }).map(bankWord) };
+  }
+  /** The lead list's total as MCD.leads shows it ("<5" below the floor, item 48): never a count the module hides. */
+  function leadsTotalText(rows) {
+    var L = MCD.leads, sm = L && typeof L.summary === 'function' ? call(L.summary, L, [rows || []]) : null;
+    return sm && sm.total && sm.total.text != null ? String(sm.total.text) : '—';
+  }
 
   /* ---------------------------------------- follow-ups (v6, V6_SPEC §7; MCD.seal feature-detected) */
 
-  // The two sealed lists: the store name of MCD.seal and the section's own Pipeline (counts, status).
+  // The three sealed lists: the store name of MCD.seal and the section's own Pipeline (counts, status). V8 (HEALTH_SPEC §8):
+  // Kesehatan (health.pipeline) joins SMA and Kampus.
   var FU_STORES = [
     { name: 'schools.pipeline', label: 'Sekolah', pipe: function () { return MCD.schools && MCD.schools.pipeline; } },
-    { name: 'campus.pipeline', label: 'Kampus', pipe: function () { return MCD.campus && MCD.campus.pipeline; } }
+    { name: 'campus.pipeline', label: 'Kampus', pipe: function () { return MCD.campus && MCD.campus.pipeline; } },
+    { name: 'health.pipeline', label: 'Kesehatan', pipe: function () { return MCD.health && MCD.health.pipeline; } }
   ];
   var FU_MEMORY = {
     'no-key': 'Tindak lanjut hanya tersimpan selama halaman terbuka. Penyimpanan terenkripsi belum aktif.',
@@ -452,7 +553,8 @@
   };
   var FU_OLD = 'Daftar tindak lanjut lama terenkripsi dengan kata sandi sebelumnya.';
   var FU_DAMAGED = 'Daftar tindak lanjut di komputer ini rusak dan tidak dapat dibuka. Daftar baru dimulai.';
-  var FU_TRAVELS = 'Daftar tindak lanjut SMA dan kampus ikut tersimpan.';
+  var FU_TRAVELS = 'Daftar tindak lanjut SMA, kampus dan fasilitas kesehatan ikut tersimpan.';
+  var POL_TRAVELS = 'Angka kebijakan bank, riwayatnya dan status daftar leads ikut tersimpan.';
   // every entry removed (or "Kosongkan daftar") with no file: the save carries the removals (D15 / V9)
   var FU_REMOVALS = 'Simpan salinan terenkripsi agar entri yang dihapus juga terhapus di komputer lain';
   function isFn(f) { return typeof f === 'function'; }
@@ -518,7 +620,7 @@
   function saveState(rs) {
     if (demoOn()) return 'demo';
     var any = rs.keepAny != null ? rs.keepAny : rs.any, allVault = rs.keepVault != null ? rs.keepVault : rs.allVault;
-    var changed = S.changed || !!(rs.extra && rs.extra.pending);   // a Google key or new place IDs count as a change
+    var changed = S.changed || !!(rs.extra && rs.extra.pending) || !!(rs.pol && rs.pol.dirty);   // a Google key, new place IDs, policy or lead switch
     if (!any) return 'empty';
     if (S.savedAt && !changed) return 'downloaded';
     if (rs.fuOnly) return 'fu';
@@ -638,31 +740,35 @@
       return;
     }
     if (!MCD.importer || typeof MCD.importer.read !== 'function') { log('Fitur impor tidak termuat. Muat ulang halaman, lalu coba lagi.', 'warn'); return; }
+    /* V8 D45: funding merchant files of one pick or drop go together to the one import row once every file is read */
+    var batch = { left: 0, fund: [] };
     files.forEach(function (file) {
       var name = file.name || 'file';
       if (!/\.(csv|txt|xlsx|xlsm|xls)$/i.test(name)) {
         log(name + ': format tidak dikenali. Impor file CSV atau XLSX, misalnya laporan Rev LVM atau template permintaan data.', 'warn');
         return;
       }
+      batch.left++;
       S.reading++;
       setProgress({ label: 'Membaca ' + name + '…', done: 0, total: 0 });
       refreshReview();
       MCD.importer.read(file, { onProgress: function (p) { if (p && p.rows) setProgress({ label: 'Membaca ' + name + ' · ' + nInt(p.rows) + ' baris', done: 0, total: 0 }); } })
         .then(function (sheets) {
-          var K = kpiMod(), kd = null;
-          if (K && /\.(xlsx|xlsm|xls)$/i.test(name)) {
-            try { kd = K.detect((sheets || []).map(function (s) { return s && s.name; }).filter(Boolean)); } catch (e0) { kd = null; }
-          }
-          if (kd && kd.ok) {                            // the Rev LVM workbook, read whole by the LVM engine
-            var we = stageWorkbook(file, kd, sheets);
-            log(name + ': dikenali sebagai laporan Livin’ Merchant (toko dan KPI cabang). Periksa, lalu tekan Gunakan data ini.', '');
+          var names = (sheets || []).map(function (s) { return s && s.name; }).filter(Boolean);
+          var hit = /\.(xlsx|xlsm|xls)$/i.test(name) ? detectWorkbook(names, sheets) : null;
+          if (hit && readerType(hit.R) === 'funding') { routeFunding(batch, file, sheets); return null; }
+          if (hit) {                                    // the Rev LVM report or the KPI workbook, read whole by its engine
+            var we = stageWorkbook(file, hit.det, sheets, hit.R);
+            log(name + (readerType(hit.R) === 'kpi' ? ': dikenali sebagai laporan KPI area bulanan. Periksa, lalu tekan Gunakan data ini.'
+              : ': dikenali sebagai laporan Livin’ Merchant (toko dan KPI cabang). Periksa, lalu tekan Gunakan data ini.'), '');
             return checkWorkbook(we).then(function () {
-              if (!we.error) return null;
+              if (!we.error || readerType(we.reader) !== 'lvm') return null;
               S.staged = S.staged.filter(function (o) { return o !== we; });   // fall back to tab by tab
               log(name + ': dibaca per sheet.', '');
               return stageSheets(file, sheets);
             });
           }
+          if (fundingRoute(sheets)) { routeFunding(batch, file, sheets); return null; }   // the branch file or a saldo sheet
           return stageSheets(file, sheets);
         })
         .catch(function (err) {
@@ -674,8 +780,28 @@
         .then(function () {
           S.reading = Math.max(0, S.reading - 1);
           if (!S.reading) setProgress(null);
+          batch.left--;
+          if (!batch.left && batch.fund.length) { var items = batch.fund; batch.fund = []; fundRun(items); }
           refreshReview();
         });
+    });
+  }
+  /** V8 D45: a funding merchant file (or a Saldo merchant sheet) read by the generic Impor goes to the one import row. */
+  function routeFunding(batch, file, sheets) {
+    batch.fund.push({ file: { name: file.name || 'file', size: file.size || 0 }, sheets: sheets || [] });
+    log((file.name || 'file') + ': dikenali sebagai file funding merchant. Hasilnya ada di kartu Funding merchant (cabang).', '');
+  }
+  /** true when MCD.funding knows the layout, or the best schema of a sheet is one read through the funding row. */
+  function fundingRoute(sheets) {
+    var Fd = MCD.funding;
+    if (Fd && typeof Fd.detect === 'function') { try { if (Fd.detect(sheets || [])) return true; } catch (e) { /* not a funding layout */ } }
+    var I = MCD.importer;
+    if (!I || typeof I.detect !== 'function') return false;
+    return (sheets || []).some(function (sh) {
+      if (!sh || !sh.rows || !sh.rows.length) return false;
+      var d = null;
+      try { d = I.detect(sh); } catch (e) { d = null; }
+      return !!(d && d.type && viaFunding(d.type, schemasByType()[d.type]));
     });
   }
 
@@ -743,11 +869,11 @@
     return e;
   }
 
-  function stageWorkbook(file, det, sheets) {
-    var K = kpiMod(), type = (K && K.TYPE) || 'lvm';
+  function stageWorkbook(file, det, sheets, R) {
+    var K = R || kpiMod(), type = readerType(K);
     var e = {
-      id: 'st' + (++S.uid), kind: 'workbook', file: file.name || 'file', fileObj: file, sheets: sheets || null, sheet: null, sheetName: null,
-      title: file.name || 'Laporan Rev LVM', rows: 0, det: det, guessed: false, type: type, mapping: null, include: true,
+      id: 'st' + (++S.uid), kind: 'workbook', reader: K, file: file.name || 'file', fileObj: file, sheets: sheets || null, sheet: null, sheetName: null,
+      title: file.name || (type === 'kpi' ? 'Laporan KPI area' : 'Laporan Rev LVM'), rows: 0, det: det, guessed: false, type: type, mapping: null, include: true,
       asOf: '', res: null, sc: null, busy: true, error: null, token: 0, open: false, filter: 'all', page: 0
     };
     var k = dataKeyOf(type), first = S.staged.filter(function (o) { return o.include && o.type && dataKeyOf(o.type) === k; })[0];
@@ -757,9 +883,10 @@
   }
   /** Parses the workbook with the LVM engine (from the sheets already read, else the reader re-reads the file). */
   function checkWorkbook(e) {
-    var K = kpiMod();
+    var K = e.reader || kpiMod();
     e.busy = true; e.error = null;
     if (!K) { e.busy = false; e.error = 'Pembaca laporan Livin’ Merchant tidak tersedia. Muat ulang halaman.'; return Promise.resolve(); }
+    if (readerType(K) === 'kpi') return checkKpi(e, K);
     var token = ++e.token;
     var L = MCD.lvm, fromSheets = e.sheets && L && K === L.workbookReader && typeof L.parseWorkbook === 'function';
     /* wait (at most 8 s) for the offline street index, so the stores are placed during the parse
@@ -792,9 +919,43 @@
       if (W.console && !(err && err.user)) W.console.warn('[data] workbook check failed', err && err.message);
     });
   }
+  /* V8 (V7 §9.2): the KPI workbook of the area, parsed here from the sheets already read (MCD.kpi.parseWorkbook). Its
+     notes are MCD.kpi.visibleWarnings(model) only: notes about the four keys D41 hides never reach this page. */
+  var KPI_UNREAD = 'File ini tidak terbaca sebagai laporan KPI area. Pastikan file berasal dari kantor area dan berisi sheet skor KPI per cabang.';
+  function kpiNotes(m) {
+    var KP = MCD.kpi;
+    if (!KP || typeof KP.visibleWarnings !== 'function') return [];
+    try { return (KP.visibleWarnings(m) || []).filter(function (w) { return w && w.text; }); } catch (e) { return []; }
+  }
+  function checkKpi(e, K) {
+    var token = ++e.token, KP = MCD.kpi;
+    var run = new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        try { resolve(KP && typeof KP.parseWorkbook === 'function' && e.sheets ? KP.parseWorkbook(e.sheets, { file: e.file }) : null); } catch (x) { reject(x); }
+      }, 0);
+    });
+    return run.then(function (m) {
+      if (token !== e.token) return;
+      e.busy = false;
+      e.sheets = null;                                  // the raw rows are no longer needed
+      if (!m || !m.ok) { e.res = null; e.sc = null; e.error = KPI_UNREAD; return; }
+      var notes = kpiNotes(m), peers = (m.branches || []).filter(function (b) { return b && b.peer; }).length;
+      e.sc = m; e.rows = peers;
+      e.res = { records: K.toRecords(m), report: { totalRows: (m.branches || []).length, accepted: peers, rejected: 0, warnings: notes.length, issues: [], notes: [],
+        dropped: [], unmatched: [], mapping: {}, checkWarnings: notes.filter(function (w) { return w.level === 'warn'; }).length,
+        asOf: KP && typeof KP.periodEnd === 'function' && m.period ? KP.periodEnd(m.period) : null, fatal: !peers } };
+      if (!S.staged.some(function (o) { return o.open; })) e.open = true;
+    }, function (err) {
+      if (token !== e.token) return;
+      e.busy = false; e.res = null; e.sc = null; e.sheets = null;
+      e.error = KPI_UNREAD;
+      if (W.console) W.console.warn('[data] KPI workbook check failed', err && err.message);
+    });
+  }
   function isWorkbook(e) { return !!e && e.kind === 'workbook'; }
-  /** Records an entry adds: stores for the workbook, rows otherwise. */
-  function recordsN(e) { return isWorkbook(e) ? (e.sc && e.sc.merchants ? e.sc.merchants.length : 0) : (e.res ? e.res.records.length : 0); }
+  function isKpiBook(e) { return isWorkbook(e) && e.type === 'kpi'; }
+  /** Records an entry adds: stores for the Rev LVM workbook, branches of the KPI workbook, rows otherwise. */
+  function recordsN(e) { return isKpiBook(e) ? (e.rows || 0) : (isWorkbook(e) ? (e.sc && e.sc.merchants ? e.sc.merchants.length : 0) : (e.res ? e.res.records.length : 0)); }
 
   function dataKeyOf(type) { var c = catalogEntry(type); return c ? c.key : null; }
   /** One sheet per dataset: a later sheet for the same dataset is left out (the user may switch). */
@@ -837,7 +998,7 @@
     if (e.busy || (e.type && !r && !e.error)) return { k: 'busy', t: 'Memeriksa…' };
     if (e.error) return { k: 'bad', t: isWorkbook(e) ? 'Tidak dapat dibaca' : 'Tidak dapat diperiksa' };
     if (!e.type) return { k: 'off', t: 'Tidak dikenali' };
-    if (r.fatal) return { k: 'bad', t: isWorkbook(e) ? 'Tidak ada toko' : 'Kolom wajib tidak ada' };
+    if (r.fatal) return { k: 'bad', t: isKpiBook(e) ? 'Tidak ada cabang' : (isWorkbook(e) ? 'Tidak ada toko' : 'Kolom wajib tidak ada') };
     if (!e.res.records.length) return { k: 'bad', t: 'Tidak ada baris yang dapat digunakan' };
     if (!e.include) return { k: 'off', t: 'Tidak digunakan' };
     if (r.rejected) return { k: 'warn', t: 'Siap · ' + plural(r.rejected, 'row', 'rows') + ' dilewati' };
@@ -850,12 +1011,14 @@
     var ready = S.staged.filter(isReady);
     if (!ready.length) return;
     var done = 0;
+    S.applied = {};
     ready.forEach(function (e) {
       var r = report(e);
-      if (isWorkbook(e)) { if (applyWorkbook(e)) done++; return; }
+      if (isWorkbook(e)) { if (applyWorkbook(e)) { done++; S.applied[e.type] = true; } return; }
       try {
         MCD.importer.apply(e.type, e.res.records, { file: e.file, sheet: e.sheetName, asOf: e.asOf || r.asOf, report: r });
         done++;
+        S.applied[e.type] = true;
         log(e.title + ' → ' + typeLabel(e.type) + ': ' + plural(e.res.records.length, recordWord(e.type, 1), recordWord(e.type, 2)) + ' diimpor' +
           (r.rejected ? ', ' + plural(r.rejected, 'row', 'rows') + ' bermasalah dilewati' : '') +
           (r.dropped && r.dropped.length ? ' · ' + plural(r.dropped.length, 'personal column', 'personal columns') + ' dihapus' : '') + '.', 'ok');
@@ -874,7 +1037,8 @@
     refreshAll();
   }
   function applyWorkbook(e) {
-    var K = kpiMod();
+    var K = e.reader || kpiMod();
+    if (readerType(K) === 'kpi') return applyKpi(e, K);
     try {
       var sc = e.asOf && e.asOf !== e.sc.asOf ? Object.assign({}, e.sc, { asOf: e.asOf }) : e.sc;
       K.apply(sc, { file: e.file });
@@ -890,16 +1054,43 @@
       return false;
     }
   }
-  var SECTION_WORD = { overview: 'Ringkasan', merchants: 'Merchant', schools: 'Sekolah', property: 'KPR' };
-  /** After "Terapkan data": where to look next (UX_FIX_PLAN C-05, IA M4). */
+  /** The KPI workbook → MCD.kpi.apply (dataset kpi_cabang, data date = the last day of the period). */
+  function applyKpi(e, K) {
+    try {
+      K.apply(e.sc, { file: e.file });
+      var per = K.periodLabel && e.sc.period ? K.periodLabel(e.sc.period) : '';
+      log(e.title + ' → ' + typeLabel('kpi') + ': KPI ' + plural(recordsN(e), 'cabang', 'cabang') + (per ? ' · ' + per : '') + (e.sc.area ? ' · Area ' + e.sc.area : '') + '.', 'ok');
+      return true;
+    } catch (err) {
+      if (W.console) W.console.warn('[data] KPI apply failed', err && err.message);
+      log(e.title + ': laporan tidak dapat digunakan. Coba lagi.', 'warn');
+      return false;
+    }
+  }
+  var SECTION_WORD = { overview: 'Ringkasan', merchants: 'Merchant', schools: 'Sekolah', property: 'KPR', health: 'Kesehatan', wealth: 'Calon Prioritas', position: 'Posisi cabang', campus: 'Kampus' };
+  /** true when the registry shows section `id` (a hidden section such as KPR answers false). */
+  function sectionShown(id) {
+    var c = MCD.config, list = c && Array.isArray(c.sections) ? c.sections : null;
+    return !!list && list.some(function (x) { return x && x.id === id && !x.hidden; });
+  }
+  /** Opens a section with the crumb back to Impor (MCD.nav), else plainly. */
+  function goSection(id, action) {
+    var N = MCD.nav, ok = false;
+    if (N && typeof N.go === 'function') { try { ok = N.go({ section: id, view: 'deep', action: action || undefined }, { from: 'data' }) === true; } catch (e) { ok = false; } }
+    if (!ok && ctx) ctx.navigate(id, action ? { view: 'deep', action: action } : undefined);
+  }
+  /** After "Terapkan data": where to look next (UX_FIX_PLAN C-05, IA M4; V8: the KPI workbook leads to Posisi cabang). */
   function afterApply() {
     if (!S.justApplied || !ctx) return null;
-    var see = el('button', { type: 'button', class: 'btn btn--secondary' }, [el('span', { text: 'Lihat hasilnya di Merchant' }), icon('chev-r', 'icon--12')]);
-    see.addEventListener('click', function () { S.justApplied = false; ctx.navigate('merchants'); });
+    var kinds = S.applied || {}, onlyKpi = !!kinds.kpi && Object.keys(kinds).length === 1;
+    var see = onlyKpi ? null : el('button', { type: 'button', class: 'btn btn--secondary' }, [el('span', { text: 'Lihat hasilnya di Merchant' }), icon('chev-r', 'icon--12')]);
+    if (see) see.addEventListener('click', function () { S.justApplied = false; ctx.navigate('merchants'); });
+    var pos = kinds.kpi && sectionShown('position') ? el('button', { type: 'button', class: 'btn btn--secondary' }, [el('span', { text: 'Lihat Posisi cabang' }), icon('chev-r', 'icon--12')]) : null;
+    if (pos) pos.addEventListener('click', function () { S.justApplied = false; goSection('position'); });
     var from = typeof ctx.cameFrom === 'function' ? ctx.cameFrom() : null;
     var back = from && from !== 'merchants' && from !== ID && SECTION_WORD[from] ? el('button', { type: 'button', class: 'btn btn--secondary' }, [icon('chev-l', 'icon--12'), el('span', { text: 'Kembali ke ' + SECTION_WORD[from] })]) : null;
     if (back) back.addEventListener('click', function () { S.justApplied = false; ctx.navigate(from); });
-    return el('div', { class: 'dp-callout dp-callout--ok dp-after' }, [icon('check', 'icon--12'), el('p', { text: 'Data siap digunakan. Simpan salinan terenkripsi agar data terbuka saat masuk berikutnya.' }), el('div', { class: 'dp-actions' }, [see, back])]);
+    return el('div', { class: 'dp-callout dp-callout--ok dp-after' }, [icon('check', 'icon--12'), el('p', { text: 'Data siap digunakan. Simpan salinan terenkripsi agar data terbuka saat masuk berikutnya.' }), el('div', { class: 'dp-actions' }, [pos, see, back])]);
   }
   function cancelStaged() {
     if (!S.staged.length) return;
@@ -909,6 +1100,7 @@
   }
 
   function removeDataset(c, n) {
+    if (c.type === 'funding') { removeFunding(c); return; }
     // The branch KPIs come from the same Rev LVM report as the stores: removing the stores removes them too.
     var sets = realSets(), kk = kpiKey(), lm = (sets.lvm && sets.lvm.meta) || {}, km = kk && sets[kk] ? sets[kk].meta : null;
     var withKpi = c.key === 'lvm' && kk && realCount(sets, kk) > 0 && km && km.file && km.file === lm.file;
@@ -930,6 +1122,7 @@
         if (!yes) return;
         try { MCD.data.clearAll({}); } catch (e) { if (W.console) W.console.warn('[data] clear failed', e && e.message); }
         S.staged = [];
+        if (FS.st === 'done') fundReset();
         S.changed = true;
         log('Semua data yang diimpor telah dihapus dari dashboard.', 'ok');
         refreshAll();
@@ -987,6 +1180,8 @@
     renderLoaded();
     renderSaveBits();
     renderCheck();
+    renderFunding();
+    renderKpiNow();
     if (deep()) ensureMatch();
   }
   function refreshReview(noRefill) {
@@ -1031,7 +1226,7 @@
     return zone;
   }
   function recordWord(type, n) {
-    var w = { lvm: ['toko', 'toko'], edc: ['terminal', 'terminal'], sekolah: ['sekolah', 'sekolah'], situs: ['lokasi', 'lokasi'], lvm_kpi: ['cabang', 'cabang'] }[type];
+    var w = { lvm: ['toko', 'toko'], edc: ['terminal', 'terminal'], sekolah: ['sekolah', 'sekolah'], situs: ['lokasi', 'lokasi'], lvm_kpi: ['cabang', 'cabang'], kpi: ['cabang', 'cabang'], funding: ['merchant', 'merchant'] }[type];
     return w ? w[n === 1 ? 0 : 1] : (n === 1 ? 'data' : 'data');
   }
 
@@ -1049,7 +1244,8 @@
     else if (rs.any) {
       var w = rs.worst;
       tone = w ? w.fresh.tone : 'ok';
-      lead = rs.primaryLoaded + ' dari ' + rs.primaryN + ' file dimuat' + (rs.asOf ? ' · data terbaru ' + F().date(rs.asOf) : '') +
+      var bf = bankFiles(rs);
+      lead = nInt(bf.n) + ' file bank dimuat: ' + joinWords(bf.names) + (bf.missing.length ? ' · ' + joinWords(bf.missing) + ' belum' : '') + (rs.asOf ? ' · data terbaru ' + F().date(rs.asOf) : '') +
         (w && w.fresh.tone === 'bad' ? ' · ' + w.c.short + ' kedaluwarsa' : (w && w.fresh.tone === 'mid' ? ' · ' + w.c.short + ': ' + w.fresh.word.toLowerCase() : ''));
     } else { tone = 'none'; lead = 'Belum ada file bank. Merchant dan Ringkasan hanya menampilkan potensi (biru).'; }
     ui.status.className = 'dp-ov__status is-' + tone;
@@ -1065,7 +1261,9 @@
 
     // cards
     clear(ui.cards);
-    rs.cat.filter(function (c) { return c.template; }).forEach(function (c) {
+    rs.cat.filter(function (c) { return c.template || c.type === 'funding' || (c.type === 'kpi' && loadedOf(rs, c.key)); }).map(function (c) {
+      return V8_CARD[c.type] ? Object.assign({}, c, V8_CARD[c.type]) : c;
+    }).forEach(function (c) {
       var x = loadedOf(rs, c.key), n = x ? x.n : 0, f = x ? x.fresh : freshness(0), m = x ? x.meta : {};
       var meta = [], home = 0;
       if (n && m.asOf) meta.push('Per ' + F().date(m.asOf));
@@ -1078,7 +1276,9 @@
         (f.tone === 'mid' ? (f.days != null ? 'Impor file yang lebih baru. File ini berumur ' + ageText(f) + '.' : 'Isi tanggal data di tampilan Detail.') : c.use));
       /* v5: the shared card head (MCD.windows.card) when the shell has it; the same facts, the same colour words */
       /* numbers: the count (large), the data date, the stores of KCP Cilangkap; a file not imported yet names what it needs */
-      var nums = !n ? [] : [{ label: c.unit ? c.unit[n === 1 ? 0 : 1] : 'baris', value: nInt(n), big: true }]
+      /* V8 final fix: the funding card counts merchants as the import does (19), not the stored records (24 MIDs and rows) */
+      var fl = n && c.type === 'funding' ? fundLoaded() : null, nShown = fl ? fl.n : n;
+      var nums = !n ? [] : [{ label: c.unit ? c.unit[nShown === 1 ? 0 : 1] : 'baris', value: nInt(nShown), big: true }]
         .concat(m.asOf ? [{ label: 'Data per', value: F().date(m.asOf) }] : [])
         .concat(home ? [{ label: 'Milik KCP Cilangkap', value: nInt(home) }] : []);
       var shared = sharedCard({ kind: 'file', key: 'file:' + c.key, eyebrow: 'File bank', title: c.label, chips: [{ text: f.word, tone: f.tone }],
@@ -1089,7 +1289,7 @@
       }
       ui.cards.appendChild(el('article', { class: 'dp-dc is-' + f.tone + (c.main ? ' is-main' : ''), role: 'listitem', 'aria-label': c.label + ': ' + f.word }, [
         el('div', { class: 'dp-dc__top' }, [el('span', { class: 'dp-dc__name', text: c.label }), chip(f.tone, f.word)]),
-        el('p', { class: 'dp-dc__value' }, n ? [el('span', { class: 'dp-dc__n', text: nInt(n) }), el('span', { class: 'dp-dc__unit', text: ' ' + (c.unit ? c.unit[n === 1 ? 0 : 1] : 'baris') })]
+        el('p', { class: 'dp-dc__value' }, n ? [el('span', { class: 'dp-dc__n', text: nInt(nShown) }), el('span', { class: 'dp-dc__unit', text: ' ' + (c.unit ? c.unit[nShown === 1 ? 0 : 1] : 'baris') })]
           : [el('span', { class: 'dp-dc__need', text: 'Perlu file' }), el('span', { class: 'dp-dc__n is-empty', text: c.need })]),
         meta.length ? el('p', { class: 'dp-dc__meta', text: meta.join(' · ') }) : null,
         el('p', { class: 'dp-dc__explain', text: explain })
@@ -1125,7 +1325,7 @@
     S.staged.forEach(function (e) {
       var st = entryState(e), r = report(e);
       if (isReady(e)) { ready += recordsN(e); skipped += r.rejected || 0; }
-      var kp = isWorkbook(e) && e.sc && e.sc.branchKpi ? e.sc.branchKpi.length : 0;
+      var kp = isWorkbook(e) && !isKpiBook(e) && e.sc && e.sc.branchKpi ? e.sc.branchKpi.length : 0;
       var line = st.k === 'busy' ? 'memeriksa…' : (!e.type ? 'tidak dikenali, tidak digunakan' :
         (st.k === 'bad' ? (isWorkbook(e) && e.error ? e.error : st.t.toLowerCase()) : (!e.include ? (e.conflict ? 'tidak digunakan: ' + e.conflict + ' yang digunakan' : 'tidak digunakan') :
           plural(recordsN(e), recordWord(e.type, 1), recordWord(e.type, 2)) + (kp ? ' · KPI ' + plural(kp, 'cabang', 'cabang') : '') + (isWorkbook(e) ? workbookTail(e) : '') +
@@ -1157,7 +1357,7 @@
   }
   /** ' · Sep 2026 · Area Pasar Rebo' for a workbook entry (as read from the file). */
   function workbookTail(e) {
-    var K = kpiMod(), sc = e.sc;
+    var K = e.reader || kpiMod(), sc = e.sc;
     if (!sc) return '';
     var per = K && K.periodLabel && sc.period ? K.periodLabel(sc.period) : '';
     return (per ? ' · ' + per : '') + (sc.area ? ' · Area ' + sc.area : '');
@@ -1214,11 +1414,12 @@
     inc.addEventListener('change', function () { e.include = inc.checked; if (e.include) resolveConflicts(e); refreshReview(); });
     var sel;
     if (isWorkbook(e)) {                               // fixed layout: one dataset, no column choices
-      sel = el('span', { class: 'dp-st__fixed', id: e.id + '-type' }, [svgIcon('sheet', 'icon--12'), el('span', { text: wbLabel() })]);
+      sel = el('span', { class: 'dp-st__fixed', id: e.id + '-type' }, [svgIcon('sheet', 'icon--12'), el('span', { text: wbLabel(e) })]);
     } else {
       sel = el('select', { class: 'select dp-select', id: e.id + '-type', 'data-fk': e.id + '-type', 'aria-label': 'Jenis data untuk ' + e.title });
       sel.appendChild(el('option', { value: '', text: 'Tidak dikenali · pilih jenis data', selected: !e.type ? true : null }));
-      cat.forEach(function (c) { if (c.schema) sel.appendChild(el('option', { value: c.type, text: c.label + (c.template ? ' · ' + c.code : ''), selected: e.type === c.type ? true : null })); });
+      /* V8 D45, V7 §9.2: funding, saldo, vault-only schemas and the lead list are never offered here */
+      cat.forEach(function (c) { if (c.schema && c.pick !== false) sel.appendChild(el('option', { value: c.type, text: c.label + (c.template ? ' · ' + c.code : ''), selected: e.type === c.type ? true : null })); });
       sel.addEventListener('change', function () {
         e.type = sel.value || null; e.mapping = null; e.include = !!e.type; e.guessed = false; e.page = 0;
         if (e.include) resolveConflicts(e);
@@ -1245,7 +1446,8 @@
     if (e.conflict && !e.include && e.type) card.appendChild(el('p', { class: 'dp-st__warn' }, [icon('info', 'icon--12'), el('span', { text: 'Tidak digunakan: ' + e.conflict + ' telah mengisi ' + typeLabel(e.type) + '. Centang untuk menggunakan sheet ini.' })]));
     if (e.guessed && r && r.fatal) card.appendChild(el('p', { class: 'dp-st__warn' }, [icon('info', 'icon--12'), el('span', { text: 'Dikenali dari nama sheet. Beberapa kolom wajib tidak ditemukan.' })]));
     if (e.error) card.appendChild(el('p', { class: 'dp-st__bad', text: e.error }));
-    if (e.open && isWorkbook(e) && e.sc) card.appendChild(workbookBody(e));
+    if (e.open && isKpiBook(e) && e.sc) card.appendChild(kpiBody(e));
+    else if (e.open && isWorkbook(e) && e.sc) card.appendChild(workbookBody(e));
     else if (e.open && e.type && r) card.appendChild(stagedBody(e));
     else if (e.open && !e.type) card.appendChild(el('div', { class: 'dp-st__body', id: e.id + '-body' }, [el('p', { class: 'dp-p', text: 'Kolom sheet ini tidak cocok dengan jenis data yang dikenal.\nPilih jenis data di atas, lalu periksa kolomnya.\nPanduan kolom di bawah memuat nama kolom yang diterima.' })]));
     return card;
@@ -1254,6 +1456,11 @@
   function summaryLine(e) {
     var r = report(e);
     if (!e.type || !r || e.busy) return null;
+    if (isKpiBook(e)) {
+      var KR = e.reader, per0 = KR && KR.periodLabel && e.sc && e.sc.period ? KR.periodLabel(e.sc.period) : '';
+      return 'KPI ' + plural(recordsN(e), 'cabang', 'cabang') + (per0 ? ' · ' + per0 : '') + (e.sc && e.sc.area ? ' · Area ' + e.sc.area : '') +
+        (r.checkWarnings ? ' · ' + plural(r.checkWarnings, 'note', 'notes') + ' perlu dibaca' : '');
+    }
     if (isWorkbook(e)) {
       var kp = (e.sc && e.sc.branchKpi) || [];
       return plural(recordsN(e), 'toko', 'toko') + ' · KPI ' + plural(kp.length, 'cabang', 'cabang') + workbookTail(e) +
@@ -1354,6 +1561,51 @@
     if (!list.firstChild) list.appendChild(el('li', { class: 'dp-find__row is-ok' }, [icon('check', 'icon--12'), el('span', { text: 'Tidak ada masalah. Semua toko dapat digunakan.' })]));
     box.appendChild(list);
     box.appendChild(el('p', { class: 'dp-fine', text: 'Catatan tidak menghalangi impor. Nomor baris sama dengan di Excel (judul kolom = baris 1).' }));
+    body.appendChild(box);
+    return body;
+  }
+
+  /* V8: the review of the KPI workbook. Counts, the period, whether KCP Cilangkap is in the file and the module's visible
+     notes only; a note about another branch is counted, not shown (peers stay out of view, V7 D24). No KPI value. */
+  var KPI_OTHER = { DUP_CODE: 1, BY_NAME: 1, NO_DATA: 1 };
+  function kpiBody(e) {
+    var K = e.reader || {}, m = e.sc, r = report(e), KP = MCD.kpi;
+    var body = el('div', { class: 'dp-st__body', id: e.id + '-body' }), grid = el('div', { class: 'dp-st__grid' });
+    var hid = (KP && KP.HIDDEN) || [], fields = (m.fields || []).filter(function (f) { return f && hid.indexOf(f.key) < 0; });
+    var found = fields.filter(function (f) { return f.found; }).length, home = (m.home || HOME);
+    var homeB = (m.branches || []).filter(function (b) { return b && (b.home || b.code === home); })[0];
+    var per = K.periodLabel && m.period ? K.periodLabel(m.period) : (m.periodLabel || '—');
+    var left = el('div', { class: 'dp-map' });
+    left.appendChild(el('h3', { class: 'dp-h3', text: 'Yang terbaca' }));
+    left.appendChild(el('dl', { class: 'dp-figs' }, [['Cabang di area', nInt(recordsN(e))], ['KPI terbaca', nInt(found) + ' dari ' + nInt(fields.length)], ['Periode', per || '—'], ['Area', m.area || '—']].map(function (f) {
+      return el('div', { class: 'dp-fig' }, [el('dt', { text: f[0] }), el('dd', { text: f[1] })]);
+    })));
+    left.appendChild(el('p', { class: 'dp-p dp-wb__home' }, [el('strong', { text: 'KCP Cilangkap (' + home + ')' }),
+      homeB ? ' ada di file ini.' : ' tidak ada di file ini. Posisi cabang tidak dapat dihitung.']));
+    left.appendChild(el('p', { class: 'dp-fine', text: 'File ini hanya memuat angka total setiap cabang, tanpa data nasabah.\nCabang lain hanya digunakan untuk peringkat di Posisi cabang.' }));
+    var side = el('div', { class: 'dp-side' });
+    side.appendChild(el('h3', { class: 'dp-h3', text: 'Dikenali sebagai' }));
+    side.appendChild(el('p', { class: 'dp-side__big', text: wbLabel(e) }));
+    var used = (m.sheets && m.sheets.used) || [];
+    if (used.length) side.appendChild(el('p', { class: 'dp-fine', text: 'Dibaca dari sheet ' + used.join(', ') }));
+    if (r.asOf) side.appendChild(el('p', { class: 'dp-fine', text: 'Tanggal data: ' + F().date(r.asOf) + ', akhir periode file.' }));
+    grid.appendChild(left);
+    grid.appendChild(side);
+    body.appendChild(grid);
+    var box = el('div', { class: 'dp-rep' });
+    box.appendChild(el('h3', { class: 'dp-h3', text: 'Hasil pemeriksaan' }));
+    box.appendChild(el('dl', { class: 'dp-figs' }, [['Cabang', r.totalRows], ['Di skor KPI', r.accepted], ['Catatan', r.checkWarnings]].map(function (f) {
+      return el('div', { class: 'dp-fig' + (f[0] === 'Catatan' && f[1] ? ' is-warn' : '') }, [el('dt', { text: f[0] }), el('dd', { text: nInt(f[1] || 0) })]);
+    })));
+    var list = el('ul', { class: 'dp-find' }), others = 0, order = { warn: 0, info: 1 };
+    kpiNotes(m).slice().sort(function (a, b) { return (order[a.level] == null ? 2 : order[a.level]) - (order[b.level] == null ? 2 : order[b.level]); }).forEach(function (w) {
+      if (KPI_OTHER[w.code] && String(w.text).indexOf(home) < 0) { others++; return; }
+      var lv = w.level === 'warn' ? 'warn' : 'info';
+      list.appendChild(el('li', { class: 'dp-find__row is-' + lv }, [icon(lv === 'warn' ? 'warn' : 'info', 'icon--12'), el('span', { text: w.text })]));
+    });
+    if (others) list.appendChild(el('li', { class: 'dp-find__row is-info' }, [icon('info', 'icon--12'), el('span', { text: nInt(others) + ' catatan tentang cabang lain di file KPI.' })]));
+    if (!list.firstChild) list.appendChild(el('li', { class: 'dp-find__row is-ok' }, [icon('check', 'icon--12'), el('span', { text: 'Tidak ada masalah. Semua KPI dapat digunakan.' })]));
+    box.appendChild(list);
     body.appendChild(box);
     return body;
   }
@@ -1611,9 +1863,10 @@
   function columnGuide() {
     var wrap = el('div', { class: 'dp-guide' });
     if (kpiMod()) wrap.appendChild(workbookGuide());
+    if (fundApi()) wrap.appendChild(fundingGuide());
     catalog().forEach(function (c) {
       var sc = c.schema;
-      if (!sc) return;
+      if (!sc || c.pick === false) return;
       var tbody = el('tbody');
       sc.columns.forEach(function (col) {
         var req = col.req === true ? 'Wajib' : (typeof col.req === 'string' && col.req.indexOf('any:') === 0 ? 'Salah satu dari ' + sc.columns.filter(function (x) { return x.req === col.req; }).map(function (x) { return x.key; }).join(' / ') : '');
@@ -1672,10 +1925,35 @@
     ]);
   }
 
+  /** V8 D45: the funding merchant files are read whole by the one import row; the guide lists the sheets it reads. */
+  function fundingGuide() {
+    var rows = [
+      ['Detail MID', 'Laporan region: satu baris per MID. Hanya baris KCP Jakarta Cilangkap (12903) yang dibaca.', 'Ini atau file cabang'],
+      ['Commonname', 'Laporan region: satu baris per nama merchant, untuk daftar Saldo merchant.', 'Opsional'],
+      ['All Cab dan Summary Area', 'Laporan region: total per cabang dan area. Cabang lain hanya menjadi peringkat.', 'Opsional'],
+      ['Sheet1', 'File cabang Cilangkap Merchant Area: satu baris per nama merchant.', 'Ini atau laporan region']
+    ];
+    var tbody = el('tbody');
+    rows.forEach(function (r) { tbody.appendChild(el('tr', null, [el('td', { class: 'mono', text: r[0] }), el('td', { text: r[1] }), el('td', { text: r[2] })])); });
+    return el('details', { class: 'dp-guide__item' }, [
+      el('summary', { class: 'dp-guide__sum' }, [
+        el('span', { class: 'dp-guide__name', text: FUND_T.title }),
+        el('span', { class: 'dp-guide__code mono', text: 'File XLSX apa adanya' }),
+        el('span', { class: 'dp-guide__n', text: plural(rows.length, 'tab', 'tabs') })
+      ]),
+      el('div', { class: 'dp-guide__body' }, [
+        el('p', { class: 'dp-p', text: FUND_LINES.join('\n') + '\nImpor melalui kartu Funding merchant (cabang) di tab ini.' }),
+        el('div', { class: 'tbl-wrap' }, [el('table', { class: 'tbl dp-tbl' }, [
+          el('thead', null, [el('tr', null, [el('th', { scope: 'col', text: 'Sheet' }), el('th', { scope: 'col', text: 'Yang dibaca' }), el('th', { scope: 'col', text: 'Diperlukan' })])]),
+          tbody])])
+      ])
+    ]);
+  }
+
   /* --- Deep dive: loaded data ------------------------------------------- */
 
   function loadedTitle(rs) {
-    if (!rs.primaryLoaded) return 'Belum ada file bank: peta hanya menampilkan potensi';
+    if (!rs.primaryLoaded) return rs.any ? 'File LVM belum diimpor: peta merchant hanya menampilkan potensi' : 'Belum ada file bank: peta hanya menampilkan potensi';
     var cat = rs.cat.filter(function (c) { return c.primary; });
     var missing = cat.filter(function (c) { return !loadedOf(rs, c.key); }).map(function (c) { return c.short || c.label; });
     var bad = rs.loaded.filter(function (x) { return x.c.primary && x.fresh.tone === 'bad'; })[0];
@@ -1699,21 +1977,29 @@
     }
     var tbody = el('tbody');
     rs.cat.forEach(function (c) {
-      var n = realCount(rs.sets, c.key), m = (rs.sets[c.key] && rs.sets[c.key].meta) || {};
+      var n = entryCount(rs.sets, c), m = entryMeta(rs.sets, c);
       if (!c.primary && !n) return;
       var f = freshness(n, m);
       var src = !n ? 'Belum diimpor' : (m.source === 'vault' ? 'Salinan terenkripsi' : ((m.file || 'File yang diimpor') + (m.sheet && m.sheet !== 'CSV' ? ' › ' + m.sheet : '')));
       var act = null;
-      if (n) {
+      if (n && c.type === 'leads') {                     // the lead list goes through its switch (initials, Riwayat), never a plain Hapus
+        act = el('button', { type: 'button', class: 'btn btn--ghost dp-ds__go', title: 'Atur daftar leads di Kebijakan & leads' }, [el('span', { text: 'Atur' }), icon('chev-r', 'icon--12')]);
+        act.addEventListener('click', function () { goTab('policy'); });
+      } else if (n) {
         act = el('button', { type: 'button', class: 'btn btn--ghost dp-remove', title: 'Hapus ' + c.label + ' dari dashboard' }, [svgIcon('trash', 'icon--12'), el('span', { text: 'Hapus' })]);
         act.addEventListener('click', function () { removeDataset(c, n); });
       }
-      tbody.appendChild(el('tr', { class: (n ? 'is-in' : 'is-out') + (c.sub ? ' is-sub' : '') }, [
-        el('td', { class: 'dp-ds__cell' }, [el('span', { class: 'dp-ds__rule dp-ds__rule--' + f.tone, 'aria-hidden': 'true' }), el('span', { class: 'dp-ds__name', text: c.label, title: c.what })]),
-        el('td', { class: 'mono dp-ds__code', text: c.template ? c.code : (c.sub ? 'Sheet UREG + USAK' : c.code) }),
+      /* V8: the funding row says its position date and its merchants; the lead list shows the module's own total text */
+      var fl = n && c.type === 'funding' ? fundLoaded() : null;
+      var sub = fl ? fill(FUND_T.loaded, { tanggal: fl.asOf ? F().date(fl.asOf) : '—', n: nInt(fl.n) }) : null;
+      var count = !n ? '—' : (c.type === 'leads' ? leadsTotalText(rs.sets[c.key].rows) : nInt(n));
+      tbody.appendChild(el('tr', { class: (n ? 'is-in' : 'is-out') + (c.sub ? ' is-sub' : '') + (c.type ? ' dp-ds--' + c.type : '') }, [
+        el('td', { class: 'dp-ds__cell' }, [el('span', { class: 'dp-ds__rule dp-ds__rule--' + f.tone, 'aria-hidden': 'true' }), el('span', { class: 'dp-ds__name', text: c.label, title: c.what }),
+          sub ? el('span', { class: 'dp-ds__sub', text: sub }) : null]),
+        el('td', { class: 'mono dp-ds__code', text: c.template ? c.code : (c.sub ? 'Sheet UREG + USAK' : (c.sheetText || c.code)) }),
         el('td', { class: 'dp-ds__src', text: src, title: n && m.importedAt ? 'Diimpor ' + F().dateTime(m.importedAt) : null }),
         el('td', { class: 'num', text: n && m.asOf ? F().date(m.asOf) : '—' }),
-        el('td', { class: 'num', text: n ? nInt(n) : '—' }),
+        el('td', { class: 'num', text: count }),
         el('td', null, [chip(f.tone, f.word)]),
         el('td', { class: 'dp-ds__act' }, [act])
       ]));
@@ -1877,8 +2163,8 @@
       empty: ['none', 'Belum ada data untuk disimpan. Impor file lebih dulu.'],
       downloaded: ['todo', 'Telah diunduh' + (S.savedAt ? ' pukul ' + F().time(S.savedAt) + ' WIB' : '') + ', belum dipasang. Ikuti langkah di bawah, lalu masuk kembali agar data terbaca.'],
       invault: ['ok', 'Tersimpan: data ini dibuka dari salinan terenkripsi dan belum berubah. Tidak perlu disimpan lagi.'],
-      todo: ['todo', (rs.loaded.length ? fm0(rs.loaded.length) + ' jenis data (' + fm0(rs.rows) + ' baris) akan disimpan. ' + (rs.extra && rs.extra.n ? 'Kunci Google dan ID tempat Google ikut disimpan. ' : '')
-        : 'Kunci Google dan ID tempat Google akan disimpan. ') + (rs.fu && rs.fu.carry ? FU_TRAVELS + ' ' : '') +
+      todo: ['todo', (rs.loaded.length ? fm0(rs.loaded.length) + ' jenis data' + (rs.rows ? ' (' + fm0(rs.rows) + ' baris)' : '') + ' akan disimpan. ' + (rs.extra && rs.extra.n ? 'Kunci Google dan ID tempat Google ikut disimpan. ' : '')
+        : (rs.extra && rs.extra.n ? 'Kunci Google dan ID tempat Google akan disimpan. ' : '')) + (rs.pol && rs.pol.any ? POL_TRAVELS + ' ' : '') + (rs.fu && rs.fu.carry ? FU_TRAVELS + ' ' : '') +
         (S.savedAt ? 'Berubah sejak diunduh pukul ' + F().time(S.savedAt) + ' WIB.' : 'Belum disimpan sejak masuk.')],
       fu: ['none', 'Belum ada file yang diimpor. ' + (rs.fu && rs.fu.removals ? FU_REMOVALS + '.' : 'Simpan salinan terenkripsi agar daftar tindak lanjut terbawa ke komputer lain.')]
     }[ss];
@@ -1946,7 +2232,10 @@
       el('li', { text: 'Kata sandi tetap sama. Setiap penyimpanan menggunakan IV acak yang baru.\nUntuk mengganti kata sandi, lihat bagian di bawah.' }),
       el('li', { text: 'Data merchant atau nasabah tidak pernah diekspor tanpa enkripsi. Jauhkan salinan lama vault.js dari folder bersama.' }),
       // v6 (V6_SPEC §7.5): the sealed follow-up lists go into the copy (payload.followups), only when MCD.seal can export them
-      sealApi() && isFn(MCD.seal.vaultExport) ? el('li', { text: FU_TRAVELS }) : null
+      sealApi() && isFn(MCD.seal.vaultExport) ? el('li', { text: FU_TRAVELS }) : null,
+      /* V8 §3.6, D61: the policy numbers, the lead switch and the visit plan go into the copy too */
+      policyApi() ? el('li', { text: POL_TRAVELS }) : null,
+      MCD.plan ? el('li', { text: 'Rencana kunjungan ikut tersimpan, terenkripsi dengan kata sandi dashboard.' }) : null
     ]));
     x.el.appendChild(el('div', { class: 'dp-sep' }));
     x.el.appendChild(el('h3', { class: 'dp-h3', text: 'Hapus data' }));
@@ -1965,7 +2254,7 @@
    * memory only, and the actions. Rebuilt in place (renderFollowups) on every MCD.seal event and after each action.
    */
   function followupsBlock() {
-    var x = exhibit('dp-followups', 'Tindak lanjut di komputer ini', 'Daftar kerja staf untuk sekolah dan kampus · hanya di browser ini', null,
+    var x = exhibit('dp-followups', 'Tindak lanjut di komputer ini', 'Daftar kerja staf untuk sekolah, kampus dan fasilitas kesehatan · hanya di browser ini', null,
       'Sumber: catatan kerja staf di browser ini · terenkripsi dengan kata sandi dashboard');
     ui.fuBody = el('div', { class: 'dp-fu' });
     x.el.appendChild(ui.fuBody);
@@ -1997,7 +2286,7 @@
       var purgeB = el('button', { type: 'button', class: 'btn btn--danger', 'data-fk': 'fu-purge' }, [svgIcon('trash', 'icon--12'), el('span', { text: 'Hapus tindak lanjut dari komputer ini' })]);
       purgeB.addEventListener('click', purgeFollowups);
       body.appendChild(el('div', { class: 'dp-actions dp-fu__act' }, [purgeB]));
-      body.appendChild(el('p', { class: 'dp-fine', text: 'Ekspor daftar dari tab Tindak lanjut di Sekolah atau Kampus jika perlu salinan terbuka.' }));
+      body.appendChild(el('p', { class: 'dp-fine', text: 'Ekspor daftar dari tab Tindak lanjut di Sekolah, Kampus atau Kesehatan jika perlu salinan terbuka.' }));
     }
     restoreFocus(keep);
   }
@@ -2050,7 +2339,7 @@
     var Sl = sealApi();
     if (!ctx || !Sl || !isFn(Sl.purge)) return;
     ctx.confirm({ title: 'Hapus tindak lanjut dari komputer ini', danger: true, ok: 'Hapus tindak lanjut', cancel: 'Batal',
-      body: 'Semua daftar tindak lanjut SMA dan kampus akan dihapus dari browser ini. Jika salinan terenkripsi di folder dashboard berisi daftar ini, daftar akan terbuka lagi saat masuk berikutnya.' })
+      body: 'Semua daftar tindak lanjut SMA, kampus dan fasilitas kesehatan akan dihapus dari browser ini. Jika salinan terenkripsi di folder dashboard berisi daftar ini, daftar akan terbuka lagi saat masuk berikutnya.' })
       .then(function (yes) {
         if (!yes) return;
         var p;
@@ -2134,7 +2423,7 @@
     return DLG;
   }
   /** Lock (gate.js dispatches mcd:gate-locking before the reload): the dialog and its field go at once. */
-  function onLocking() { closeOldDialog(); }
+  function onLocking() { closeOldDialog(); fundReset(); FS.after = false; S.logShown = 0; S.logOpen = false; }
   /** MCD.seal events (state, a list opened, merged, purged): the card and the save bits follow. */
   function onSeal() { if (ctx && ui) afterFollowups(); }
 
@@ -2191,8 +2480,9 @@
       el('p', { class: 'dp-field__err', id: id + '-e', role: 'alert', hidden: true })
     ]);
   }
-  function numInput(id, value) {
-    return el('input', { class: 'input input--num dp-in', id: id, name: id, type: 'text', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false', value: value, 'aria-describedby': id + '-h ' + id + '-e' });
+  /** A number field (M16): type text, inputmode decimal (a comma on every phone keyboard) or numeric for whole numbers. */
+  function numInput(id, value, mode) {
+    return el('input', { class: 'input input--num dp-in', id: id, name: id, type: 'text', inputmode: mode || 'decimal', autocomplete: 'off', attrs: { spellcheck: 'false' }, value: value, 'aria-describedby': id + '-h ' + id + '-e' });
   }
   function parseNumber(s) {
     var t = str(s).replace(/%$/, '').trim();
@@ -2234,7 +2524,7 @@
     // Locations
     var g3 = el('fieldset', { class: 'dp-fs' + fb, 'data-fold': fb ? 'lokasi' : null }, [el('legend', { class: 'dp-fs__t' + ft, text: 'Perkiraan lokasi' })]);
     var grid3 = el('div', { class: 'dp-fs__grid' });
-    grid3.appendChild(fieldRow('as-kel', 'Radius perkiraan kelurahan', numInput('as-kel', F().num(c.geocode.kelurahanJitterM, 0)),
+    grid3.appendChild(fieldRow('as-kel', 'Radius perkiraan kelurahan', numInput('as-kel', F().num(c.geocode.kelurahanJitterM, 0), 'numeric'),
       'Data yang hanya memiliki kelurahan disebar dalam jarak ini dari titik tengahnya. Bawaan ' + (d.geocode ? d.geocode.kelurahanJitterM : 350) + ' m.', tagFor('geocode', c.geocode.kelurahanJitterM === (d.geocode || {}).kelurahanJitterM), 'm'));
     grid3.appendChild(fieldRow('as-blat', 'Titik cabang, lintang', numInput('as-blat', c.branch.lat.toFixed(5)),
       'Titik cabang yang diatur pengguna. Periksa di lokasi. Jarak dari cabang diukur dari titik ini.', tagFor('cabang', c.branch.lat === (d.branch || {}).lat && c.branch.lon === (d.branch || {}).lon)));
@@ -2582,6 +2872,10 @@
     return x.el;
   }
 
+  /* V8: which privacy lines apply (each module feature-detected, so a page without it never claims it) */
+  function fundingKnown() { return !!(fundApi() || MCD.saldo || dataKeyAvail('funding_merchant')); }
+  function omzetKnown() { return !!(MCD.omzet || W.MCD_OMZET_BENCHMARKS); }
+  function leadsKnown() { return !!(MCD.leads || MCD.leadsUi || policyApi()); }
   function privacyBlock() {
     var x = exhibit('dp-privacy', 'Data pribadi di laporan LVM dihapus saat impor. Sisanya tetap terenkripsi di komputer ini.', 'Cara data merchant dan nasabah dijaga · UU PDP No. 27/2022', null,
       'Sumber: BUILD_SPEC §K (privasi dan keamanan) · Content Security Policy di index.html · daftar kolom yang ditolak saat impor');
@@ -2592,12 +2886,21 @@
       ['shield', 'Semua data diproses di browser ini. Data dari file bank tidak pernah dikirim ke server mana pun.\nHalaman ini memblokir semua koneksi, kecuali gambar peta, font, library dengan versi tetap dan Google Places.'],
       ['globe', 'Cek rating Google bersifat opsional dan mati tanpa kunci cabang.\nCek ini mengirim nama usaha dari peta publik dan titiknya ke Google.\nRating dan ulasan tidak disimpan. Hanya ID tempat Google yang disimpan, di salinan terenkripsi.'],
       ['lock', 'Data impor tetap di perangkat ini.\nSelama bekerja, data ada di dashboard. Setelah disimpan, data ada di salinan terenkripsi (data/vault.js).\nData hilang dari dashboard saat Anda menekan Kunci atau menutup tab.\nData juga hilang setelah ' + idle + ' menit tanpa aktivitas.'],
-      /* v6 (V6_SPEC §8.2): the follow-up lists are sealed with the dashboard password (MCD.seal) */
-      sealed ? ['lock', 'Daftar tindak lanjut SMA dan kampus terenkripsi di browser ini dengan kata sandi dashboard.\nDaftar hanya terbuka setelah masuk dan ikut tersimpan saat salinan terenkripsi disimpan.'] : null,
+      /* v6 (V6_SPEC §8.2): the follow-up lists are sealed with the dashboard password (MCD.seal); V8: Kesehatan too */
+      sealed ? ['lock', 'Daftar tindak lanjut SMA, kampus dan fasilitas kesehatan terenkripsi di browser ini dengan kata sandi dashboard.\nDaftar hanya terbuka setelah masuk dan ikut tersimpan saat salinan terenkripsi disimpan.'] : null,
+      /* V8 (D46, D61, D64; V7 §11.2 without the calculator lines): funding merchant, Perkiraan omzet, policy, leads, plan */
+      fundingKnown() ? ['lock', 'Saldo per merchant hanya tampil di daftar Saldo merchant dan disamarkan saat nama disamarkan.\nDaftar Saldo merchant tidak dicetak dari dashboard.\nCabang lain hanya tampil sebagai peringkat.'] : null,
+      omzetKnown() ? ['info', 'Perkiraan omzet berasal dari data publik. Data pajak setiap usaha bersifat rahasia dan tidak digunakan.'] : null,
+      leadsKnown() ? ['lock', 'Angka kebijakan bank dan daftar leads terenkripsi dalam salinan terenkripsi.\nDaftar leads tetap data nasabah yang dilindungi rahasia bank.\nGunakan profil browser tanpa ekstensi yang membaca halaman saat daftar leads menyala.'] : null,
+      MCD.plan ? ['lock', 'Rencana kunjungan terenkripsi di browser ini dengan kata sandi dashboard.\nTautan Google Maps rencana kunjungan hanya memuat koordinat.'] : null,
+      leadsKnown() || MCD.kpi ? ['info', 'Daftar leads, angka kebijakan dan Posisi cabang tidak dicetak.'] : null,
       ['nocommit', 'Jangan simpan atau kirim file Rev LVM ke repositori kode, e-mail atau folder bersama.\nLarangan ini juga berlaku untuk CSV dan isi file tersebut.\nHanya vault.js terenkripsi yang boleh ada di folder dashboard.'],
+      leadsKnown() ? ['nocommit', 'Salinan terenkripsi kini dapat memuat daftar leads. Simpan hanya di laptop cabang.\nJangan kirim salinan terenkripsi melalui e-mail, WhatsApp atau folder awan.'] : null,
       ['pin', 'Toko ditempatkan menurut kecamatan dan kelurahan dengan daftar wilayah bawaan dashboard. Tidak ada alamat yang dikirim ke layanan peta.'],
       /* v6 (V6_SPEC §5.3, §8.2, D7, D17): institutional contacts only */
       ['shield', 'Kontak yang tampil hanya kontak lembaga dari daftar resmi atau situs resmi lembaga.\nNama kepala sekolah, dosen, staf dan siswa tidak disimpan.\nNomor seluler tampil hanya jika daftar resmi mencatatnya sebagai kontak lembaga.\nE-mail yang tampak milik pribadi tidak ditampilkan, walaupun tercatat di daftar resmi.\nSitus resmi menjadi tautan hanya jika terbuka saat diperiksa.\nKontak disembunyikan saat nama disamarkan.'],
+      /* V8 (HEALTH_SPEC §8): the five lines of Kesehatan */
+      ['shield', 'Kontak fasilitas kesehatan hanya kontak lembaga dari register Kemenkes dan Dinkes DKI.\nNomor seluler klinik tidak disimpan karena sering milik pribadi pemilik atau dokter.\nNama dokter dan tenaga kesehatan tidak dibaca dari sumber mana pun.\nKlinik yang menggunakan nama dokter tampil dengan nama usahanya.\nDashboard tidak memuat data pasien.'],
       ['veil', 'Gunakan Samarkan nama saat berbagi layar (tombol V).\nNama menjadi inisial, nominal dikelompokkan dan titik digeser ke kotak 250 m.'],
       ['id', 'Tampilkan nama lengkap membuka nama dan nomor lengkap selama 5 menit.\nNama disamarkan lagi saat tab tidak aktif atau mode berbagi layar menyala.'],
       ['info', 'Penggunaan data pribadi merchant atau nasabah perlu dasar hukum sesuai UU PDP No. 27/2022 dan persetujuan internal (Compliance atau DPO).\nDashboard ini tidak menggantikan persetujuan tersebut.'],
@@ -2618,8 +2921,12 @@
       col('Terenkripsi (data/vault.js)', icon('lock', 'icon--12'), [
         'Toko Livin’ Merchant dan KPI cabang (UREG dan USAK), tanpa data pribadi pemilik',
         'Terminal EDC Mandiri dan nasabah SMA',
+        fundingKnown() ? 'Funding merchant KCP Cilangkap (saldo sebagai rentang) dan daftar Saldo merchant' : null,
+        MCD.kpi ? 'File KPI bulanan area: angka total setiap cabang' : null,
+        leadsKnown() ? 'Angka kebijakan bank, riwayatnya dan daftar leads (CIF disamarkan)' : null,
         'Kunci Google dan ID tempat Google, jika diisi',
-        sealed ? 'Daftar tindak lanjut SMA dan kampus, terenkripsi dengan kata sandi dashboard' : null,
+        sealed ? 'Daftar tindak lanjut SMA, kampus dan fasilitas kesehatan, terenkripsi dengan kata sandi dashboard' : null,
+        MCD.plan ? 'Rencana kunjungan, terenkripsi dengan kata sandi dashboard' : null,
         'Hanya terbuka dengan kata sandi (AES-256-GCM, PBKDF2)'
       ], 'is-enc'),
       col('Publik (terbaca tanpa kata sandi)', svgIcon('globe', 'icon--12'), [
@@ -2627,11 +2934,14 @@
         'Batas kecamatan dan kelurahan (Kemendagri, BPS, OpenStreetMap)',
         'Batas dan lokasi Mabes TNI, kantor bank lain (OpenStreetMap)',
         'Sekolah, proyek perumahan dan tabel suku bunga KPR Mandiri',
-        'Sekolah dan kampus dalam 30 km dengan kontak lembaga dan kelas biaya'
+        'Sekolah dan kampus dalam 30 km dengan kontak lembaga dan kelas biaya',
+        'Rumah sakit, klinik dan klinik kecantikan dalam 30 km dengan kontak lembaga',
+        omzetKnown() ? 'Perkiraan omzet UMKM dari riset publik' : null
       ], 'is-pub'),
       col('Tidak pernah disimpan', svgIcon('trash', 'icon--12'), [
         'Kata sandi dan kuncinya',
-        'Nama pemilik, telepon, e-mail, nomor rekening, CIF, ID pemilik, kode referal, saldo, nama pimpinan cabang',
+        'Nama pemilik, telepon, e-mail, nomor rekening, CIF, ID pemilik, kode referal, nama pimpinan cabang',
+        fundingKnown() ? 'Alamat, actype dan sccode di file funding merchant, serta nama dan angka cabang lain' : null,
         'NIK, nama ibu kandung dan NPWP di file apa pun',
         'Rating, ulasan dan nama dari Google',
         'Data impor dan kunci Google di penyimpanan browser, kolom alamat browser atau repositori kode'
@@ -2643,8 +2953,10 @@
         'Tampilan Sekolah (tab, urutan daftar, titik MA/SMK), isian kalkulator dan porsi siswa 17+',
         'Tampilan Kampus: urutan daftar dan jenis yang tampil, tanpa nama',
         'Cakupan 5, 15 atau 30 km per bagian, hanya selama tab terbuka (angka saja)',
-        sealed ? 'Daftar tindak lanjut SMA dan kampus, terenkripsi dengan kata sandi dashboard. Jangan mengisi data pribadi.'
+        sealed ? 'Daftar tindak lanjut SMA, kampus dan fasilitas kesehatan, terenkripsi dengan kata sandi dashboard. Jangan mengisi data pribadi.'
           : 'Catatan Tindak lanjut SMA (nama petugas dan catatan kerja), tidak terenkripsi. Jangan mengisi data pribadi.',
+        sealed && MCD.plan ? 'Rencana kunjungan hari ini dan sebelumnya, terenkripsi dengan kata sandi dashboard' : null,
+        'Tampilan Kesehatan, Calon Prioritas dan Rencana kunjungan: tab, urutan dan pilihan, tanpa nama',
         'Jumlah cek rating Google bulan ini (angka saja) dan waktu unduhan salinan terakhir',
         'Jumlah salah kata sandi dan alasan dashboard terakhir dikunci',
         'Tata letak kartu dan panel: ukuran, posisi, bagian yang dilipat dan catatan yang telah tampil. Tanpa nama, angka atau lokasi.',
@@ -2723,6 +3035,54 @@
       ['Jaringan jalan 16 sampai 32 km dari KCP', 'OpenStreetMap (rute di komputer ini)', og ? (isoDate(og.meta.generated) || '—') : LAZY_WAIT, 'ODbL · perkiraan, lalu lintas normal']
     ];
   }
+  /** "2026-10-22 s.d. 2026-10-23" → "22–23 Okt 2026"; one date → "22 Okt 2026"; else null. */
+  function fetchedText(v) {
+    var d = String(v || '').match(/\d{4}-\d{2}-\d{2}/g);
+    if (!d || !d.length) return null;
+    var a = d[0], b = d[d.length - 1];
+    if (a === b) return F().date(a);
+    if (a.slice(0, 7) === b.slice(0, 7)) return (+a.slice(8)) + '–' + F().date(b);
+    return F().date(a) + ' – ' + F().date(b);
+  }
+  /**
+   * V8 rows (HEALTH_SPEC §8; V8 §4.2.4; V7 §11.2): Kesehatan (three rows; "Dimuat saat diperlukan" until the lazy file is
+   * in, never loaded from here), funding merchant, Perkiraan omzet, the KPI file and the lead list.
+   */
+  function v8SourceRows() {
+    var out = [], hf = lazyFile('MCD_HEALTH_FACILITIES'), hm = hf && hf.meta;
+    var src = function (id) { return hm && Array.isArray(hm.sources) ? hm.sources.filter(function (x) { return x && x.id === id; })[0] || null : null; };
+    var when = function (id) { var x = src(id); return (x && fetchedText(x.fetched)) || (hm ? isoDate(hm.generated) : null) || '—'; };
+    var lic = 'Data publik pemerintah dengan atribusi · ODbL · CDLA-Permissive-2.0';
+    out.push(['Rumah sakit dalam 30 km', 'Kemenkes: SIRS Online dan SIRANAP · titik dari OpenStreetMap dan Overture Maps', hm ? when('sirs') : LAZY_WAIT, lic]);
+    out.push(['Klinik dan klinik kecantikan dalam 30 km', 'Kemenkes: Direktori Klinik · Dinas Kesehatan DKI Jakarta (Satu Data Jakarta) · OpenStreetMap, Overture Maps', hm ? when('keslan') : LAZY_WAIT, lic]);
+    out.push(['Pemeriksaan situs resmi fasilitas kesehatan', 'Satu kunjungan ke halaman depan setiap situs', hm ? when('keslan') : LAZY_WAIT, '—']);
+    var sets = realSets(), one = function (type) { var c = catalogEntry(type); return c && entryCount(sets, c) ? entryMeta(sets, c) : null; };
+    if (fundingKnown()) { var fm = one('funding'); out.push(['Funding merchant cabang', 'Laporan region dan file cabang, diimpor pengguna', fm && fm.asOf ? F().date(fm.asOf) : 'posisi file', 'Data bank, tidak dibagikan.']); }
+    if (omzetKnown()) {
+      var om = W.MCD_OMZET_BENCHMARKS && W.MCD_OMZET_BENCHMARKS.meta;
+      out.push(['Perkiraan omzet UMKM', 'Riset publik: BPS, peraturan daerah tentang pajak restoran dan PP 7/2021', (om && isoDate(om.researchAsOf || om.generated)) || '22 Okt 2026', 'Data publik']);
+    }
+    if (MCD.kpi || dataKeyAvail('kpi_cabang')) {
+      var km = one('kpi'), KR = MCD.kpi && MCD.kpi.workbookReader, kp = km && km.asOf && KR && KR.periodLabel ? KR.periodLabel(String(km.asOf).slice(0, 7)) : null;
+      out.push(['File KPI bulanan area', 'Kantor area, diimpor pengguna', kp || (km && km.asOf ? F().date(km.asOf) : 'periode file'), 'Data bank, tidak dibagikan.']);
+    }
+    if (MCD.leads || dataKeyAvail('leads')) { var lm = one('leads'); out.push(['Daftar leads (CIF disamarkan)', 'Laporan nasabah cabang, diimpor pengguna', lm && lm.asOf ? F().date(lm.asOf) : 'tanggal data', 'Data bank yang disamarkan, hanya di laptop cabang.']); }
+    return out;
+  }
+  /** HEALTH_SPEC §8: the four lines of Kesehatan under the table, only once its file is in: [{text, title}]. */
+  function healthNotes() {
+    var hf = lazyFile('MCD_HEALTH_FACILITIES'), cov = hf && hf.meta && hf.meta.coverage;
+    if (!hf) return [];
+    var belum = [], unplaced = 0;
+    Object.keys((cov && cov.keslanByKota) || {}).forEach(function (k) { var v = cov.keslanByKota[k]; if (v && v.status === 'belum') belum.push(k); });
+    Object.keys((cov && cov.unplaced) || {}).forEach(function (k) { if (/^rs /.test(k)) unplaced += +cov.unplaced[k] || 0; });
+    var out = [];
+    if (belum.length) out.push({ text: 'Daftar klinik Kemenkes belum dibaca untuk ' + nInt(belum.length) + ' kota dan kabupaten. Di wilayah itu klinik berasal dari Dinkes DKI dan peta terbuka.', title: belum.join(', ') });
+    if (unplaced) out.push({ text: nInt(unplaced) + ' rumah sakit terdaftar di SIRS belum dapat ditempatkan di peta.' });
+    out.push({ text: 'Status mitra BPJS belum tersedia: situs faskes BPJS tidak dapat dibuka saat data dikumpulkan.' });
+    out.push({ text: 'Klinik kecantikan dikenali dari nama dan kategori peta, sehingga perlu diperiksa.' });
+    return out;
+  }
   /** The lines under the table: what "perkiraan" means, then the gap lines of files that are in (D16, D20). */
   function sourceNotes() {
     var out = ['Perkiraan berarti angka dihitung dari data lain, tidak dari sumber resmi untuk lembaga itu.',
@@ -2766,7 +3126,7 @@
     var trv = W.MCD_TRAVEL || (MCD.travel && typeof MCD.travel.ready === 'function' && MCD.travel.ready() ? MCD.travel : null);
     if (trv) rows.push(['Jarak dan waktu tempuh dari KCP', 'OSRM (rute OpenStreetMap), per kelurahan', (W.MCD_TRAVEL && metaDate(W.MCD_TRAVEL)) || '—', 'ODbL · perkiraan, lalu lintas normal']);
     rows.push(['Sekolah dalam 30 km', 'Kemendikdasmen (Data Pokok Pendidikan), dimuat di Sekolah', W.MCD_SCHOOLS ? (metaDate(W.MCD_SCHOOLS) || '—') : 'Dimuat saat diperlukan', 'Data publik lembaga']);
-    rows = rows.concat(sourceRows());
+    rows = rows.concat(sourceRows()).concat(v8SourceRows());
     var tbody = el('tbody');
     rows.forEach(function (r) {
       var by = el('td', { class: 'dp-src__by' }, [r[4] ? logoTile(r[4]) : null, el('span', { text: r[1] })]);
@@ -2776,11 +3136,592 @@
       el('thead', null, [el('tr', null, [el('th', { scope: 'col', text: 'Data' }), el('th', { scope: 'col', text: 'Sumber' }), el('th', { scope: 'col', class: 'num', text: 'Per' }), el('th', { scope: 'col', text: 'Lisensi' })])]),
       tbody])]));
     /* v6 (V6_SPEC §8.1): what "perkiraan" means, then the two gaps staff should know about, once their files are in */
-    x.el.appendChild(el('div', { class: 'dp-src-notes' }, sourceNotes().map(function (t) { return el('p', { class: 'dp-fine', text: t }); })));
+    x.el.appendChild(el('div', { class: 'dp-src-notes' }, sourceNotes().map(function (t) { return el('p', { class: 'dp-fine', text: t }); })
+      .concat(healthNotes().map(function (n) { return el('p', { class: 'dp-fine dp-src-notes__hf', text: n.text, title: n.title || null }); }))));
     x.el.appendChild(el('p', { class: 'dp-fine', text: 'Perangkat lunak: MapLibre GL JS 4.7.1 (BSD-3-Clause), deck.gl 9.0.41 (MIT), D3 7.9.0 (ISC), Papa Parse 5.4.1 (MIT), SheetJS CE 0.18.5 (Apache-2.0, dimuat pada impor XLSX pertama). Font: Source Serif 4, Inter Tight, IBM Plex Mono (SIL Open Font Licence).' }));
     x.el.appendChild(x.src);
     return x.el;
   }
+
+  /* ==================================== V8: the one import row "Funding merchant (cabang)" (D45, D46; §3.2, §4.2.1) */
+
+  var FUND_LINES = ['Laporan Funding Merchant Mass Retail atau file Cilangkap Merchant Area.', 'Hanya merchant KCP Jakarta Cilangkap (12903) yang disimpan.',
+    'CIF, nomor rekening, nama resmi pemilik dan alamat dihapus saat file dibaca.'];
+  var FUND_T = {
+    title: 'Funding merchant (cabang)', pick: 'Impor file funding merchant', hint: 'Pilih satu atau dua file: laporan region dan file cabang.',
+    reading: 'Membaca file…', notFunding: 'File ini bukan laporan funding merchant. Pilih file lain.',
+    unread: 'File tidak dapat dibaca. Pastikan formatnya CSV atau XLSX.', noXlsx: 'Pembaca XLSX tidak dapat dimuat. Periksa internet, lalu coba lagi.',
+    noModule: 'Pembaca funding merchant tidak termuat. Muat ulang halaman.', result: 'Hasil pemeriksaan',
+    head: 'Posisi {tanggal} · {n} merchant', mids: ' · {m} MID', dropped: 'Kolom yang dihapus dan tidak disimpan: {daftar}.',
+    saldoKept: 'Daftar Saldo merchant menyimpan saldo per merchant sesuai file.', bandsOnly: 'Peta dan kartu merchant hanya menampilkan rentang saldo.',
+    use: 'Gunakan data ini', cancel: 'Batal', ready: 'Funding merchant siap · {n} merchant KCP Cilangkap', see: 'Lihat di Merchant',
+    notKept: 'Isi file tidak disimpan. Untuk impor ulang, pilih file lagi.', failed: 'Funding merchant tidak dapat digunakan. Coba lagi.',
+    clearBody: 'Data funding merchant dan daftar Saldo merchant akan dihapus dari dashboard.', loaded: 'Posisi {tanggal} · {n} merchant',
+    cancelled: 'Impor funding merchant dibatalkan. Tidak ada yang berubah.'
+  };
+  /* the dropped columns in words (§4.2.1); other labels (actype, sccode, …) as written in the file */
+  var DROP_WORDS = [[/^(cif|cifno|cif_no|no_cif|nocif)$/, 'CIF'], [/^(norekening|no_rekening|nomor_rekening|norek|rekening|account|account_no|account_number)$/, 'nomor rekening'],
+    [/^(merchantofficialname|merchant_official_name|official_name|nama_resmi|nama_pemilik|pemilik|owner|owner_name|nama_nasabah)$/, 'nama resmi pemilik'],
+    [/^(alamat|alamat_[a-z0-9_]+|address)$/, 'alamat']];
+  var DROP_ORDER = ['CIF', 'nomor rekening', 'nama resmi pemilik', 'alamat'];
+  function fill(t, v) { return String(t).replace(/\{(\w+)\}/g, function (m, k) { return Object.prototype.hasOwnProperty.call(v, k) ? String(v[k]) : m; }); }
+  /** Column labels as written in the file → the words of the dropped-columns line, without repeats, CIF first. */
+  function dropWords(list) {
+    var out = [];
+    (list || []).forEach(function (raw) {
+      var h = str(raw);
+      if (!h) return;
+      var n = h.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''), w = h;
+      for (var i = 0; i < DROP_WORDS.length; i++) if (DROP_WORDS[i][0].test(n)) { w = DROP_WORDS[i][1]; break; }
+      if (out.indexOf(w) < 0) out.push(w);
+    });
+    var rank = function (w) { var i = DROP_ORDER.indexOf(w); return i < 0 ? DROP_ORDER.length : i; };
+    return out.map(function (w, i) { return { w: w, i: i }; }).sort(function (a, b) { return rank(a.w) - rank(b.w) || a.i - b.i; }).map(function (x) { return x.w; });
+  }
+
+  // memory only (D45: nothing is kept before "Gunakan data ini"): st 'idle' | 'reading' | 'review' | 'error' | 'done'
+  var FS = { st: 'idle', res: null, saldo: null, names: [], msg: null, after: false, doneN: 0, token: 0 };
+  function fundApi() { var Fd = MCD.funding; return Fd && typeof Fd.importFiles === 'function' && typeof Fd.apply === 'function' ? Fd : null; }
+  function fundReset() { FS.token++; FS.st = 'idle'; FS.res = null; FS.saldo = null; FS.names = []; FS.msg = null; FS.after = false; }
+  /** Empties a sheet read from a file (its rows hold the columns that are never kept: CIF, account, owner, address). */
+  function wipeSheet(sh) {
+    if (!sh || typeof sh !== 'object') return;
+    if (Array.isArray(sh.rows)) { sh.rows.forEach(function (r) { if (Array.isArray(r)) for (var j = 0; j < r.length; j++) r[j] = null; }); sh.rows.length = 0; }
+    if (Array.isArray(sh.headers)) sh.headers.length = 0;
+    if (Array.isArray(sh.rowNos)) sh.rowNos.length = 0;
+  }
+  function wipeItems(items) { (items || []).forEach(function (it) { (it && it.sheets || []).forEach(wipeSheet); }); }
+  /** The funding row as stored: {asOf, n} (merchants; the Saldo list when no funding dataset), or null. */
+  function fundLoaded() {
+    var sets = realSets(), c = catalogEntry('funding');
+    if (!c) return null;
+    var key = entryKey(sets, c), n = realCount(sets, key);
+    if (!n) return null;
+    /* merchants as the import counted them (the meta record's branch totals), else the records */
+    var rows = (sets[key] && sets[key].rows) || [], meta = rows.filter(function (r) { return r && r.isMeta; })[0], t = meta && meta.aggregates && meta.aggregates.total;
+    return { asOf: entryMeta(sets, c).asOf || null, n: t && isNum(t.merchants) ? t.merchants : n };
+  }
+  function fundMerchants(model) {
+    var A = model && model.aggregates, t = A && A.total;
+    return t && isNum(t.merchants) ? t.merchants : ((model && model.merchants) || []).length;
+  }
+
+  /** "Impor file funding merchant": one or two files, read here, then checked by MCD.funding.importFiles. */
+  function fundPick(files) {
+    files = (files || []).filter(Boolean);
+    if (!files.length) return;
+    if (demoOn()) { MCD.demo.ensureOff().then(function (ok) { if (ok) fundPick(files); }); return; }
+    var I = MCD.importer;
+    if (!fundApi() || !I || typeof I.read !== 'function') { FS.st = 'error'; FS.msg = FUND_T.noModule; renderFunding(); return; }
+    if (files.some(function (f) { return !/\.(csv|txt|xlsx|xlsm|xls)$/i.test(f.name || ''); })) { FS.st = 'error'; FS.msg = FUND_T.unread; renderFunding(); return; }
+    var token = ++FS.token;
+    FS.st = 'reading'; FS.msg = null; FS.after = false; FS.res = null; FS.saldo = null;
+    renderFunding();
+    Promise.all(files.map(function (file) {
+      return I.read(file).then(function (sheets) { return { file: { name: file.name || 'file', size: file.size || 0 }, sheets: sheets || [] }; });
+    })).then(function (items) {
+      if (token !== FS.token) { wipeItems(items); return; }
+      fundRun(items);
+    }, function (err) {
+      if (token !== FS.token) return;
+      var m = String((err && err.message) || '');
+      if (W.console) W.console.warn('[data] funding file could not be read', m);
+      FS.st = 'error'; FS.msg = /sheetjs|could not load|timed out/i.test(m) ? FUND_T.noXlsx : FUND_T.unread;
+      renderFunding();
+    });
+  }
+  /**
+   * The check: MCD.funding.importFiles (12903 only, both layouts), the merchant-name sheet through the Saldo schema, then
+   * the raw sheets are emptied. Nothing is stored here.
+   */
+  function fundRun(items) {
+    var Fd = fundApi(), I = MCD.importer, names = (items || []).map(function (it) { return (it && it.file && it.file.name) || 'file'; });
+    FS.token++;
+    if (!Fd) { wipeItems(items); FS.st = 'error'; FS.msg = FUND_T.noModule; renderFunding(); return; }
+    var r = null;
+    try { r = Fd.importFiles(items); } catch (e) { r = null; if (W.console) W.console.warn('[data] funding check failed', e && e.message); }
+    if (!r || !r.model || r.error === 'not-funding') {
+      wipeItems(items);
+      FS.st = 'error'; FS.msg = FUND_T.notFunding; FS.res = null; FS.saldo = null; FS.names = names;
+      log(names.join(', ') + ': bukan laporan funding merchant.', 'warn');
+      showFunding();
+      return;
+    }
+    var saldo = null;
+    if (r.saldoSheet && r.saldoSheet.sheet && I && typeof I.parse === 'function') {
+      try {
+        var p = I.parse(r.saldoSheet.sheet, 'saldo', null, {});
+        saldo = { records: p.records || [], report: p.report || {}, file: r.saldoSheet.file || null, sheet: r.saldoSheet.sheet.name || null };
+      } catch (e2) { saldo = null; if (W.console) W.console.warn('[data] saldo sheet check failed', e2 && e2.message); }
+    }
+    if (r.saldoSheet) wipeSheet(r.saldoSheet.sheet);
+    wipeItems(items);
+    FS.st = 'review'; FS.names = names; FS.after = false; FS.msg = null;
+    FS.res = { ok: !!r.ok, error: r.error || null, model: r.model, report: r.report || r.model.report || {} };
+    FS.saldo = saldo;
+    log(names.join(', ') + ': ' + (r.ok ? 'funding merchant terbaca. Periksa, lalu tekan Gunakan data ini.' : 'KCP Jakarta Cilangkap (12903) tidak ada di file ini.'), r.ok ? '' : 'warn');
+    showFunding();
+  }
+  /** Brings the card into view: Detail › Impor (a drop in Sederhana switches the view; the card keeps its state). */
+  function showFunding() {
+    S.tab = 'import';
+    if (ctx && !deep()) { S.scrollTo = 'dp-funding'; ctx.setView('deep'); return; }
+    if (ui && ui.panels && !ui.panels.import.hidden) renderFunding();
+    else goTab('import');
+    if (ctx) bringTo('dp-funding', function (c) { var u = c.querySelector('[data-fk="fund-use"]'); return u && !u.disabled ? u : (c.querySelector('[data-fk="fund-cancel"]') || c.querySelector('[data-fk="fund-pick"]')); }, true);
+  }
+  /** "Gunakan data ini": both bank datasets in one step, with the funding position date (D45). */
+  function fundUse() {
+    var res = FS.res, Fd = fundApi();
+    if (!res || !res.ok || !Fd) return;
+    if (demoOn()) { MCD.demo.ensureOff().then(function (ok) { if (ok) fundUse(); }); return; }
+    var model = res.model, file = (FS.names || []).join(' + ') || null, saldo = FS.saldo, ok = false;
+    try { ok = Fd.apply(model, { file: file }) !== false; } catch (e) { ok = false; if (W.console) W.console.warn('[data] funding apply failed', e && e.message); }
+    if (!ok) { log(FUND_T.failed, 'warn'); if (ctx) ctx.toast(FUND_T.failed, 'warn'); return; }
+    var sk = dataKeyAvail('saldo');
+    if (saldo && saldo.records.length && MCD.importer && typeof MCD.importer.apply === 'function') {
+      try { MCD.importer.apply('saldo', saldo.records, { asOf: model.asOf || (saldo.report && saldo.report.asOf) || null, file: saldo.file || file, sheet: saldo.sheet, report: saldo.report }); }
+      catch (e2) { if (W.console) W.console.warn('[data] saldo apply failed', e2 && e2.message); log('Daftar Saldo merchant tidak dapat digunakan. Coba lagi.', 'warn'); }
+    } else if (sk && realCount(realSets(), sk)) {
+      try { MCD.data.revert(sk); } catch (e3) { /* the older list stays until its own clear */ }   // one import, one date: no older Saldo list stays
+    }
+    var n = fundMerchants(model), words = dropWords((res.report.droppedColumns || []).concat((saldo && saldo.report && saldo.report.dropped) || []));
+    log(file + ' → ' + FUND_T.title + ': ' + nInt(n) + ' merchant' + (model.asOf ? ', posisi ' + F().date(model.asOf) : '') +
+      (words.length ? ' · ' + plural(words.length, 'personal column', 'personal columns') + ' dihapus' : '') + '.', 'ok');
+    FS.token++; FS.st = 'done'; FS.res = null; FS.saldo = null; FS.after = true; FS.doneN = n;
+    S.changed = true;
+    if (ctx) ctx.toast(fill(FUND_T.ready, { n: nInt(n) }));
+    refreshAll();
+  }
+  function fundCancel() {
+    fundReset();
+    FS.after = true;
+    log(FUND_T.cancelled, '');
+    renderFunding();
+  }
+  /** One "Hapus" for the row: the funding dataset and the Saldo merchant list (§4.2.4). */
+  function removeFunding(c) {
+    ctx.confirm({ title: 'Hapus ' + c.label + '?', danger: true, ok: 'Hapus', cancel: 'Batal',
+      body: FUND_T.clearBody + '\nFile asli Anda tidak berubah dan dapat diimpor lagi.' })
+      .then(function (yes) {
+        if (!yes) return;
+        ['funding_merchant', 'saldo'].forEach(function (k) {
+          var key = dataKeyAvail(k);
+          if (key) { try { MCD.data.revert(key); } catch (e) { if (W.console) W.console.warn('[data] remove failed', e && e.message); } }
+        });
+        S.changed = true;
+        if (FS.st === 'done') fundReset();
+        log(c.label + ' dan daftar Saldo merchant telah dihapus dari dashboard.', 'ok');
+        refreshAll();
+      });
+  }
+
+  function findRow(level, text, id) {
+    var lv = level === 'warn' ? 'warn' : (level === 'ok' ? 'ok' : 'info');
+    return el('li', { class: 'dp-find__row is-' + lv, id: id || null }, [icon(lv === 'warn' ? 'warn' : (lv === 'ok' ? 'check' : 'info'), 'icon--12'), el('span', { text: text })]);
+  }
+  /** "Hasil pemeriksaan" (§4.2.1): dates, counts and the notes of the modules, never a cell value of the files. */
+  function fundReport() {
+    var res = FS.res, model = res.model || {}, rep = res.report || {}, saldo = FS.saldo;
+    var box = el('div', { class: 'dp-rep dp-fund__rep', 'aria-live': 'polite' });
+    box.appendChild(el('h4', { class: 'dp-h3', text: FUND_T.result }));
+    box.appendChild(el('p', { class: 'dp-fund__files', text: 'Dari ' + (FS.names || []).join(', ') }));
+    var A = model.aggregates, t = A && A.total, mids = A && A.unit === 'mid' && t && isNum(t.mids) ? t.mids : null;
+    if (res.ok) box.appendChild(el('p', { class: 'dp-fund__head', text: fill(FUND_T.head, { tanggal: model.asOf ? F().date(model.asOf) : '—', n: nInt(fundMerchants(model)) }) + (mids != null ? fill(FUND_T.mids, { m: nInt(mids) }) : '') }));
+    var list = el('ul', { class: 'dp-find' });
+    var words = dropWords((rep.droppedColumns || []).concat((saldo && saldo.report && saldo.report.dropped) || []));
+    var dropLine = words.length ? fill(FUND_T.dropped, { daftar: joinWords(words) }) : null, dropShown = false;
+    (rep.checks || []).forEach(function (c) {
+      if (!c || !c.text) return;
+      if (c.code === 'DROPPED') { if (dropLine && !dropShown) { list.appendChild(findRow('info', dropLine)); dropShown = true; } return; }   // the same fact, in words
+      list.appendChild(findRow(c.level, c.text, c.code === 'HOME_MISSING' ? 'dp-fund-why' : null));
+    });
+    ((saldo && saldo.report && saldo.report.notes) || []).forEach(function (t2) { if (t2) list.appendChild(findRow('info', String(t2))); });
+    if (dropLine && !dropShown) list.appendChild(findRow('info', dropLine));
+    if (saldo && saldo.records && saldo.records.length) list.appendChild(findRow('info', FUND_T.saldoKept));
+    list.appendChild(findRow('info', FUND_T.bandsOnly));
+    box.appendChild(list);
+    var use = el('button', { type: 'button', class: 'btn btn--lg btn--primary', 'data-fk': 'fund-use', disabled: res.ok ? null : true,
+      'aria-describedby': res.ok ? null : 'dp-fund-why' }, [icon('check'), el('span', { text: FUND_T.use })]);
+    use.addEventListener('click', fundUse);
+    var cancel = el('button', { type: 'button', class: 'btn btn--lg btn--secondary', 'data-fk': 'fund-cancel' }, [el('span', { text: FUND_T.cancel })]);
+    cancel.addEventListener('click', fundCancel);
+    box.appendChild(el('div', { class: 'dp-actions dp-fund__act' }, [use, cancel]));
+    return box;
+  }
+  /** The card of the Impor tab (built once per Detail render, refilled by renderFunding). */
+  function fundingCard() {
+    var input = el('input', { type: 'file', class: 'sr-only', accept: '.xlsx,.xlsm,.xls,.csv', multiple: true, tabindex: '-1', 'aria-hidden': 'true' });
+    input.addEventListener('change', function () { var f = Array.prototype.slice.call(input.files || []); input.value = ''; fundPick(f); });
+    var now = el('p', { class: 'dp-icard__now', hidden: true });
+    var body = el('div', { class: 'dp-fund__body' });
+    var card = el('section', { class: 'dp-icard dp-fund', id: 'dp-funding', 'aria-labelledby': 'dp-funding-t' }, [
+      el('h3', { class: 'dp-icard__t', id: 'dp-funding-t', text: FUND_T.title }),
+      el('ul', { class: 'dp-icard__lines' }, FUND_LINES.map(function (t) { return el('li', { text: t }); })),
+      now, body, input
+    ]);
+    ui.fund = { card: card, body: body, input: input, now: now };
+    renderFunding();
+    return card;
+  }
+  function renderFunding() {
+    var f = ui && ui.fund;
+    if (!f) return;
+    var keep = focusKey();
+    clear(f.body);
+    f.card.setAttribute('aria-busy', FS.st === 'reading' ? 'true' : 'false');
+    var ld = fundLoaded();
+    f.now.hidden = !ld;
+    f.now.textContent = ld ? fill(FUND_T.loaded, { tanggal: ld.asOf ? F().date(ld.asOf) : '—', n: nInt(ld.n) }) : '';
+    if (!fundApi()) { f.body.appendChild(el('p', { class: 'dp-st__bad', text: FUND_T.noModule })); return; }
+    if (FS.st === 'reading') {
+      f.body.appendChild(el('p', { class: 'dp-icard__busy', role: 'status' }, [el('span', { class: 'dp-spin', 'aria-hidden': 'true' }), el('span', { text: FUND_T.reading })]));
+      return;
+    }
+    if (FS.st === 'review' && FS.res) { f.body.appendChild(fundReport()); restoreFocus(keep); return; }
+    if (FS.st === 'error' && FS.msg) f.body.appendChild(el('p', { class: 'dp-st__bad', role: 'alert', text: FS.msg }));
+    if (FS.st === 'done') {
+      var see = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'fund-see' }, [el('span', { text: FUND_T.see }), icon('chev-r', 'icon--12')]);
+      /* V8 final fix: land where the import shows (Detail › Status LVM & EDC › EDC tidak bertransaksi, with the rank line),
+         not in whatever Merchant state was last used */
+      see.addEventListener('click', function () { goSection('merchants', 'merchants:idle'); });
+      f.body.appendChild(el('div', { class: 'dp-callout dp-callout--ok dp-fund__done' }, [icon('check', 'icon--12'), el('p', { text: fill(FUND_T.ready, { n: nInt(FS.doneN) }) }), el('div', { class: 'dp-actions' }, [see])]));
+    }
+    var pick = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'fund-pick' }, [icon('upload', 'icon--12'), el('span', { text: FUND_T.pick })]);
+    pick.addEventListener('click', function () { f.input.click(); });
+    f.body.appendChild(el('div', { class: 'dp-actions' }, [pick]));
+    f.body.appendChild(el('p', { class: 'dp-fine', text: FUND_T.hint }));
+    if (FS.after) f.body.appendChild(el('p', { class: 'dp-fine dp-fund__after', text: FUND_T.notKept }));
+    restoreFocus(keep);
+  }
+
+  /* V8 §4.2.3: the KPI workbook goes through the generic Impor (MCD.kpi.workbookReader); this card is the target of
+     the action data:kpi and says what the file gives. */
+  function kpiCard() {
+    var R = MCD.kpi && MCD.kpi.workbookReader;
+    if (!R) return null;
+    var pick = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'kpi-pick' }, [icon('upload', 'icon--12'), el('span', { text: 'Pilih file KPI' })]);
+    pick.addEventListener('click', pickFiles);
+    var now = el('p', { class: 'dp-icard__now', hidden: true });
+    ui.kpiNow = now;
+    renderKpiNow();
+    return el('section', { class: 'dp-icard dp-kpicard', id: 'dp-kpi', 'aria-labelledby': 'dp-kpi-t' }, [
+      el('h3', { class: 'dp-icard__t', id: 'dp-kpi-t', text: V8_ENTRY.kpi.label }),
+      el('ul', { class: 'dp-icard__lines' }, ['Laporan KPI area bulanan apa adanya, seperti yang dikirim kantor area.', 'File dikenali dari nama sheet. Hasilnya tampil di Posisi cabang.']
+        .map(function (t) { return el('li', { text: t }); })),
+      now, el('div', { class: 'dp-actions' }, [pick])
+    ]);
+  }
+  function renderKpiNow() {
+    var n = ui && ui.kpiNow;
+    if (!n) return;
+    var sets = realSets(), c = catalogEntry('kpi'), cnt = c ? entryCount(sets, c) : 0, m = c ? entryMeta(sets, c) : {};
+    n.hidden = !cnt;
+    n.textContent = cnt ? 'Data per ' + (m.asOf ? F().date(m.asOf) : '—') + ' · diimpor ' + (m.importedAt ? F().dateTime(m.importedAt) : '—') : '';
+  }
+  /** "Impor daftar leads" (MCD.leadsUi.importFlow, V7 §9.2): the module draws nothing while the lead switch is off. */
+  function leadsImportHost() {
+    var LU = MCD.leadsUi, host = el('div', { class: 'dp-luimp', id: 'dp-leads-import' });
+    if (!LU || typeof LU.importFlow !== 'function') return host;
+    try { ui.luImport = LU.importFlow(host, leadsCtx()); } catch (e) { ui.luImport = null; if (W.console) W.console.warn('[data] lead import card failed', e && e.message); }
+    return host;
+  }
+  function leadsCtx() {
+    return {
+      saveEncrypted: function () { saveCopy(); },
+      toast: function (m, k) { if (ctx) ctx.toast(m, k); },
+      onSwitch: function (on) { renderPolicy(); renderSaveBits(); if (on) focusPolicy('leads'); },
+      openThresholds: function () { goTab('policy'); focusPolicy('leads'); }
+    };
+  }
+  /** Scrolls a block into view after the shell's own scroll restore, and focuses `pick(block)` unless the user is typing. */
+  function bringTo(id, pick, force) {
+    [80, 450].forEach(function (ms) {
+      setTimeout(function () {
+        var c = DOC.getElementById(id);
+        if (!c || !ctx) return;
+        var top = c.getBoundingClientRect().top;
+        if ((top < 0 || top > (W.innerHeight || 800) * 0.6) && c.scrollIntoView) c.scrollIntoView({ block: 'start' });
+        var b = pick ? pick(c) : null, act = DOC.activeElement;
+        if (!b || b.disabled || act === b) return;
+        if (!force && act && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName)) return;
+        try { b.focus({ preventScroll: true }); } catch (e) { b.focus(); }
+      }, ms);
+    });
+  }
+
+  /* ============================ V8: tab "Kebijakan & leads" (V7 §8 as trimmed by D41, D51, D52; V8 §4.2.2) */
+
+  var POL_T = {
+    banner: 'Angka kebijakan berlaku sampai dashboard dikunci. Simpan salinan terenkripsi agar terbuka lagi.',
+    save: 'Simpan salinan terenkripsi', print: 'Halaman ini memuat data bank dan tidak dicetak dari dashboard.',
+    cardTitle: 'Angka kebijakan bank (diisi cabang)', noDefault: 'Dashboard tidak memiliki angka kebijakan bawaan.',
+    thrFirst: 'Isi ambang sebelum impor. Aturan dengan ambang kosong tidak menghasilkan leads.', thrAfter: 'Setelah ambang diubah, impor ulang file leads.',
+    empty: 'Belum diisi', complete: 'Lengkap · diisi {tanggal}', incomplete: 'Belum lengkap: {n} angka', optional: 'opsional',
+    actor: 'Inisial petugas', actorHint: 'Isi 2 sampai 4 huruf, misalnya AB.',
+    savePolicy: 'Simpan angka kebijakan', clearPolicy: 'Kosongkan angka kebijakan', saveThr: 'Simpan ambang',
+    saved: 'Angka kebijakan disimpan untuk sesi ini', nothing: 'Tidak ada yang berubah', cleared: 'Angka kebijakan dikosongkan untuk sesi ini',
+    kprAsumsi: 'Jika kosong, simulator KPR menggunakan asumsi {x}% dari Pengaturan & sumber.',
+    clearBody: 'Angka kebijakan di kartu ini dikosongkan untuk sesi ini.\nRiwayat tetap mencatat perubahan ini.',
+    logTitle: 'Riwayat kebijakan dan leads', logMore: 'Tampilkan 20 berikutnya', logEmpty: 'Belum ada catatan di sesi ini.',
+    logLine1: 'Riwayat ini catatan bantu cabang dan ikut tersimpan di salinan terenkripsi.',
+    logLine2: 'Catatan persetujuan Kepala cabang tetap disimpan pemilik dashboard.', logCap: 'Riwayat menyimpan {n} catatan terakhir.',
+    footer: 'Simpan salinan terenkripsi agar kebijakan dan daftar leads terbuka lagi saat masuk berikutnya.',
+    noModule: 'Kebijakan bank belum termuat. Muat ulang halaman.', blank: 'kosong'
+  };
+  var LOG_PAGE = 20;
+  function policyApi() { var P = MCD.policy; return P && typeof P === 'object' && typeof P.set === 'function' && typeof P.get === 'function' ? P : null; }
+  function leadsOn() { var L = MCD.leads; return !!(L && typeof L.enabled === 'function' && call(L.enabled, L)); }
+  /** What "Simpan salinan terenkripsi" carries for the policy module and the lead switch (V8 §3.6). */
+  function policyKeep() {
+    var P = policyApi(), LU = MCD.leadsUi, out = { any: false, dirty: false };
+    if (P) {
+      var d = isFn(P.dirty) ? call(P.dirty, P) === true : false, a = isFn(P.all) ? call(P.all, P) : null, h = isFn(P.history) ? call(P.history, P) : null;
+      out.dirty = d;
+      out.any = d || !!(a && a.values && Object.keys(a.values).length) || !!(h && h.length);
+    }
+    if (LU && isFn(LU.dirty) && call(LU.dirty, LU) === true) { out.dirty = true; out.any = true; }
+    return out;
+  }
+  function groupDef(id) { var P = policyApi(); return P && Array.isArray(P.GROUPS) ? P.GROUPS.filter(function (g) { return g && g.id === id; })[0] || null : null; }
+  function fieldId(key) { return 'pol-' + String(key).replace(/[^a-zA-Z0-9]+/g, '-'); }
+  function statusText(st) {
+    if (!st) return '';
+    if (st.complete) return fill(POL_T.complete, { tanggal: st.date ? F().date(String(st.date).slice(0, 10)) : '—' });
+    if (st.missing && st.missing.length) return fill(POL_T.incomplete, { n: nInt(st.missing.length) });
+    return POL_T.optional;
+  }
+  /** One policy field (no <form>; autocomplete, spellcheck and the browser's own translation off; D18: no example number). */
+  function policyField(key) {
+    var P = policyApi(), id = fieldId(key), unit = (P.UNITS || {})[key], cur = P.get(key);
+    var inp = el('input', { class: 'input dp-in dp-pol__in', id: id, name: id, type: 'text', inputmode: unit === 'pct' ? 'decimal' : 'numeric', autocomplete: 'off',
+      'data-fk': id, 'aria-describedby': id + '-h ' + id + '-e', attrs: { spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }, value: P.format(key) });
+    inp.addEventListener('blur', function () { if (!str(inp.value)) { fieldErr(id, ''); return; } var r = P.parse(key, inp.value); fieldErr(id, r && r.ok ? '' : (r && r.pesan) || ''); });
+    inp.addEventListener('input', function () { fieldErr(id, ''); });
+    var tag = cur === null ? el('span', { class: 'tag dp-tag dp-tag--empty', text: POL_T.empty }) : null;
+    var row = fieldRow(id, (P.LABELS || {})[key] || key, inp, (P.HINTS || {})[key] || null, tag, unit === 'pct' ? '%' : null);
+    if (!(P.HINTS || {})[key]) row.appendChild(el('p', { class: 'sr-only', id: id + '-h' }));
+    return row;
+  }
+  function actorField(prefix) {
+    var P = policyApi(), id = 'pol-actor-' + prefix;
+    var inp = el('input', { class: 'input dp-in dp-pol__actor', id: id, name: id, type: 'text', maxLength: 4, autocomplete: 'off', 'data-fk': id,
+      'aria-describedby': id + '-h ' + id + '-e', attrs: { spellcheck: 'false', autocapitalize: 'characters', autocorrect: 'off' }, value: (P && isFn(P.actor) && P.actor()) || '' });
+    inp.addEventListener('input', function () { fieldErr(id, ''); });
+    return fieldRow(id, POL_T.actor, inp, POL_T.actorHint, null);
+  }
+  /** Validates the fields of `keys` and the initials, then MCD.policy.set (it logs the Riwayat entry, D27). */
+  function savePolicy(keys, prefix) {
+    var P = policyApi();
+    if (!P || !ctx) return;
+    if (demoOn()) { ctx.toast((P.MESSAGES && P.MESSAGES.demo) || 'Tidak tersedia saat Data contoh aktif.', 'warn'); return; }
+    var patch = {}, bad = null;
+    keys.forEach(function (k) {
+      var id = fieldId(k), node = DOC.getElementById(id);
+      if (!node) return;
+      var raw = node.value, cur = P.get(k);
+      if (!str(raw)) { fieldErr(id, ''); if (cur !== null) patch[k] = ''; return; }
+      var r = P.parse(k, raw);
+      if (!r || !r.ok) { fieldErr(id, (r && r.pesan) || ''); bad = bad || node; return; }
+      fieldErr(id, '');
+      if (r.value !== cur) patch[k] = raw;
+    });
+    var aid = 'pol-actor-' + prefix, an = DOC.getElementById(aid), a = isFn(P.setActor) ? P.setActor(an ? an.value : '') : { ok: true };
+    if (!a.ok) { fieldErr(aid, a.pesan || POL_T.actorHint); bad = bad || an; } else fieldErr(aid, '');
+    if (bad) { if (isFn(bad.focus)) bad.focus(); return; }
+    if (!Object.keys(patch).length) { ctx.toast(POL_T.nothing); return; }
+    var res = P.set(patch, { source: 'user' });
+    if (!res || !res.ok) {
+      var first = null;
+      ((res && res.errors) || []).forEach(function (e) {
+        if (e && e.key && DOC.getElementById(fieldId(e.key))) { fieldErr(fieldId(e.key), e.pesan || ''); first = first || DOC.getElementById(fieldId(e.key)); }
+        else if (e && e.pesan) ctx.toast(e.pesan, 'warn');
+      });
+      if (first) first.focus();
+      return;
+    }
+    ctx.toast(POL_T.saved);
+    renderPolicy(true);
+    restoreFocus(prefix === 'thr' ? 'pol-save-thr' : 'pol-save-card');
+  }
+  function clearPolicyCard() {
+    var P = policyApi();
+    if (!P || !ctx) return;
+    if (demoOn()) { ctx.toast((P.MESSAGES && P.MESSAGES.demo) || 'Tidak tersedia saat Data contoh aktif.', 'warn'); return; }
+    var aid = 'pol-actor-card', an = DOC.getElementById(aid), a = isFn(P.setActor) ? P.setActor(an ? an.value : '') : { ok: true };
+    if (!a.ok) { fieldErr(aid, a.pesan || POL_T.actorHint); if (an) an.focus(); return; }
+    fieldErr(aid, '');
+    ctx.confirm({ title: POL_T.clearPolicy, danger: true, ok: POL_T.clearPolicy, cancel: 'Batal', body: POL_T.clearBody }).then(function (yes) {
+      if (!yes || !policyApi()) return;
+      var changed = P.clear();
+      ctx.toast(changed && changed.length ? POL_T.cleared : POL_T.nothing);
+      renderPolicy(true);
+    });
+  }
+  /** "Angka kebijakan bank (diisi cabang)": only while KPR is shown (D52); its one group "KPR (opsional)". */
+  function policyCard() {
+    var P = policyApi();
+    if (!P || !sectionShown('property')) return null;
+    var groups = (P.GROUPS || []).filter(function (g) { return g && g.id !== 'leads'; }), keys = [];
+    var card = el('section', { class: 'dp-pol-card dp-polc', id: 'dp-polc', 'aria-labelledby': 'dp-polc-t', attrs: { translate: 'no' } }, [
+      el('h3', { class: 'dp-pol-card__t', id: 'dp-polc-t', text: POL_T.cardTitle }),
+      el('p', { class: 'dp-p', text: POL_T.noDefault })
+    ]);
+    groups.forEach(function (g) {
+      var st = isFn(P.groupStatus) ? P.groupStatus(g.id) : null;
+      card.appendChild(el('div', { class: 'dp-pol__gh' }, [el('h4', { class: 'dp-h3', text: g.label }), el('span', { class: 'dp-pol__st' + (st && st.complete ? ' is-ok' : ''), text: statusText(st) })]));
+      g.keys.forEach(function (k) { keys.push(k); card.appendChild(policyField(k)); });
+      if (g.id === 'kpr' && isFn(P.forKpr)) {
+        var fk = P.forKpr();
+        if (fk && fk.source === 'asumsi' && isNum(fk.pct)) card.appendChild(el('p', { class: 'dp-fine', text: fill(POL_T.kprAsumsi, { x: F().num(fk.pct, fk.pct % 1 ? 1 : 0) }) }));
+      }
+    });
+    card.appendChild(actorField('card'));
+    var save = el('button', { type: 'button', class: 'btn btn--primary', 'data-fk': 'pol-save-card' }, [icon('check', 'icon--12'), el('span', { text: POL_T.savePolicy })]);
+    save.addEventListener('click', function () { savePolicy(keys, 'card'); });
+    var clr = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'pol-clear-card' }, [el('span', { text: POL_T.clearPolicy })]);
+    clr.addEventListener('click', clearPolicyCard);
+    card.appendChild(el('div', { class: 'dp-actions' }, [save, clr]));
+    return card;
+  }
+  /** "Ambang daftar leads" (V7 §8.2 as trimmed by D41): only while the lead list is on. */
+  function thresholdsCard() {
+    var P = policyApi(), g = groupDef('leads');
+    if (!P || !g || !leadsOn()) return null;
+    var st = isFn(P.groupStatus) ? P.groupStatus('leads') : null;
+    var card = el('section', { class: 'dp-pol-card dp-thr', id: 'dp-thr', 'aria-labelledby': 'dp-thr-t', attrs: { translate: 'no' } }, [
+      el('div', { class: 'dp-pol__gh' }, [el('h3', { class: 'dp-pol-card__t', id: 'dp-thr-t', text: g.label }), el('span', { class: 'dp-pol__st' + (st && st.complete ? ' is-ok' : ''), text: statusText(st) })]),
+      el('p', { class: 'dp-p', text: POL_T.thrFirst })
+    ]);
+    g.keys.forEach(function (k) { card.appendChild(policyField(k)); });
+    card.appendChild(actorField('thr'));
+    var save = el('button', { type: 'button', class: 'btn btn--primary', 'data-fk': 'pol-save-thr' }, [icon('check', 'icon--12'), el('span', { text: POL_T.saveThr })]);
+    save.addEventListener('click', function () { savePolicy(g.keys, 'thr'); });
+    card.appendChild(el('div', { class: 'dp-actions' }, [save]));
+    card.appendChild(el('p', { class: 'dp-fine', text: POL_T.thrAfter }));
+    return card;
+  }
+  /** "Riwayat kebijakan dan leads" (V7 §8.5): newest first, 20 rows a page, read-only; hidden under Data contoh. */
+  function historyBlock() {
+    var P = policyApi();
+    if (!P || !isFn(P.history) || demoOn()) return null;
+    var list = P.history() || [], shown = Math.max(LOG_PAGE, S.logShown || LOG_PAGE);
+    var det = el('details', { class: 'dp-pol__log', id: 'dp-pol-log', open: S.logOpen ? true : null });
+    det.addEventListener('toggle', function () { S.logOpen = !!det.open; });
+    det.appendChild(el('summary', { class: 'dp-pol__logsum' }, [el('span', { text: POL_T.logTitle }), list.length ? el('span', { class: 'dp-pol__logn', text: nInt(list.length) }) : null]));
+    var ol = el('ol', { class: 'dp-pol__rows' });
+    list.slice(0, shown).forEach(function (e) {
+      var d = isFn(P.describe) ? P.describe(e) : { text: '', changes: [] };
+      if (!d || !d.text) return;
+      var li = el('li', { class: 'dp-pol__row' }, [el('span', { class: 'dp-pol__at', text: F().dateTime(e.at) }), el('span', { class: 'dp-pol__txt', text: d.text })]);
+      if (d.changes && d.changes.length) {
+        li.appendChild(el('details', { class: 'dp-pol__chg' }, [el('summary', { text: 'Rincian' }),
+          el('ul', null, d.changes.map(function (c) { return el('li', { text: (c.name || c.key) + ': ' + (c.from || POL_T.blank) + ' → ' + (c.to || POL_T.blank) }); }))]));
+      }
+      ol.appendChild(li);
+    });
+    det.appendChild(ol.firstChild ? ol : el('p', { class: 'dp-fine', text: POL_T.logEmpty }));
+    if (list.length > shown) {
+      var more = el('button', { type: 'button', class: 'btn btn--secondary', 'data-fk': 'pol-log-more' }, [el('span', { text: POL_T.logMore })]);
+      more.addEventListener('click', function () { S.logShown = shown + LOG_PAGE; renderPolicy(); restoreFocus('pol-log-more'); });
+      det.appendChild(el('div', { class: 'dp-actions' }, [more]));
+    }
+    det.appendChild(el('p', { class: 'dp-fine', text: POL_T.logLine1 + '\n' + POL_T.logLine2 }));
+    if (isFn(P.capped) && P.capped()) det.appendChild(el('p', { class: 'dp-fine', text: fill(POL_T.logCap, { n: nInt(P.LOG_MAX || 500) }) }));
+    return det;
+  }
+  /** The tab frame (built once per Detail render); the lead card is mounted once and follows MCD.leadsUi itself. */
+  function policyPanel(panel) {
+    var p = ui.pol = {
+      print: el('p', { class: 'dp-print-line', text: POL_T.print }),
+      banner: el('div', { class: 'dp-pol__banner' }),
+      grid: el('div', { class: 'dp-pol__grid' }),
+      card: el('div', { class: 'dp-pol__col dp-pol__col--card' }),
+      side: el('div', { class: 'dp-pol__col' }),
+      lead: el('div', { class: 'dp-pol__lead', id: 'dp-leads' }),
+      thr: el('div', { class: 'dp-pol__thr' }),
+      log: el('div', { class: 'dp-pol__logwrap' })
+    };
+    p.side.appendChild(p.lead);
+    p.side.appendChild(p.thr);
+    p.grid.appendChild(p.card);
+    p.grid.appendChild(p.side);
+    var x = exhibit('dp-policy', 'Kebijakan bank dan daftar leads', 'Angka yang diisi cabang dan daftar leads dengan CIF disamarkan · hanya di komputer ini', null,
+      'Sumber: angka yang diisi cabang · terenkripsi di salinan terenkripsi');
+    x.el.setAttribute('translate', 'no');
+    x.el.appendChild(p.banner);
+    if (!policyApi()) x.el.appendChild(el('p', { class: 'dp-st__bad', text: POL_T.noModule }));
+    x.el.appendChild(p.grid);
+    x.el.appendChild(p.log);
+    x.el.appendChild(el('p', { class: 'dp-fine dp-pol__foot', text: POL_T.footer }));
+    x.el.appendChild(x.src);
+    panel.appendChild(p.print);
+    panel.appendChild(x.el);
+    var LU = MCD.leadsUi;
+    if (LU && isFn(LU.settingsCard)) {
+      try { ui.luCard = LU.settingsCard(p.lead, leadsCtx()); } catch (e) { ui.luCard = null; if (W.console) W.console.warn('[data] lead card failed', e && e.message); }
+    }
+    renderPolicy();
+  }
+  /**
+   * The parts that follow MCD.policy and the lead switch: banner, KPR card, thresholds card, Riwayat. An outside change
+   * (a lead event, a data refresh) never rebuilds the fields while staff type in one; this tab's own save does (force).
+   */
+  function renderPolicy(force) {
+    var p = ui && ui.pol, P = policyApi();
+    if (!p) return;
+    var keep = focusKey(), typing = !force && DOC.activeElement && p.grid.contains(DOC.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(DOC.activeElement.tagName);
+    clear(p.banner);
+    if (P && isFn(P.dirty) && P.dirty() && !demoOn()) {
+      var sv = el('button', { type: 'button', class: 'btn btn--primary', 'data-fk': 'pol-banner-save' }, [svgIcon('shield', 'icon--12'), el('span', { text: POL_T.save })]);
+      sv.addEventListener('click', saveCopy);
+      p.banner.appendChild(el('div', { class: 'dp-callout dp-callout--mid', role: 'status' }, [icon('warn', 'icon--12'), el('p', { text: POL_T.banner }), sv]));
+    }
+    /* a card that appears or goes (the lead switch, KPR shown) is always redrawn; while staff type, a card that stays
+       keeps its fields and only its status line follows */
+    var wantCard = !!(P && sectionShown('property')), wantThr = !!(P && groupDef('leads') && leadsOn());
+    if (!typing || wantCard !== !!p.card.firstChild) {
+      clear(p.card);
+      var pc = policyCard();
+      if (pc) p.card.appendChild(pc);
+      p.card.hidden = !pc;
+      p.grid.classList.toggle('has-card', !!pc);
+    } else statusInPlace(p.card, 'kpr');
+    if (!typing || wantThr !== !!p.thr.firstChild) {
+      clear(p.thr);
+      var tc = thresholdsCard();
+      if (tc) p.thr.appendChild(tc);
+      p.thr.hidden = !tc;
+    } else statusInPlace(p.thr, 'leads');
+    clear(p.log);
+    var hb = historyBlock();
+    if (hb) p.log.appendChild(hb);
+    restoreFocus(keep);
+  }
+  function statusInPlace(host, id) {
+    var P = policyApi(), n = host && host.querySelector ? host.querySelector('.dp-pol__st') : null;
+    if (!P || !n || !isFn(P.groupStatus)) return;
+    var st = P.groupStatus(id);
+    n.textContent = statusText(st);
+    n.classList.toggle('is-ok', !!(st && st.complete));
+  }
+  /** data:policy and data:leads: this tab, then the first empty threshold (lead list on), the KPR field, else the switch. */
+  function focusPolicy(kind) {
+    bringTo(kind === 'leads' ? 'dp-leads' : 'dp-policy', function () {
+      var P = policyApi(), g = groupDef('leads');
+      if (P && g && leadsOn() && DOC.getElementById('dp-thr')) {
+        var req = g.keys.filter(function (k) { return (P.OPTIONAL || []).indexOf(k) < 0; }), miss = isFn(P.missing) ? P.missing(req) : req;
+        if (kind !== 'leads' || miss.length) return DOC.getElementById(fieldId(miss[0] || g.keys[0]));
+      }
+      if (kind !== 'leads' && DOC.getElementById('dp-polc')) {
+        var k0 = (groupDef('kpr') || { keys: [] }).keys[0];
+        if (k0) return DOC.getElementById(fieldId(k0));
+      }
+      var lead = DOC.getElementById('dp-leads');
+      return lead ? lead.querySelector('.lu-switch') : null;
+    });
+  }
+  function onPolicyChange() { if (ctx && ui) { renderPolicy(); renderSaveBits(); } }
 
   /* --- page assembly ------------------------------------------------------ */
 
@@ -2827,7 +3768,9 @@
     renderOverviewState();
   }
 
-  var TABS = [{ id: 'import', label: 'Impor' }, { id: 'loaded', label: 'File dimuat' }, { id: 'save', label: 'Simpan & kata sandi' }, { id: 'settings', label: 'Pengaturan & sumber' }];
+  /* V8 R5, §4.2.2: "Kebijakan & leads" between File dimuat and Simpan & kata sandi */
+  var TABS = [{ id: 'import', label: 'Impor' }, { id: 'loaded', label: 'File dimuat' }, { id: 'policy', label: 'Kebijakan & leads' },
+    { id: 'save', label: 'Simpan & kata sandi' }, { id: 'settings', label: 'Pengaturan & sumber' }];
   function tabOk(id) { return TABS.some(function (t) { return t.id === id; }); }
   /** Shows one tab (the shell's ctx.tabs when present, A-09; else an equivalent tablist). */
   function goTab(id) {
@@ -2844,6 +3787,8 @@
     if (ui.tabs && typeof ui.tabs.set === 'function' && (!ui.tabs.get || ui.tabs.get() !== id)) ui.tabs.set(id);
     if (id === 'loaded') { renderLoaded(); renderCheck(); ensureMatch(); }
     if (id === 'save') renderSaveBits();
+    if (id === 'policy') renderPolicy();
+    if (id === 'import') { renderFunding(); renderKpiNow(); }
   }
   function makeTabs(host, panel) {
     var active = tabOk(S.tab) ? S.tab : 'import';
@@ -2883,6 +3828,8 @@
     ui.drop = el('div', { class: 'dp-drop-row' }, [dropZone(true, true), el('div', { class: 'dp-drop-side' }, [
       el('p', { class: 'dp-p' }, [el('strong', { text: 'Livin’ Merchant: ' }), 'letakkan laporan bulanan “Rev LVM” persis seperti yang dikirim kantor area. Sheet rincian dan sheet UREG / USAK dibaca bersama.']),
       el('p', { class: 'dp-p' }, [el('strong', { text: 'EDC Mandiri dan nasabah SMA: ' }), 'isi template permintaan data, satu sheet per file, atau file CSV dengan kolom yang sama. Beberapa file dapat dimasukkan sekaligus.']),
+      /* V8 (§4.2.3, D45): the funding merchant files and the KPI workbook are recognised as they are */
+      el('p', { class: 'dp-p' }, [el('strong', { text: 'Funding merchant dan KPI area: ' }), 'letakkan file apa adanya. Jenis file dikenali dari nama sheet dan judul kolomnya.']),
       tpl,
       el('p', { class: 'dp-fine' }, [el('code', { text: TEMPLATE })])
     ])]);
@@ -2899,6 +3846,11 @@
     ix.el.appendChild(el('details', { class: 'dp-guide-wrap' }, [el('summary', { class: 'dp-guide-wrap__sum' }, [el('span', { text: 'Panduan kolom' }), el('span', { class: 'dp-fine', text: 'sheet dan nama kolom yang dapat digunakan setiap file' })]), columnGuide()]));
     ix.el.appendChild(ix.src);
     ui.panels.import.appendChild(ix.el);
+    /* V8: the import rows with their own flow (funding merchant, D45), the KPI file card and "Impor daftar leads" */
+    ui.panels.import.appendChild(el('div', { class: 'dp-icards' }, [fundingCard(), kpiCard()]));
+    ui.panels.import.appendChild(leadsImportHost());
+    // Kebijakan & leads (V7 §8 as trimmed by D41, D51, D52)
+    policyPanel(ui.panels.policy);
 
     // File dimuat: loaded datasets and the LVM file check
     var lx = exhibit('dp-loaded', '', '', null, 'Sumber: salinan terenkripsi dan file yang diimpor · hanya di komputer ini');
@@ -2947,6 +3899,7 @@
     renderCheck();
     showTab(tabOk(S.tab) ? S.tab : 'import');
     if (S.tab === 'loaded') ensureMatch();
+    if (S.scrollTo) { var to = S.scrollTo; S.scrollTo = null; bringTo(to, function (c) { var u = c.querySelector('[data-fk="fund-use"]'); return u && !u.disabled ? u : null; }, true); }
   }
 
   /* ------------------------------------------------------------ the page */
@@ -2956,9 +3909,10 @@
     var rs = realStatus(), ss = saveState(rs), st = saveTone(ss), w = rs.worst;
     var newest = rs.asOf ? freshness(1, { asOf: rs.asOf }) : null;
     return [
-      { label: 'File dimuat', value: rs.primaryLoaded + ' dari ' + rs.primaryN, tone: !rs.any ? 'none' : (rs.primaryLoaded === rs.primaryN ? 'ok' : 'mid'),
-        explain: !rs.any ? 'Belum ada yang diimpor: mulai dengan laporan Rev LVM' : (rs.primaryLoaded === rs.primaryN ? 'Livin’ Merchant, EDC Mandiri dan nasabah SMA'
-          : 'Belum diimpor: ' + joinWords(rs.cat.filter(function (c) { return c.primary && !loadedOf(rs, c.key); }).map(function (c) { return c.short || c.label; }))), demo: false, emptyNote: false },
+      { label: 'File bank dimuat', value: nInt(bankFiles(rs).n), tone: !rs.any ? 'none' : (rs.primaryLoaded === rs.primaryN ? 'ok' : 'mid'),
+        explain: !rs.any ? 'Belum ada yang diimpor: mulai dengan laporan Rev LVM' : (function (bf) {
+          return cap1(joinWords(bf.names)) + (bf.missing.length ? ' · belum diimpor: ' + joinWords(bf.missing) : '');
+        })(bankFiles(rs)), demo: false, emptyNote: false },
       { label: 'Baris di dashboard', value: rs.rows, explain: 'Dari semua file yang dimuat', demo: false, emptyNote: false },
       { label: 'Tanggal data terbaru', value: rs.asOf ? F().date(rs.asOf) : null, tone: newest ? newest.tone : 'none',
         explain: rs.asOf ? (w && w.fresh.tone !== 'ok' ? (w.c.short || w.c.label) + ': ' + w.fresh.word.toLowerCase() : newest.word + ' · ' + ageText(newest)) : '', emptyNote: 'Belum ada file yang diimpor', demo: false },
@@ -2985,7 +3939,7 @@
         keys = keys || [];
         var all = keys.indexOf('*') >= 0;
         if (all || keys.indexOf('data') >= 0 || keys.indexOf('demo') >= 0) {
-          renderLoaded(); renderSaveBits(); refreshGoogle(); renderFollowups();
+          renderLoaded(); renderSaveBits(); refreshGoogle(); renderFollowups(); renderFunding(); renderKpiNow(); renderPolicy();
           if (deep()) { renderReview(); renderCheck(); ensureMatch(); if (ui && ui.demoX) ui.demoX.title.textContent = demoOn() ? 'Data contoh aktif: angka bank hanya ilustrasi' : 'Data contoh mati: angka berasal dari file Anda dan sumber publik'; }
           else { renderOverviewState(); if (page && !all) page.refill(); }
         }
@@ -3002,7 +3956,7 @@
       lines under the sources table in place ("Dimuat saat diperlukan" until then). */
   function onLazyData(e) {
     var n = e && e.detail && e.detail.name;
-    if (!ui || !/^(school-students|campuses|school-contacts|institution-tiers)$/.test(String(n || ''))) return;
+    if (!ui || !/^(school-students|campuses|school-contacts|institution-tiers|health-facilities)$/.test(String(n || ''))) return;
     var old = DOC.getElementById('dp-sources');
     if (!old || !old.parentNode) return;
     try { old.parentNode.replaceChild(sourcesBlock(), old); } catch (x) { /* the next visit shows them */ }
@@ -3011,7 +3965,7 @@
   /* ------------------------------------------------------- registrations */
 
   MCD.sections = MCD.sections || {};
-  var offSeal = null;
+  var offSeal = null, offPol = [];
   MCD.sections[ID] = {
     mount: function (root, c) {
       ctx = c;
@@ -3025,6 +3979,14 @@
       if (!offSeal && isFn(DOC.addEventListener)) { DOC.addEventListener('mcd:seal', onSeal); offSeal = function () { DOC.removeEventListener('mcd:seal', onSeal); }; }
       if (isFn(DOC.addEventListener)) DOC.addEventListener('mcd:gate-locking', onLocking);
       if (isFn(DOC.addEventListener)) DOC.addEventListener('mcd:lazy', onLazyData);
+      /* V8: the policy tab follows MCD.policy and the lead switch (their own on(), else their document events) */
+      offPol = [];
+      var Po = MCD.policy, LUo = MCD.leadsUi;
+      if (Po && isFn(Po.on)) { var o1 = call(Po.on, Po, [onPolicyChange]); if (isFn(o1)) offPol.push(o1); }
+      if (LUo && isFn(LUo.on)) { var o2 = call(LUo.on, LUo, [onPolicyChange]); if (isFn(o2)) offPol.push(o2); }
+      if (!offPol.length && isFn(DOC.addEventListener)) {
+        ['mcd:policy', 'mcd:leads'].forEach(function (ev) { DOC.addEventListener(ev, onPolicyChange); offPol.push(function () { DOC.removeEventListener(ev, onPolicyChange); }); });
+      }
       c.registerCommands(function () {
         return [
           { label: 'Impor file data', kw: 'upload csv xlsx import rev lvm', run: function () { pickFiles(); } },
@@ -3032,7 +3994,10 @@
           { label: 'Simpan salinan terenkripsi', kw: 'vault save encrypt', run: saveCopy },
           { label: 'Hapus semua data dari dashboard', kw: 'clear wipe delete hapus memori', run: removeAll },
           { label: 'Isi kunci Google untuk Cek rating Google', kw: 'google places api key kunci rating ulasan', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:google' }); } },
-          { label: 'Tindak lanjut di komputer ini', kw: 'tindak lanjut pipeline terenkripsi kata sandi lama hapus daftar', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:followups' }); } }
+          { label: 'Tindak lanjut di komputer ini', kw: 'tindak lanjut pipeline terenkripsi kata sandi lama hapus daftar', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:followups' }); } },
+          { label: 'Impor file funding merchant', kw: 'funding merchant saldo merchant laporan region cilangkap merchant area', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:funding' }); } },
+          { label: 'Impor file KPI bulanan area', kw: 'kpi area bulanan posisi cabang target', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:kpi' }); } },
+          { label: 'Kebijakan & leads', kw: 'kebijakan ambang prioritas leads inisial riwayat', run: function () { if (ctx) ctx.navigate('data', { view: 'deep', action: 'data:policy' }); } }
         ].concat(winApi('resetLayout') ? [{ label: 'Atur ulang tata letak kartu', kw: 'tata letak kartu panel reset posisi ukuran rapikan', run: resetLayout }] : []);
       });
     },
@@ -3041,14 +4006,26 @@
       dropCharts();
       closeOldDialog();
       if (offSeal) { call(offSeal, null); offSeal = null; }
+      (offPol || []).forEach(function (f) { call(f, null); });
+      offPol = [];
+      if (ui) [ui.luCard, ui.luImport].forEach(function (m) { if (m && isFn(m.destroy)) call(m.destroy, m); });
       if (isFn(DOC.removeEventListener)) DOC.removeEventListener('mcd:gate-locking', onLocking);
       if (isFn(DOC.removeEventListener)) DOC.removeEventListener('mcd:lazy', onLazyData);
       page = null; ui = null; ctx = null;
     },
     onFiles: function (files) { if (ctx) stageFiles(Array.prototype.slice.call(files || [])); },
     onAction: function (action) {
-      var m = /^data:(import|loaded|save|settings|google|followups)$/.exec(String(action || ''));
+      var m = /^data:(import|loaded|policy|save|settings|google|followups|leads|kpi|funding)$/.exec(String(action || ''));
       if (!m) return false;
+      /* V8 §4.2.2: data:policy (this tab, the first empty threshold), data:leads (the lead card and its thresholds),
+         data:kpi and data:funding (Impor, the card with its button) */
+      if (m[1] === 'policy' || m[1] === 'leads') { goTab('policy'); focusPolicy(m[1]); return true; }
+      if (m[1] === 'kpi' || m[1] === 'funding') {
+        goTab('import');
+        var id = m[1] === 'kpi' ? 'dp-kpi' : 'dp-funding', fk = m[1] === 'kpi' ? 'kpi-pick' : 'fund-pick';
+        bringTo(id, function (c) { return c.querySelector('[data-fk="' + fk + '"]') || c.querySelector('[data-fk="fund-use"]'); });
+        return true;
+      }
       if (m[1] === 'followups') {       // "Buka di Data & Privasi" from a Tindak lanjut tab (V6_SPEC §7.6): the card in Simpan & kata sandi
         goTab('save');
         [80, 450].forEach(function (ms) {
@@ -3094,6 +4071,11 @@
       v6: { followups: followups, openOldAll: openOldAll, oldPwDialog: oldPwDialog, closeOldDialog: closeOldDialog, dialog: function () { return DLG; },
         saveState: function () { return saveState(realStatus()); }, realStatus: realStatus, sourceRows: sourceRows, sourceNotes: sourceNotes,
         block: function (name) { ui = ui || { root: null }; return { followups: followupsBlock, sources: sourcesBlock, privacy: privacyBlock, save: saveBlock }[name](); } },
-      peak: { set: setPeak, reset: resetPeak, saved: savedPeak, apply: applySavedPeak, KEY: PEAK_KEY } }
+      peak: { set: setPeak, reset: resetPeak, saved: savedPeak, apply: applySavedPeak, KEY: PEAK_KEY },
+      /* V8 (docs/V8_SPEC.md §3.2, §4.2) for tests/data-v8.test.mjs */
+      v8: { catalog: catalog, fundRun: fundRun, fundUse: fundUse, fundCancel: fundCancel, fundPick: fundPick, state: function () { return FS; },
+        dropWords: dropWords, fundingRoute: fundingRoute, detectWorkbook: detectWorkbook, sourceRows: v8SourceRows, healthNotes: healthNotes,
+        realStatus: realStatus, saveState: function () { return saveState(realStatus()); }, policyKeep: policyKeep, renderPolicy: function () { renderPolicy(); },
+        tabs: function () { return TABS.map(function (t) { return t.id; }); }, stage: function (files) { stageFiles(files); } } }
   };
 })(window.MCD = window.MCD || {});

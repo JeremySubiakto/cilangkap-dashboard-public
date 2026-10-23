@@ -32,16 +32,17 @@
  * values) keeps a disabled select; a pick the module denies for the field chosen is undone (W9). Under Data contoh the
  * switch and "Matikan dan hapus daftar leads" do nothing (MCD.policy neither logs nor clears then, D27). When the page is hidden the panel body leaves the DOM for a
  * cover; the panel closes on lock, section switch, "Samarkan nama", Data contoh and after 5 minutes without input.
- * The rule Calon top up KSM stays off while the branch has not filled its tenor (D31); a rule the UI shows as off
- * never gets a table, row list, rail line or chip, also when it was the remembered rule. No browser storage, no
+ * A rule stays off while the branch has not filled its threshold (D31); a rule the UI shows as off never gets a
+ * table, row list, rail line or chip, also when it was the remembered rule. No browser storage, no
  * network, no console output, no join between a unit code and any place on the map (D31). Plain Indonesian
  * (COPY_DECK_ID §1–4). Safe DOM only (createElement, textContent, setAttribute). No bank policy number in this file.
  *
- * D39 (22 Oct 2026, the KSM & KKB section is removed): the lead rules stay as written (they read the bank's own
- * customer report, not the removed section), and no label of this lane names the removed tab or its calculator.
- * This file reads only MCD.leads, MCD.data, MCD.state, MCD.policy (forLeads, missing, actor, setActor, log,
- * clear, on), MCD.nav and MCD.app. Count lines go to the KPR and Calon Prioritas full rails and the Posisi cabang
- * rows (DPK, KSM, KKB), each through railLine / chip.
+ * D39, D41 (22 and 23 Oct 2026; docs/V8_SPEC.md §3.5, §4.7, D51): the former TNI credit section and its two
+ * products left the UI and the logic. Two rules remain, Calon KPR and Mendekati Prioritas; groupings Kode satuan ·
+ * Saldo · Penghasilan. This file reads only MCD.leads, MCD.data, MCD.state, MCD.policy (forLeads, missing, actor,
+ * setActor, log, clear, on), MCD.nav, MCD.back and MCD.app. Count lines go to the Calon Prioritas full rail
+ * (Mendekati Prioritas) and the Posisi cabang DPK and KPR rows, each through railLine / chip. On coarse pointers
+ * (tablets ≥ 1024 px) the panel registers the MCD.back layer 'leads', so Back closes it first (V8 §2.7, M2).
  * ========================================================================== */
 (function (root, factory) {
   var api = factory(root);
@@ -58,40 +59,31 @@
   var PAGE = 200;                       // row list page
   var ISSUES_SHOWN = 50;                // §9.2 step 4
 
-  var RULE_IDS = ['calonKsm', 'calonTopUpKsm', 'calonKkb', 'calonKpr', 'calonPrioritas'];
+  var RULE_IDS = ['calonKpr', 'calonPrioritas'];
   /** D32: the UI's own labels. "Calon Prioritas" names the tab of public places only. */
-  var LABELS = { calonKsm: 'Calon KSM', calonTopUpKsm: 'Calon top up KSM', calonKkb: 'Calon KKB', calonKpr: 'Calon KPR',
-    calonPrioritas: 'Mendekati Prioritas' };
-  // what each rule means, in the UI's words (the module's own texts carry its starting tenor, D31)
+  var LABELS = { calonKpr: 'Calon KPR', calonPrioritas: 'Mendekati Prioritas' };
+  // what each rule means, in the UI's words
   var RULE_TITLES = {
-    calonKsm: 'Payroll TNI dengan kolektibilitas lancar yang belum memiliki KSM.',
-    calonTopUpKsm: 'Memiliki KSM dengan sisa tenor sampai batas top up yang diisi cabang, kolektibilitas lancar.',
-    calonKkb: 'Belum memiliki KKB, penghasilan dari batas yang diisi cabang, kolektibilitas lancar.',
     calonKpr: 'Belum memiliki KPR, penghasilan dari batas yang diisi cabang, kolektibilitas lancar.',
     calonPrioritas: 'Nasabah bukan Prioritas dengan saldo 80 sampai 100% dari ambang Prioritas.'
   };
   var OFF_WHY = {
-    calonKsm: 'Aturan ini belum aktif.',
-    calonTopUpKsm: 'Sisa tenor untuk top up KSM belum diisi.',
-    calonKkb: 'Penghasilan minimal Calon KKB belum diisi.',
     calonKpr: 'Penghasilan minimal Calon KPR belum diisi.',
     calonPrioritas: 'Ambang saldo Mandiri Prioritas belum diisi.'
   };
-  var BY_IDS = ['kodeSatuan', 'segmen', 'saldoBand', 'penghasilanBand', 'tenorBand'];
-  var BY_LABELS = { kodeSatuan: 'Kode satuan', segmen: 'Segmen', saldoBand: 'Saldo', penghasilanBand: 'Penghasilan', tenorBand: 'Sisa tenor' };
-  var THRESHOLD_KEYS = ['leads.prioritasThreshold', 'leads.kkbMinIncome', 'leads.kprMinIncome', 'leads.topUpMaxTenor'];
+  var BY_IDS = ['kodeSatuan', 'saldoBand', 'penghasilanBand'];
+  var BY_LABELS = { kodeSatuan: 'Kode satuan', saldoBand: 'Saldo', penghasilanBand: 'Penghasilan' };
+  var THRESHOLD_KEYS = ['leads.prioritasThreshold', 'leads.kprMinIncome'];
   var THRESHOLD_LABELS = {
-    'leads.prioritasThreshold': 'Ambang saldo Mandiri Prioritas', 'leads.kkbMinIncome': 'Penghasilan minimal Calon KKB',
-    'leads.kprMinIncome': 'Penghasilan minimal Calon KPR', 'leads.topUpMaxTenor': 'Sisa tenor untuk top up KSM'
+    'leads.prioritasThreshold': 'Ambang saldo Mandiri Prioritas', 'leads.kprMinIncome': 'Penghasilan minimal Calon KPR'
   };
   // threshold keys that change the bands of an import (k does not)
-  var CUT_KEYS = { 'leads.prioritasThreshold': 1, 'leads.kkbMinIncome': 1, 'leads.kprMinIncome': 1, 'leads.topUpMaxTenor': 1 };
+  var CUT_KEYS = { 'leads.prioritasThreshold': 1, 'leads.kprMinIncome': 1 };
   // short field names for the mapping select and the row issues (the module's FIELDS, in its order)
   var FIELD_NAMES = {
-    cif: 'CIF (disamarkan)', segmen: 'Segmen', kodeSatuan: 'Kode satuan', tabungan: 'Tabungan', giro: 'Giro', deposito: 'Deposito',
-    ksm: 'KSM', kkb: 'KKB', kpr: 'KPR', kartuKredit: 'Kartu Kredit', livin: 'Livin’ by Mandiri', prioritas: 'Prioritas',
-    saldo: 'Saldo (kelompok)', penghasilan: 'Penghasilan (kelompok)', sisaTenorKsm: 'Sisa tenor KSM (kelompok)',
-    kolektibilitas: 'Kolektibilitas (lancar ya/tidak)'
+    cif: 'CIF (disamarkan)', kodeSatuan: 'Kode satuan', tabungan: 'Tabungan', giro: 'Giro', deposito: 'Deposito',
+    kpr: 'KPR', kartuKredit: 'Kartu Kredit', livin: 'Livin’ by Mandiri', prioritas: 'Prioritas',
+    saldo: 'Saldo (kelompok)', penghasilan: 'Penghasilan (kelompok)', kolektibilitas: 'Kolektibilitas (lancar ya/tidak)'
   };
   var STATUS_WORDS = { dipakai: 'digunakan', ditolak: 'ditolak', diabaikan: 'diabaikan' };
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -132,6 +124,7 @@
     print: 'Halaman ini memuat data bank dan tidak dicetak dari dashboard.',
     openLeads: 'Buka Leads',
     leadIn: '{aturan} di Leads: {n}',
+    railHead: 'Leads: ',
     // settings card (§8.3)
     switchLabel: 'Impor daftar leads',
     off: 'Mati', on: 'Nyala',
@@ -204,7 +197,7 @@
     issue: 'Baris {r} · {field}: {reason}',
     issueMore: 'dan {k} baris lain',
     noKol1: 'Kolom kolektibilitas tidak ada di file ini.',
-    noKol2: 'Calon KSM, Calon top up KSM, Calon KKB dan Calon KPR akan kosong.',
+    noKol2: 'Calon KPR akan kosong.',
     use: 'Gunakan data ini',
     ready: 'Daftar leads siap. Simpan salinan terenkripsi agar terbuka lagi.',
     fileGone: 'Isi file tidak disimpan. Untuk impor ulang, pilih file lagi.',
@@ -360,33 +353,30 @@
     return !!safe(function () { return root.matchMedia('(min-width: ' + MIN_WIDTH + 'px)').matches; });
   }
   function policyLeads() { var p = P(); return p ? safe(function () { return p.forLeads(); }) || null : null; }
-  /** D31: Calon top up KSM is off while the branch has not filled leads.topUpMaxTenor (or no policy module is loaded). */
-  function topUpOff() { var pl = policyLeads(); return !pl || pl.topUpMaxTenor == null; }
-
-  /** MCD.leads.configure from the policy numbers (§1.7.1 "Feeds"); an empty top-up tenor keeps the module's own cut. */
+  /** MCD.leads.configure from the policy numbers (§1.7.1 "Feeds"). */
   function feedPolicy() {
     var l = L(), pl = policyLeads();
     if (!l || !pl) return;
     var patch = {};
-    ['prioritasThreshold', 'kkbMinIncome', 'kprMinIncome', 'topUpMaxTenor', 'k'].forEach(function (k) { if (has(pl, k)) patch[k] = pl[k]; });
+    ['prioritasThreshold', 'kprMinIncome', 'k'].forEach(function (k) { if (has(pl, k)) patch[k] = pl[k]; });
     safe(function () { l.configure(patch); });
   }
 
   /**
    * The summary as the screens may show it: {k, total: {text}, rules: {<id>: {id, off, offWhy, text, suppressed, shown,
-   * n}}}. n is set only for a count that is shown (not hidden, not off, at least k); a rule that the UI shows as off
-   * (D31) reads "—". Memoised per data version and settings.
+   * n}}}. n is set only for a count that is shown (not hidden, not off, at least k); a rule that is off (its threshold
+   * is empty, D31) reads "—". Memoised per data version and settings.
    */
   function view() {
     var l = L(), d = D();
     if (!l || !d) return null;
-    var recs = records(), set = l.settings(), off = topUpOff();
-    var sig = [d.version, recs.length, JSON.stringify(set), off ? 1 : 0].join('|');
+    var recs = records(), set = l.settings();
+    var sig = [d.version, recs.length, JSON.stringify(set)].join('|');
     if (S.cache.sig === sig && S.cache.val) return S.cache.val;
     var sm = l.summary(recs), out = { k: sm.k, total: { text: sm.total.text, suppressed: !!sm.total.suppressed }, rules: {} };
     sm.rules.forEach(function (r) {
       if (RULE_IDS.indexOf(r.id) < 0) return;
-      var isOff = !r.active || (r.id === 'calonTopUpKsm' && off);
+      var isOff = !r.active;
       var shown = !isOff && !r.suppressed && isNum(r.n) && r.n >= sm.k;
       out.rules[r.id] = { id: r.id, off: isOff, offWhy: isOff ? OFF_WHY[r.id] : null, text: isOff ? '—' : r.text,
         suppressed: isOff || !!r.suppressed, shown: shown, n: shown ? r.n : null };
@@ -422,8 +412,8 @@
     var l = L();
     if (!S.cuts || !l) return false;
     var s = l.settings();
-    var cur = { prioritas: isNum(s.prioritasThreshold), penghasilan: l.edgesFor('penghasilanBand', s), tenor: l.edgesFor('tenorBand', s) };
-    return JSON.stringify(cur) !== JSON.stringify({ prioritas: S.cuts.prioritas, penghasilan: S.cuts.penghasilan, tenor: S.cuts.tenor });
+    var cur = { prioritas: isNum(s.prioritasThreshold), penghasilan: l.edgesFor('penghasilanBand', s) };
+    return JSON.stringify(cur) !== JSON.stringify({ prioritas: S.cuts.prioritas, penghasilan: S.cuts.penghasilan });
   }
 
   /* ============================================== count lines outside the panel */
@@ -434,7 +424,10 @@
       on: { click: function () { open({ rule: id }); } }
     }, [fill(T.leadIn, { aturan: LABELS[id], n: r.text })]);
   }
-  /** railLine(rules) → a block of lines, one per rule whose count is shown; null when none (D17, §9.6). */
+  /**
+   * railLine(rules) → one line "Leads: Mendekati Prioritas {n} · Buka Leads" (V7 §5.3, V8 §4.5) with the rules whose
+   * count is shown, as one button that opens the panel at the first of them; null when none (D17, §9.6).
+   */
   function railLine(rules) {
     ensureWired();
     if (!available()) return null;
@@ -444,7 +437,11 @@
     });
     if (!ids.length) return null;
     var box = h('div', { cls: 'lu-rail', attrs: { translate: 'no' } });
-    ids.forEach(function (id) { box.appendChild(leadButton(id, v.rules[id], 'lu-rail__line')); });
+    var text = T.railHead + ids.map(function (id) { return LABELS[id] + ' ' + v.rules[id].text; }).join(' · ') + ' · ' + T.openLeads;
+    box.appendChild(h('button', {
+      cls: 'lu-rail__line', attrs: { type: 'button', title: T.openLeads, 'data-rule': ids[0] },
+      on: { click: function () { open({ rule: ids[0] }); } }
+    }, [text]));
     return box;
   }
   /** chip(rule) → the Posisi cabang lead chip "Mendekati Prioritas di Leads: n", or null (same rule as railLine). */
@@ -559,6 +556,9 @@
     host.appendChild(p.box);
     S.panel = p;
     setInert(p);
+    /* V8 §2.7 (M2): on coarse pointers Back closes the panel first; MCD.back decides whether it is active */
+    var B = M().back;
+    if (B && typeof B.open === 'function') safe(function () { B.open('leads', function (o) { close(o && o.via === 'back' ? 'back' : (o && o.via === 'lock' ? 'lock' : 'section')); }); });
     render();
     armIdle();
     var first = p.box.querySelector ? p.box.querySelector('.lu-rule[aria-pressed="true"]') : null;
@@ -573,7 +573,7 @@
     p.timer = setTimeout(function () { p.timer = null; if (S.panel === p) close('idle'); }, IDLE_MS);
   }
   /**
-   * close(reason) → boolean. reason: 'user' | 'esc' | 'lock' | 'section' | 'veil' | 'idle' | 'demo' | 'width' | 'off'.
+   * close(reason) → boolean. reason: 'user' | 'esc' | 'back' | 'lock' | 'section' | 'veil' | 'idle' | 'demo' | 'width' | 'off'.
    * The remembered view survives every reason except lock, veil and off (D17).
    */
   function close(reason) {
@@ -588,6 +588,9 @@
     detach(p.scrim); detach(p.box); detach(p.printNote);
     var d = doc();
     if (d.body.classList) d.body.classList.remove('lu-noprint');
+    /* the panel closed itself: its Back entry is given back (a close by Back or a section change has none left) */
+    var B = M().back;
+    if (B && typeof B.closed === 'function' && reason !== 'back') safe(function () { B.closed('leads'); });
     if (reason !== 'lock' && p.opener && typeof p.opener.focus === 'function' && p.opener.isConnected !== false) safe(function () { p.opener.focus(); });
     if (reason === 'veil') toast(T.toastVeil);
     else if (reason === 'idle') toast(T.toastIdle);

@@ -23,6 +23,8 @@
  * MCD.campus.pipeline), MCD.windows (callouts and cards), MCD.distance (km and minutes from KCP), MCD.territory.
  * Engine: assets/js/campus-core.js (MCD.campus). Storage: mcd.campus.ui.v1 {v, sort, show} (no names), the scope in
  * sessionStorage mcd.scope.v1 (through MCD.inst.scope when present). Safe DOM only (MCD.util.el, textContent).
+ * V8 (docs/V8_SPEC.md §4.6, §2.5): "+ Rencana kunjungan" (MCD.plan.quick, stop pt:… / osm:… / ovt:…, "#n" for another
+ *   campus point) beside "+ Tindak lanjut" and in the callout's link row; landing campus:tab:<tab>[:half[:<sort>]] (mhs, dosen).
  * ========================================================================== */
 (function (MCD) {
   'use strict';
@@ -850,7 +852,9 @@
     s.sortSel.addEventListener('change', function () { st.sort = s.sortSel.value; saveUi(); renderList(); });
     s.sort = { el: s.sortSel, set: function (v) { s.sortSel.value = v; } };
     s.sw = distToggles();
-    s.q = E('input', { class: 'input cp-search__in', type: 'search', placeholder: 'Cari kampus', title: 'Cari menurut nama, singkatan atau kode PT', aria: { label: 'Cari kampus menurut nama, singkatan atau kode PT' }, value: st.q || '' });
+    /* M3 (MOBILE_UX_PLAN): no capitals or "corrections" on campus names; the keyboard's Enter key reads "Cari" */
+    s.q = E('input', { class: 'input cp-search__in', type: 'search', placeholder: 'Cari kampus', title: 'Cari menurut nama, singkatan atau kode PT', aria: { label: 'Cari kampus menurut nama, singkatan atau kode PT' }, value: st.q || '',
+      attrs: { enterkeyhint: 'search', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false' } });
     s.q.addEventListener('input', debounce(function () { st.q = s.q.value; renderList(); }, 150));
     s.exportB = guard(btn('Ekspor daftar kampus (CSV)', 'download', function () { exportCampus(); }, 'btn--secondary btn--bar', 'Daftar kampus yang tampil, dalam CSV. File CSV dapat dibuka di Excel.'));
     s.ex.el.insertBefore(E('div', { class: 'cp-tools cp-tools--list' }, E('label', { class: 'search cp-search' }, icon('search'), s.q),
@@ -1662,6 +1666,17 @@
     return true;
   }
   function trailCrumb(kid) { var name = C.kecName(kid); return { id: String(kid), label: name, title: 'Kembali ke Kecamatan ' + name, run: function () { openKec(String(kid)); } }; }
+  /* ---- "+ Rencana kunjungan" (V8 §4.6, V7 §7): the campus point shown (its main point, or "<id>#<n>" for another one) */
+  function planQuick(r, site) {
+    var P = MCD.plan, pt = site || r;
+    if (!P || !isFn(P.quick) || !r || !C.validKey(r.id) || !isNum(pt.lon) || !isNum(pt.lat)) return null;
+    try { return P.quick({ id: site ? site.id : r.id, kind: 'kampus', label: r.name + (site && site.name ? ' · ' + site.name : ''), lon: pt.lon, lat: pt.lat }) || null; } catch (e) { return null; }
+  }
+  /** The callout's link row entry {label, run} (MCD.windows runLinks) while the campus is not in today's plan. */
+  function planLinkOf(q) {
+    if (!q || q.done || !isFn(q.run)) return null;
+    return { label: q.label, title: q.title || null, run: function () { q.run(); } };
+  }
   /** The callout and card head (≤ 2 chips, ≤ 3 numbers): Mahasiswa (big), Dosen tetap, "10,9 km" over "± 31 menit dari KCP". */
   function campusBrief(r, pt) {
     var f = fm(), d = distOf(pt), dp = distText(d, 'cell'), nums = [];
@@ -1688,14 +1703,16 @@
     var body = [mhsBlock(r), payBlock(r), tierBlock(r), contactBlock(r, identity), routeBlock(r, site, o.trail), kantinBlock(r, site), productBlock(r)];
     body.push(C.validKey(r.id) ? pipelineEditor(r.id, r.name) : blk('Tindak lanjut', [note(NO_KEY)], 'cp-dd--pipe', { id: 'pipe', preview: 'tidak dapat dilacak', open: false }));
     if (o.fold) body.forEach(function (b) { if (b.getAttribute('data-fold') === o.fold) b.setAttribute('data-open', '1'); });
-    var b = campusBrief(r, pt);
+    var b = campusBrief(r, pt), planQ = planQuick(r, site), planL = planLinkOf(planQ);
     return {
       kind: 'pt', key: 'campus:' + (site ? site.id : r.id),
       eyebrow: site ? ['Kampus lain', C.isDesain(r) ? 'Desain dan kursus' : C.jenisWord(r), C.statusWord(r), C.kotaWord(site.kecamatanId)].filter(Boolean).join(' · ') : C.eyebrow(r),
       title: r.name + (r.short ? ' (' + r.short + ')' : ''),
       tags: b.chips.map(function (n) { return n.cloneNode(true); }), body: body,
       gmaps: veil() ? null : { lat: pt.lat, lon: pt.lon },
-      prov: SRC_LINE, provBadge: { src: LOGO.pddikti.src, alt: LOGO.pddikti.alt, width: 56, height: 24 }, brief: b, quick: [pipeQuick(r)],
+      /* V8 §4.6: "+ Rencana kunjungan" beside "+ Tindak lanjut" (MCD.windows.QUICK_MAX = 2) and in the callout's link row */
+      prov: SRC_LINE, provBadge: { src: LOGO.pddikti.src, alt: LOGO.pddikti.alt, width: 56, height: 24 }, brief: b, quick: [pipeQuick(r), planQ].filter(Boolean),
+      links: planL ? [planL] : [],
       crumb: o.trail ? trailCrumb(o.trail) : null,
       anchor: [pt.lon, pt.lat], hints: []
     };
@@ -2422,8 +2439,15 @@
       if (k) { C.ensure().then(function (ok) { if (ok && ctx) { computeView(); showKec(k[1]); } }); return true; }
       var sc = /^campus:scope:(5|15|30)$/.exec(a);
       if (sc) { setKm(+sc[1]); return true; }
-      var tb = /^campus:tab:(list|kec|merch|pipe)$/.exec(a);
-      if (tb) { goTab(tb[1]); return true; }
+      /* V8 §2.5 landing grammar: campus:tab:<tab>[:half[:<sort>]] (Posisi cabang: 'campus:tab:list:half:dosen' | ':mhs');
+         an unknown tab opens the list, an unknown sort or part is ignored */
+      var tb = /^campus:tab:([A-Za-z-]+)((?::[A-Za-z0-9_-]*)*)$/.exec(a);
+      if (tb) {
+        var parts = tb[2].split(':').filter(Boolean), srt = parts.length > 1 && parts[0] === 'half' ? parts[1] : null;
+        if (srt && (C.SORTS || []).some(function (o) { return o.v === srt; })) { st.sort = srt; if (saveUi) saveUi(); }
+        goTab(tb[1]);
+        return true;
+      }
       if (a === 'campus:list') { goTab('list'); return true; }
       if (a === 'filters:reset') { resetFilters(); return true; }
       return false;

@@ -29,7 +29,9 @@
  *   pipeline   MCD.seal.pipeline('health.pipeline', …) (encrypted, H19); a memory-only list without MCD.seal
  *   csv, search, door (the Ringkasan line, H11)
  *
- * Nothing here serves KSM, KKB, TNI loans or satker (D39). No network, no storage apart from the sealed pipeline.
+ * Nothing here serves the removed TNI credit products or satker (D39, D41). No network, no storage apart from the
+ * sealed pipeline. V8 (docs/V8_SPEC.md §4.4): merchantLink adds `ours` (the linked listing is a merchant of KCP
+ * Cilangkap in MCD.funding.ofListing; never a band or an amount).
  * Classic IIFE on window.MCD (UMD for Node), safe DOM only in sym.chip.
  * ========================================================================== */
 (function (root, MCD) {
@@ -265,7 +267,7 @@
   }
   function lvmChip(r) {
     if (!r.in15 || !r.play) return null;
-    var m = merchantLink(r);
+    var m = linkOf(r);                 // the filter never reads MCD.funding (its links are built off the filter path)
     return m.state === 'acquired' ? 'acquired' : m.state === 'not_yet' ? 'not_yet' : m.state === 'tanpa-peta' ? 'unlisted' : null;
   }
   function bpjsChip(r) { return r.bpjs === true ? 'ya' : r.bpjs === false ? 'tidak' : 'belum'; }
@@ -442,8 +444,12 @@
    * 9 + 3,2 × log10(n + 1), not zoomed) drew a group of 38 at 28 px on the 15 km camera, wider than every RS there.
    * A 1,5 px ring and 11 px counts keep the bubble lighter than a hospital; the count may run past a small disc, so it
    * carries an outline in the glass colour.
+   * V8 final fix (critic, 24 Oct 2026): at the default 5 km camera (zoom ≈ 12) groups of 20–40 clinics drew 19–21 px
+   * while most hospitals there are RS kecil (≈ 16,6 px), so "rs lebih besar" was not visibly true. Now 13,5 px for two,
+   * + 2,5 px per tenfold count, never above 16,5 px: with the same zoom and pointer factors every bubble is narrower
+   * than RS kecil (18 px at zoom 13) at every zoom.
    */
-  var BUBBLE = { min: 14.5, perTen: 4.5, max: 21, ring: 1.5, text: 11, badgeMin: 6, badgeMax: 8 };
+  var BUBBLE = { min: 13.5, perTen: 2.5, max: 16.5, ring: 1.5, text: 11, badgeMin: 6, badgeMax: 8 };
   H.BUBBLE = Object.assign({}, BUBBLE);
   /** bubbleDiameter(n, zoom, coarse) → px, rounded to 0,1 (zoom omitted: the zoom-13 size). */
   H.bubbleDiameter = function (n, zoom, coarse) {
@@ -797,7 +803,8 @@
     theme = themeOf(theme);
     var c = COLOURS[theme], n = counts || {}, fl = flags || {}, show = fl.show || {}, viaMap = mapSprites(), rows = [];
     function row(spec, label, count, extra) {
-      var r = Object.assign({ shape: spec.shape, rgb: c[spec.kind].slice(), hollow: !!spec.hollow, label: label }, extra || {});
+      /* ring: the keyline of the map sprites (dark in Gelap), which map.js shapeLegend honours (MAP lane, V8) */
+      var r = Object.assign({ shape: spec.shape, rgb: c[spec.kind].slice(), ring: c.keyline.slice(), hollow: !!spec.hollow, label: label }, extra || {});
       if (count !== undefined) r.count = isNum(count) ? count : null;
       if (spec.faint) r.alpha = SYM.FAINT_ALPHA;
       if (!viaMap || (spec.hollow && !MAPSYM.hollow)) { r.img = SYM.spriteUrl(spec, theme); r.imgKey = 'hf|' + theme + '|' + spec.key + (spec.faint ? '-f' : ''); r.glyph = null; }
@@ -1096,12 +1103,23 @@
     return found.length === 1 ? found[0] : null;
   }
   /**
-   * merchantLink(row) → {state, poi?, status?, guess?, demo} (§5): 'bukan-merchant' (play false) · 'luar-15' (outside
+   * merchantLink(row) → {state, poi?, status?, guess?, demo, ours?} (§5): 'bukan-merchant' (play false) · 'luar-15' (outside
    * 15 km) · 'potensi' (no LVM file; poi when linked) · 'acquired' | 'not_yet' (linked, MCD.lvm.poiStatus) · 'tidak-dihitung'
    * (linked, not a merchant in the Merchant tab) · 'tanpa-peta' (no listing; maybe a guess). Rows that are not merchants
-   * never read MCD.lvm. Memoised per MCD.lvm.result() object.
+   * never read MCD.lvm. Memoised per MCD.lvm.result() object. ours (V8 §4.4, H17): true when the linked listing is a
+   * merchant of KCP Cilangkap (MCD.funding.ofListing), read only while a funding file is loaded; counts nothing.
+   * o {ours: false} skips that read (list columns and filters: the funding links are built only for an open card).
    */
-  function merchantLink(r) {
+  function merchantLink(r, o) {
+    var out = linkOf(r);
+    if (out.poi == null || out.poi < 0 || (o && o.ours === false)) return out;
+    var F = MCD.funding, ours = false;
+    if (F && isFn(F.current) && isFn(F.ofListing)) {
+      try { ours = !!(F.current() && F.ofListing(out.poi)); } catch (e) { ours = false; }
+    }
+    return ours ? Object.assign({}, out, { ours: true }) : out;
+  }
+  function linkOf(r) {
     if (!r) return { state: 'none', demo: false };
     if (r.play === false) return { state: 'bukan-merchant', demo: false };
     if (!r.in15) return { state: 'luar-15', demo: false };
@@ -1298,16 +1316,20 @@
   /* ------------------------------------------------------------ search and the Ringkasan door */
 
   /** search(q, max) → {rows: [row], chains: [{name, kinds}]}: whole names first, then names that contain the words. */
+  var SFOLD = typeof WeakMap === 'function' ? new WeakMap() : { get: function () { return null; }, set: function () {} };   /* folded names, per row object */
   H.search = function (q, max) {
     var I = index(), key = fold(q), lim = isNum(max) ? max : 8;
     if (!I || key.length < 3) return { rows: [], chains: [] };
     var exact = [], part = [];
-    for (var i = 0; i < I.rows.length && exact.length + part.length < lim * 4; i++) {
-      var n = fold(I.rows[i].name);
+    /* V8 final fix (critic, 24 Oct 2026): every match is read (at most 600), so a kind word ("rumah sakit", "klinik")
+       lists the nearest facilities, not the first rows of the file sorted by size (17–38 km away) */
+    for (var i = 0; i < I.rows.length && exact.length + part.length < Math.max(lim * 4, 600); i++) {
+      var n = SFOLD.get(I.rows[i]);
+      if (n == null) { n = fold(I.rows[i].name); SFOLD.set(I.rows[i], n); }
       if (n === key) exact.push(I.rows[i]);
       else if (n.indexOf(key) >= 0) part.push(I.rows[i]);
     }
-    var rows = exact.concat(H.sort(part, 'rsBesar')).slice(0, lim);
+    var rows = exact.concat(H.sort(part, 'near')).slice(0, lim);
     var chains = I.chains.filter(function (c) { return fold(c.name).indexOf(key) >= 0 || key.indexOf(fold(c.name)) >= 0 && fold(c.name).length >= 3; }).slice(0, 3);
     return { rows: rows, chains: chains };
   };

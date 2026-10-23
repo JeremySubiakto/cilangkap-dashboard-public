@@ -2,8 +2,8 @@
  * MCD.plan: "Rencana kunjungan", the dated daily visit plan shared by every tab (v7, docs/V7_SPEC.md §1.7.3 and §7;
  * COPY_STYLE_EN item 48d; decisions D14, D15, D16, D36). Bank Mandiri KCP Jakarta Cilangkap · Dashboard Akuisisi.
  *
- * Staff add public places from the place cards ("+ Rencana kunjungan"): schools, campuses, merchants of the public
- * listing and KPR projects. The plan starts at KCP Cilangkap (D16), is ordered by
+ * Staff add public places from the place cards ("+ Rencana kunjungan"): schools, campuses, health facilities, merchants
+ * of the public listing and KPR projects. The plan starts at KCP Cilangkap (D16), is ordered by
  * MCD.visitPlan (or kept in the user's own order), shows "Tiba ± HH.MM" per stop and opens in Google Maps through
  * links that hold COORDINATES ONLY (MCD.visitPlan.mapsLinks, which fails closed). Leads, LVM-only stores, kecamatan
  * and pages are never added (item 49): every stop is re-checked by MCD.visitPlan.checkStop and by a per-kind id rule.
@@ -39,10 +39,12 @@
  *   placement(ctx) → {mode: 'pin' | 'sheet' | 'over' | 'full', side?, refuse?}, mount(host, {mode}) → {el, update, destroy}
  * }
  * stop = a fresh {id, kind, label, lon, lat, geoPrecision?}; kinds and ids (§1.7.3): sekolah npsn:… / app:<lon>,<lat>,
- *   kampus pt:… / osm:… / ovt:… (+ #n for another campus point), merchant poi:<row index>, kpr project:<id>.
- *   Map aliases (smaSchool, poi, project) are accepted. The kinds satuan and dealer were removed with the KSM & KKB
- *   section (22 Oct 2026, docs/V7_SPEC.md D39) and are refused; a kesehatan kind comes with the Kesehatan section
- *   (D40, wired by the V8 build), not before.
+ *   kampus pt:… / osm:… / ovt:… (+ #n for another campus point), kesehatan rs:… / ks:… / dk:… / osm:… / ovt:… (the id
+ *   rule of MCD.health, HEALTH_SPEC §1.1 and §7), merchant poi:<row index>, kpr project:<id>. Map aliases (smaSchool,
+ *   poi, project, health, hf) are accepted. The kinds satuan and dealer were removed with the former TNI credit section
+ *   (22 Oct 2026, docs/V7_SPEC.md D39, D41) and are refused.
+ * BACK    The phone sheet and the slide-over register the MCD.back layer 'plan' (V8 §2.7, MOBILE_UX_PLAN M2): Back
+ *         closes the card first; a card closed by its own button gives its history entry back.
  *
  * Seams for Phase B (feature-detected, nothing breaks without them): MCD.windows.planCard({placement, title, root,
  * onClose}) → handle (SHELL: the pin kind 'plan', the surviving tray chip "Rencana · n", Sederhana replacing the
@@ -71,7 +73,7 @@
   var DWELLS = [15, 30, 45, 60];
   var DEPART_FIRST = 6 * 60, DEPART_LAST = 18 * 60, DEPART_STEP = 15;
   var DEFAULT_OPTS = { mode: 'mobil', returnToStart: true, keepOrder: false, departAt: '08:30', dwellMin: 30 };
-  var KINDS = ['sekolah', 'kampus', 'merchant', 'kpr'];   // D39: no satuan, no dealer
+  var KINDS = ['sekolah', 'kampus', 'kesehatan', 'merchant', 'kpr'];   // D39: no satuan, no dealer; V8: kesehatan (HEALTH §7)
   // One id rule per kind (§1.7.3). A merchant is a public listing only (poi:<row index>); an LVM-only store has no
   // public id and is never planned (D16). An NPSN is 6 or 8 digits, a few carry a letter prefix ('NP' + 6 digits in
   // data/schools.js). A school without an NPSN is 'app:<lon>,<lat>' (schools-core idOf and
@@ -80,11 +82,13 @@
   var ID_RE = {
     sekolah: /^(npsn:[A-Z]{0,2}\d{6,10}|app:-?\d{1,3}\.\d{1,6},-?\d{1,2}\.\d{1,6})$/,
     kampus: /^(pt:\d{6}|osm:(node|way|relation)\/\d{1,15}|ovt:[0-9a-f]{8,40})(#\d{1,3})?$/,
+    /* HF_ID_RE: the same rule as MCD.health.ID_RE (assets/js/health-core.js; tests/modules-v8 compares them) */
+    kesehatan: /^(rs:\d{7}|ks:[0-9a-f]{12}|dk:[0-9a-f]{12}(-[0-9a-f]{4})?|osm:[nw]\d{1,12}|ovt:[0-9a-f]{12})$/,
     merchant: /^poi:\d{1,7}$/,
     kpr: /^project:[A-Za-z0-9._-]{1,80}$/
   };
-  var KIND_NAME = { sekolah: 'Sekolah', kampus: 'Kampus', merchant: 'Merchant', kpr: 'Proyek KPR' };
-  var KIND_ICON = { sekolah: 'sec-schools', kampus: 'sec-campus', merchant: 'sec-merchants', kpr: 'sec-property' };
+  var KIND_NAME = { sekolah: 'Sekolah', kampus: 'Kampus', kesehatan: 'Fasilitas kesehatan', merchant: 'Merchant', kpr: 'Proyek KPR' };
+  var KIND_ICON = { sekolah: 'sec-schools', kampus: 'sec-campus', kesehatan: 'sec-health', merchant: 'sec-merchants', kpr: 'sec-property' };
   var COARSE = { KELURAHAN: 'pusat kelurahan', KECAMATAN: 'pusat kecamatan' };
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   var WEEKDAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -102,7 +106,7 @@
     removeOne: 'Hapus dari rencana',
     removed: 'Tujuan dihapus dari rencana.',
     privateStop: 'Data nasabah tidak pernah masuk rencana kunjungan atau tautan Google Maps. Cari nasabah tersebut di sistem bank.',
-    notPublic: 'Tempat ini tidak dapat masuk rencana kunjungan. Yang dapat: sekolah, kampus, merchant dari data publik dan proyek KPR.',
+    notPublic: 'Tempat ini tidak dapat masuk rencana kunjungan. Yang dapat: sekolah, kampus, fasilitas kesehatan, merchant dari data publik dan proyek KPR.',
     badPoint: 'Tempat ini tidak memiliki koordinat yang benar.',
     noPlanner: 'Perencana kunjungan belum termuat. Muat ulang halaman.',
     tooMany: 'Maksimal 15 tujuan dalam satu rencana.',
@@ -293,7 +297,7 @@
     listeners: [],
     clockOn: false, timer: null,
     // card
-    frame: null, rootEl: null, content: null, live: null, sticky: null, titleEl: null,
+    frame: null, rootEl: null, content: null, live: null, sticky: null, titleEl: null, backOn: false,
     fk: null, drag: null, menu: null, unsubState: null, onResize: null, returnFocus: null,
     status: null
   };
@@ -1331,16 +1335,34 @@
     }
     if (!frame) frame = ownFrame(p.mode === 'full' ? 'full' : 'over');
     S.frame = frame;
+    if (frame.kind === 'own') backOpen();
     watch();
     syncOverlay();
     emit({ type: 'open', n: S.today.stops.length });
     return true;
   }
 
+  /* V8 §2.7 (M2): the own frames (phone sheet, slide-over) are a Back layer; MCD.back decides whether it is active */
+  function backOpen() {
+    var B = MCD().back;
+    if (!B || !isFn(B.open)) return;
+    S.backOn = !!safe(B.open, B, ['plan', function (o) {
+      S.backOn = false;
+      var via = o && o.via;
+      close(via === 'back' ? 'back' : (via === 'lock' ? 'lock' : 'section'));
+    }]);
+  }
+  function backClosed(reason) {
+    if (!S.backOn) return;
+    S.backOn = false;
+    var B = MCD().back;
+    if (reason !== 'back' && B && isFn(B.closed)) safe(B.closed, B, ['plan']);
+  }
   function closeFrame(reason) {
     var f = S.frame;
     if (!f) { unmountBody(); return false; }
     S.frame = null;
+    backClosed(reason);
     if (f.kind === 'own' && isFn(f.destroy)) f.destroy();
     else if (f.handle && isFn(f.handle.close)) safe(f.handle.close, f.handle, [reason]);
     else if (f.kind === 'drawer') { var A = MCD().app; if (A && isFn(A.closeDrawer) && S.rootEl && S.rootEl.isConnected !== false) safe(A.closeDrawer, A, [true]); }
@@ -1360,14 +1382,14 @@
     if (Mp && isFn(Mp.clearPlanOverlay)) safe(Mp.clearPlanOverlay, Mp);
     emit({ type: 'close', n: S.today.stops.length, reason: reason });
   }
-  /** close(reason): 'button' | 'escape' | 'section' | 'lock' | 'api'. A section switch keeps the tray chip (SHELL). */
+  /** close(reason): 'button' | 'escape' | 'back' | 'section' | 'lock' | 'api'. A section switch keeps the tray chip (SHELL). */
   function close(reason) {
     var back = S.returnFocus;
     var was = closeFrame(reason || 'api');
     S.returnFocus = null;
     if (!was) return false;
     emit({ type: 'close', n: S.today.stops.length, reason: reason || 'api' });
-    if ((reason === 'button' || reason === 'escape') && back && back.isConnected !== false && isFn(back.focus)) safe(back.focus, back);
+    if ((reason === 'button' || reason === 'escape' || reason === 'back') && back && back.isConnected !== false && isFn(back.focus)) safe(back.focus, back);
     return true;
   }
 

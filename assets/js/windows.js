@@ -27,6 +27,14 @@
  *   'campusSite' are points with a route link; 'cpKec' is a kecamatan). The slim rail paints summary().scope as the
  *   15 km / 30 km pair (paintScope).
  *
+ * V8 (docs/V8_SPEC.md §5.1 S7; R4): planCard({placement, title, root, onClose}) hosts Rencana kunjungan (a pin opposite
+ *   the active sheet at ≥ 1280 px in Detail, the left column with no sheet, the active sheet at 1024–1279 px and in
+ *   Sederhana); its tray chip "Rencana · {n}" is the only chip that survives a section switch (lock drops it). The slim
+ *   rail paints MCD.nav.crumb() as "‹ Kembali" (the full text in title and aria-label). QUICK_MAX = 2 quick actions in a
+ *   sheet head; callout links take {label, run} entries after the Google links (kept while veiled); model.chipKind
+ *   names a tray chip ("RS", "KLINIK"; HEALTH_SPEC §14.1 item 6; kinds 'hf', 'hfStack'). mode() 'phone-land' (M13):
+ *   a phone turned sideways shows its cards in a left column with the phone brief, not a bottom sheet.
+ *
  * Pure maths (no DOM) are exported as MCD.windows._pure for tests/windows-v5.test.mjs.
  * ========================================================================== */
 (function (W, MCD) {
@@ -37,6 +45,8 @@
   var INSET = 16, GAP = 12, RAIL_SLIM = 76, RAIL_FULL = 360, BAR_H = 56, CO_W = 300, CO_MAX_H = 260;
   var MIN_W = 300, MIN_H = 200, CARD_MIN_H = 240, SNAP_PX = 40, MAX_PINS = 2, KEEP_R = 24, CO_OFF = 32, CO_FREE_IN = 10;
   var FREE_MIN = 560, COL_MIN = 300, WIDE = 1441, PIN_MIN = 1280, TABLET_COL = 360, NUDGE_MAX = 160, EDGE_IN = 8;
+  var QUICK_MAX = 2;      /* V8 R4: two quick actions in a sheet head ("+ Tindak lanjut", "+ Rencana kunjungan") */
+  var LAND_Q = '(orientation: landscape) and (max-height: 500px) and (pointer: coarse)';   /* V8 M13 */
   var NS = 'http://www.w3.org/2000/svg';
 
   /* ------------------------------------------------------------------ words (COPY_DECK_ID §10.3) */
@@ -71,7 +81,10 @@
     calloutMore: 'Tekan Detail untuk semua angka.', filters: function (n) { return n + ' filter'; },
     sheetAria: 'Detail pilihan', quickDone: '✓ Di tindak lanjut', edit: 'Ubah',
     /* v6 (V6_SPEC §3.1, §11): the slim rail's scope pair */
-    scope: 'Cakupan', scopeAria: 'Cakupan jarak dari Mabes TNI'
+    scope: 'Cakupan', scopeAria: 'Cakupan jarak dari Mabes TNI',
+    /* V8 (§2.5, §4.6): the slim rail's crumb and the plan's tray chip */
+    back: 'Kembali', planTitle: 'Rencana kunjungan',
+    planChip: function (n) { return 'Rencana · ' + n; }
   };
 
   /* ------------------------------------------------------------------ small helpers */
@@ -561,13 +574,18 @@
   /* ======================================================================= MODE */
 
   var SUSPENDED = false;
-  /** 'desk' ≥ 1024 · 'tablet' 768–1023 · 'phone' < 768 · 'off' on pages without a map and before the sign-in. */
+  /** 'desk' ≥ 1024 · 'tablet' 768–1023 · 'phone' < 768 · 'off' on pages without a map and before the sign-in.
+      V8 M13: 'phone-land', a phone turned sideways (short landscape, coarse pointer, < 1024 px): the phone's cards, in a
+      left column instead of a bottom sheet (shell.css). */
   function mode() {
     if (!DOC || !DOC.body || !booted()) return 'off';
     if (body().getAttribute('data-layout') === 'page') return 'off';
     var vw = W.innerWidth || 0;
+    if (vw < 1024 && mq(LAND_Q)) return 'phone-land';
     return vw >= 1024 ? 'desk' : (vw >= 768 ? 'tablet' : 'phone');
   }
+  /** the phone's one card system (the brief and the sticky row in the app sheet): upright and sideways */
+  function phoneish(m) { return m === 'phone' || m === 'phone-land'; }
   function active() { var m = mode(); return m === 'desk' || m === 'tablet'; }
   /** What the arrangement allows at this width and view (build spec §2). */
   function caps() {
@@ -921,6 +939,10 @@
     var badge = h('span', { class: 'ws-slim__badge', hidden: true });
     /* v6: the scope pair (15 km over 30 km) between the label and the numbers; built on the first summary that has one */
     var scope = h('div', { class: 'ws-slim__scope', hidden: true });
+    /* V8 §2.5: "‹ Kembali" after MCD.nav.go (the full text in title and aria-label), painted by paintCrumb */
+    var crumb = h('button', { type: 'button', class: 'ws-slim__crumb', hidden: true }, [icon('chev-l'), h('span', { text: T.back })]);
+    crumb.addEventListener('click', function (e) { e.stopPropagation(); var c0 = navCrumb(); if (c0) safe(c0.run); });
+    crumb.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var N = MCD.nav; if (N && isFn(N.clearCrumb) && navCrumb()) { e.preventDefault(); e.stopPropagation(); safe(N.clearCrumb, N); } } });
     var el = h('aside', { class: 'ws-slim panel', role: 'region', 'aria-label': T.railRegion(cfg.label), 'data-map-occluder': '' }, [
       open, tip,
       h('span', { class: 'ws-slim__sec', 'aria-hidden': 'true' }, [icon(cfg.icon || 'layers')]),
@@ -928,13 +950,29 @@
       badge, scope, kpis
     ]);
     open.addEventListener('click', function (e) { e.stopPropagation(); onOpen(); });
-    el.addEventListener('click', function (e) { if (e.target === el || (e.target.closest && e.target.closest('.ws-slim__kpis, .ws-slim__sec, .ws-slim__lbl, .ws-slim__badge, .ws-slim__tip'))) onOpen(); });
+    el.addEventListener('click', function (e) { if (e.target === el || (e.target.closest && e.target.closest('.ws-slim__kpis, .ws-slim__sec, .ws-slim__lbl, .ws-slim__badge, .ws-slim__tip') && !e.target.closest('.ws-slim__crumb'))) onOpen(); });
     /* the tooltip comes back once the cursor leaves the rail or the focus leaves the button (Esc hid it) */
     el.addEventListener('pointerleave', function () { el.classList.remove('is-tip-off'); });
     open.addEventListener('blur', function () { el.classList.remove('is-tip-off'); });
     watchTipEsc();
-    return { el: el, kpis: kpis, open: open, tip: tip, badge: badge, scope: scope, pair: null };
+    var slim = { el: el, kpis: kpis, open: open, tip: tip, badge: badge, scope: scope, pair: null, crumb: crumb };
+    paintCrumb(slim);
+    return slim;
   }
+  /** MCD.nav.crumb() → {label, run, …} | null (V8 §2.5). */
+  function navCrumb() { var N = MCD.nav; try { return N && isFn(N.crumb) ? N.crumb() : null; } catch (e) { return null; } }
+  /** The crumb is in the rail only while there is one (first, above the expand button); otherwise it is not in the DOM. */
+  function paintCrumb(slim) {
+    if (!slim || !slim.crumb) return;
+    var c = navCrumb();
+    slim.crumb.hidden = !c;
+    if (c && slim.crumb.parentNode !== slim.el) slim.el.insertBefore(slim.crumb, slim.el.firstChild);
+    else if (!c && slim.crumb.parentNode) slim.crumb.parentNode.removeChild(slim.crumb);
+    slim.el.classList.toggle('has-crumb', !!c);
+    if (c) { slim.crumb.setAttribute('aria-label', c.label); slim.crumb.title = c.title || c.label; }
+    else { slim.crumb.removeAttribute('aria-label'); slim.crumb.removeAttribute('title'); }
+  }
+  function paintCrumbs() { if (AD && AD.slim) paintCrumb(AD.slim); if (GUIDE_SLIM) paintCrumb(GUIDE_SLIM); }
   /**
    * Esc hides a showing slim-rail tooltip (WCAG 1.4.13: dismissible without moving the cursor or the focus). With the
    * focus on the expand button the key stops there; under the cursor alone it hides the tip and goes on to the app.
@@ -958,6 +996,7 @@
     }, true);
   }
   function paintSlim() {
+    paintCrumbs();
     if (AD && AD.slim) paintSlimEl(AD.slim, summaryOf());
     if (GUIDE_SLIM && GUIDE_SLIM.el.isConnected !== false) paintSlimEl(GUIDE_SLIM, summaryOf(curMod()));
   }
@@ -1465,9 +1504,9 @@
   }
   function chipFor(c, onPick) {
     var t = c.title || T.sheetAria;
-    var chipLabel = (c.chipKind ? c.chipKind + ' ' : '') + t;
+    var chipLabel = c.isPlan ? planChipLabel() : (c.chipKind ? c.chipKind + ' ' : '') + t;
     var chip = h('button', { type: 'button', class: 'ws-chip' + (c.pinned ? ' is-pinned' : ''), title: T.reopen(t), 'aria-label': T.reopen(t) },
-      [icon(c.pinned ? 'tack' : (c.kind === 'kec' ? 'map' : 'pin')), h('span', { class: 'ws-chip__t', text: chipLabel })]);
+      [icon(c.isPlan ? 'plan' : (c.pinned ? 'tack' : (c.kind === 'kec' ? 'map' : 'pin'))), h('span', { class: 'ws-chip__t', text: chipLabel })]);
     chip.addEventListener('click', function () { if (onPick) onPick(); restore(c); });
     var x = h('button', { type: 'button', class: 'ws-chip__x', title: T.closeCard(t), 'aria-label': T.closeCard(t) }, [icon('close')]);
     x.addEventListener('click', function () { if (onPick) onPick(); closeCard(c, 'button'); });
@@ -1483,6 +1522,9 @@
     clear(host);
     trayPop(false);
     var mins = CARDS.filter(function (c) { return c.open && c.min; });
+    /* V8 §4.6: the plan's chip after a section switch (the only chip that survives one) */
+    var planChip = PLAN_CHIP && !planOpen() ? planSurvivor() : null;
+    if (planChip) host.appendChild(planChip);
     var compact = !!(AD && AD.bar && host === AD.bar.traySlot && AD.trayCompact && mins.length);
     if (compact) {
       var more = h('button', { type: 'button', class: 'ws-chip ws-traymore', 'aria-haspopup': 'true', 'aria-expanded': 'false',
@@ -1495,10 +1537,10 @@
       mins.forEach(function (c) { var x = chipFor(c); c.chip = x.chip; host.appendChild(x.wrap); });
     }
     if (host === TRAY) {
-      TRAY.hidden = !mins.length || !active();
+      TRAY.hidden = !(mins.length || planChip) || !active();
       placeTray();
     }
-    if (AD && AD.bar) AD.bar.el.classList.toggle('has-tray', mins.length > 0);
+    if (AD && AD.bar) AD.bar.el.classList.toggle('has-tray', mins.length > 0 || !!planChip);
   }
   /** The list of the folded tray: above its button, closes on a pick, Esc or a press outside. */
   var TRAYPOP = null;
@@ -1620,7 +1662,7 @@
     var pl = c.pinned ? T.unpin : T.pin;
     b.pin.setAttribute('aria-label', pl);
     b.pin.title = c.pinned ? T.unpin : (pinCount() >= MAX_PINS ? T.pinMax : T.pinTip);
-    b.pin.hidden = !cp.pins;
+    b.pin.hidden = !cp.pins || !!c.isPlan;            /* V8: the plan card counts as a pin but is never unpinned */
     /* a third pin is refused with the message (pin()): the button stays focusable and clickable, it only looks off */
     var full = !c.pinned && pinCount() >= MAX_PINS;
     if (full) b.pin.setAttribute('aria-disabled', 'true'); else b.pin.removeAttribute('aria-disabled');
@@ -1962,7 +2004,9 @@
     if (!c || !c.open) return;
     var back = c.opener;
     var title = c.title || '';
-    if (c.isDrawer) {
+    if (c.isPlan) {
+      closePlanCard(reason === 'esc' || reason === 'button' ? reason : (reason || 'api'), false);
+    } else if (c.isDrawer) {
       c.pinned = false;
       if (MCD.app && isFn(MCD.app.closeDrawer)) MCD.app.closeDrawer(reason === 'button' || reason === 'esc' ? false : true);
     } else {
@@ -2170,13 +2214,19 @@
       eyebrow: model.eyebrow, title: model.title, demo: !!(model.demo || (model.brief && model.brief.demo)),
       source: model.prov || '', chips: chips, numbers: b.numbers, note: b.note,
       actions: b.primary && b.primary.label ? [{ id: 'main', label: b.primary.label, run: b.primary.run, primary: true }] : [],
-      links: gmapsLinks(model, sel, ll),
+      /* V8 R4: the section's own links ({label, run}: "+ Rencana kunjungan") follow the Google links */
+      links: gmapsLinks(model, sel, ll).concat(runLinks(model.links), runLinks(model.brief && model.brief.links)),
       detail: function () { if (MCD.app && isFn(MCD.app.openDrawer)) MCD.app.openDrawer(model, Object.assign({}, opts || {}, { explicit: true })); },
       onClose: function (reason) {
         var s = st() && st().selection;
         if ((reason === 'button' || reason === 'esc') && s && selKey(s) === key) MCD.state.set({ selection: null }, { history: 'none' });
       }
     };
+  }
+
+  /** Link entries that run in the page ({label, run, title?}); hrefs come from gmapsLinks only. */
+  function runLinks(list) {
+    return (Array.isArray(list) ? list : []).filter(function (l) { return l && !l.href && l.label && isFn(l.run); });
   }
 
   /** Detach: the pinned drawer's item moves into a pin card of its own (live from cardFor, else its own nodes). */
@@ -2219,13 +2269,14 @@
     var wasOpen = !!c.open && drawerOpen();
     c.title = model.title || '';
     c.kind = model.kind || (sel && sel.kind) || 'point';
-    c.chipKind = c.kind === 'kec' || /kec/i.test(String(sel && sel.kind)) ? 'KEC.' : '';
+    /* V8 (HEALTH_SPEC §14.1 item 6): a model may name its tray chip ("RS", "KLINIK") */
+    c.chipKind = model.chipKind ? String(model.chipKind) : (c.kind === 'kec' || /kec/i.test(String(sel && sel.kind)) ? 'KEC.' : '');
     c.prov = model.prov || '';
     c.model = model;
     if (!refresh) { c.sel = sel; c.trail = !!(model.crumb || (sel && sel.extra && sel.extra.trail)); }
     d.el.setAttribute('aria-label', model.title || T.sheetAria);
     c.dirty = true;
-    if (m === 'phone') {
+    if (phoneish(m)) {
       body().classList.remove('ws-on');
       phoneDecorate(d, model, opts);
       var pcr = crumbEl(model.crumb);                       /* the trail "‹ Makasar" above the title */
@@ -2251,6 +2302,8 @@
       c.open = true;
       var fromCo = !!(FROM_CO && now() - FROM_CO < 2000);
       FROM_CO = 0;
+      /* V8 §4.6 (D14): one active sheet; the plan in that role goes to the tray when another card opens */
+      if (!was && PLAN && PLAN.c && PLAN.c.open && !PLAN.c.min && PLAN.mode === 'sheet') setMin(PLAN.c, true, { force: true });
       if (!was) {
         c.opener = DOC.activeElement && DOC.activeElement !== DOC.body && !d.el.contains(DOC.activeElement) ? DOC.activeElement : null;
         c.order = ++ORDER;
@@ -2360,13 +2413,24 @@
     return dl;
   }
   /**
-   * quickEl([{label, run, done}], {compact, noteHost}): the quick action of a card head ("+ Tindak lanjut"). Done, it
-   * reads "✓ Di tindak lanjut", "Tersimpan di komputer ini · {tahap}" and "Ubah". compact (the phone's sticky row): one
-   * line "✓ Di tindak lanjut · Ubah"; the note goes to noteEl (a line under the row) so the row never grows or moves.
+   * quickEl([{label, run, done, nav?}], {compact, noteEl}): the quick actions of a card head ("+ Tindak lanjut",
+   * V8: "+ Rencana kunjungan", "Lihat di Sekolah ›"), at most QUICK_MAX (two) side by side. Done, one reads
+   * "✓ Di tindak lanjut", "Tersimpan di komputer ini · {tahap}" and "Ubah". compact (the phone's sticky row): one line
+   * "✓ Di tindak lanjut · Ubah"; the first one's note goes to noteEl (a line under the row) so the row never moves.
    */
   function quickEl(list, o) {
-    var q = (list || []).filter(Boolean)[0];
-    if (!q) return null;
+    o = o || {};
+    var qs = (list || []).filter(Boolean).slice(0, QUICK_MAX);
+    if (!qs.length) return null;
+    if (qs.length === 1) return quickOne(qs[0], o);
+    var row = h('div', { class: 'ws-quicks' + (o.compact ? ' is-compact' : '') });
+    qs.forEach(function (q, i) {
+      var e = quickOne(q, i === 0 ? o : { compact: o.compact });
+      if (e) row.appendChild(e);
+    });
+    return row;
+  }
+  function quickOne(q, o) {
     o = o || {};
     var wrap = h('div', { class: 'ws-quick' + (o.compact ? ' is-compact' : '') });
     function paintDone(done) {
@@ -2386,7 +2450,7 @@
       }
     }
     if (q.done) { paintDone(q.done); return wrap; }
-    var b = h('button', { type: 'button', class: 'btn btn--secondary ws-quick__btn', title: q.title || null, disabled: q.disabled ? true : null }, [h('span', { text: q.label })]);
+    var b = h('button', { type: 'button', class: 'btn ' + (q.nav ? 'btn--ghost' : 'btn--secondary') + ' ws-quick__btn', title: q.title || null, disabled: q.disabled ? true : null }, [h('span', { text: q.label })]);
     var err = h('p', { class: 'ws-quick__err', role: 'status', hidden: true });
     b.addEventListener('click', function () {
       if (!isFn(q.run)) return;
@@ -2408,7 +2472,7 @@
   /** The card head under the title: crumb above, numbers and the quick action below (once per fill). */
   function fillHead(titleEl, model, c) {
     if (!titleEl) return;
-    kids(titleEl).forEach(function (n) { if (hasClass(n, 'ws-crumb') || hasClass(n, 'ws-nums') || hasClass(n, 'ws-quick')) titleEl.removeChild(n); });
+    kids(titleEl).forEach(function (n) { if (hasClass(n, 'ws-crumb') || hasClass(n, 'ws-nums') || hasClass(n, 'ws-quick') || hasClass(n, 'ws-quicks')) titleEl.removeChild(n); });
     var h2 = titleEl.querySelector('.dd-title');
     if (h2) { if (!h2.id) h2.id = uid('ws-t'); h2.setAttribute('tabindex', '-1'); if (c && c.el) c.el.setAttribute('aria-labelledby', h2.id); }
     var cr = crumbEl(model.crumb);
@@ -2488,7 +2552,7 @@
         setFold(blk, btn, bodyEl, on);
         pref().folds[key] = on;             /* the preferences now (a reset since the fold was built made a new record) */
         save();
-        if (mode() === 'phone') PH.keys[key] = on;
+        if (phoneish(mode())) PH.keys[key] = on;
         checkHintsSoon();
         var c = blk.closest ? CARDS.filter(function (x) { return x.el && x.el.contains(blk); })[0] : null;
         if (c) { c.dirty = true; relayout('swap', { still: true }); }
@@ -2626,17 +2690,23 @@
     var who = selKey(st() && st().selection) || String(model.title || '');
     if (!opts.refresh || PH.sel !== who) PH = { sel: who, keys: {}, all: false };
     var b = brief(model);
-    var q = (model.quick || []).filter(Boolean)[0];
     var primary = b.primary;
+    /* the quick actions ("+ Rencana kunjungan", "+ Tindak lanjut"); one that is the primary itself is not repeated */
+    var qs = (model.quick || []).filter(function (q) { return q && !(primary && primary.label && q.label === primary.label && !q.done); }).slice(0, QUICK_MAX);
     var actRow = h('div', { class: 'ws-sticky' });
     /* "Tersimpan di komputer ini · {tahap}" after "+ Tindak lanjut": a line under the row, so the row stays put */
     var stageNote = h('p', { class: 'ws-quick__note ws-sticky__note', hidden: true });
+    var extra = null;
     if (primary && primary.label) {
       var pb = h('button', { type: 'button', class: 'btn btn--primary btn--lg ws-sticky__main' }, [h('span', { text: primary.label })]);
       pb.addEventListener('click', function () { safe(primary.run); });
       actRow.appendChild(pb);
-    } else if (q) {
-      var qe = quickEl([q], { compact: true, noteEl: stageNote });
+      /* V8 fix round: a card with both a primary (a merchant listing's "Rute di Google Maps" on a phone) and quick
+         actions keeps them reachable: they take a second line of the sticky row, after "Semua detail" */
+      var qx = qs.length ? quickEl(qs, { compact: true, noteEl: stageNote }) : null;
+      if (qx) { extra = h('div', { class: 'ws-sticky__extra' }, [qx]); actRow.classList.add('has-extra'); }
+    } else if (qs.length) {
+      var qe = quickEl(qs, { compact: true, noteEl: stageNote });
       if (qe) actRow.appendChild(qe);
     }
     var hasMore = kids(bodyEl).some(function (n) { return hasClass(n, 'dd-blk'); }) || (opts.phone && PHONE_DETAIL);
@@ -2653,10 +2723,11 @@
       });
       actRow.appendChild(more);
     }
+    if (extra) actRow.appendChild(extra);
     /* a list-first card (the SMA of a kecamatan): the list itself is the brief, so row 1 shows in the peek */
     var nums = model.listFirst ? null : numbersEl(b.numbers, 'ws-nums ws-brief__nums');
     if (model.blocks && model.blocks.length && !opts.phone) { clear(bodyEl); blocksInto(bodyEl, model.blocks, model); }
-    if (model.listFirst && !(primary && primary.label) && !q) actRow = h('div', { class: 'ws-sticky' });
+    if (model.listFirst && !(primary && primary.label) && !qs.length) actRow = h('div', { class: 'ws-sticky' });
     /* the row is a direct child of the scrolling body (sticky top and bottom), right under the brief */
     if (actRow.firstChild) { bodyEl.insertBefore(stageNote, bodyEl.firstChild); bodyEl.insertBefore(actRow, stageNote); }
     if (nums) bodyEl.insertBefore(h('section', { class: 'ws-brief' }, [nums]), bodyEl.firstChild);
@@ -2686,7 +2757,7 @@
    */
   function callout(spec) {
     spec = spec || {};
-    if (mode() === 'phone') return phoneCallout(spec);
+    if (phoneish(mode())) return phoneCallout(spec);
     closeCallout('replace');
     if (!active()) return { el: null, update: function () {}, close: function () {}, isOpen: function () { return false; } };
     var titleId = uid('ws-co-t');
@@ -2776,10 +2847,24 @@
       db.addEventListener('click', function () { var fn = spec.detail; FROM_CO = now(); closeCallout('detail'); safe(fn); });
       acts.appendChild(db);
     }
-    var links = veiled() ? [] : (spec.links || []);
-    var linkRow = links.length ? h('div', { class: 'ws-co__links' }, links.map(function (l) {
+    /* the Google links (never while veiled) and then, V8 R4, the links that run in the page ({label, run}; kept while
+       veiled: "+ Rencana kunjungan" sends no name, and the plan shows initials itself) */
+    var all = spec.links || [];
+    var links = veiled() ? [] : all.filter(function (l) { return l && l.href; });
+    var runs = runLinks(all.concat(spec.runs || []));
+    var linkEls = links.map(function (l) {
       return h('a', { class: 'ws-co__link', href: l.href, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer', title: l.title || null }, [icon('external'), h('span', { text: l.label })]);
-    })) : null;
+    }).concat(runs.map(function (l) {
+      var rb = h('button', { type: 'button', class: 'ws-co__link ws-co__run', title: l.title || null }, [h('span', { text: l.label })]);
+      rb.addEventListener('click', function () {
+        var r = safe(l.run) || {};
+        if (r.ok === false) { if (r.text) say(r.text); return; }
+        if (r.done) { clear(rb); rb.appendChild(icon('check')); rb.appendChild(h('span', { text: String(r.done.label || T.quickDone).replace(/^✓\s*/, '') })); rb.setAttribute('disabled', ''); }
+        if (r.text) say(r.text);
+      });
+      return rb;
+    }));
+    var linkRow = linkEls.length ? h('div', { class: 'ws-co__links' }, linkEls) : null;
     [head, title, chipRow, nums, note, acts.firstChild ? acts : null, linkRow, srcP].forEach(function (n) { if (n) el.insertBefore(n, c.tail.parentNode === el ? c.tail : null); });
   }
   /** The anchor on screen: {x, y} for a point, {bbox, label} for a shape, or null. */
@@ -2830,7 +2915,7 @@
   }
   function placeCallout1(force) {
     var c = CO;
-    if (!c || mode() === 'phone') return;
+    if (!c || phoneish(mode())) return;
     var el = c.el;
     if (!c.sized || force) { c.size = { w: el.offsetWidth || CO_W, h: el.offsetHeight || CO_MAX_H }; c.sized = true; }
     if (c.held) return;                 /* the app's own camera flight is landing: placed once, on its final side */
@@ -2985,7 +3070,12 @@
         eyebrow: s.eyebrow, title: s.title, kind: s.kind || 'kec', demo: s.demo,
         sub: (s.chips || []).filter(Boolean).slice(0, 2).map(function (ch) { return ch.nodeType ? ch : h('span', { class: 'tag', text: ch.text || '' }); }),
         body: [], prov: s.source || '',
-        brief: { numbers: s.numbers || [], primary: main ? { label: main.label, run: function () { var fn = main.run; closeIt('action'); safe(fn); } } : null, note: s.note || null }
+        brief: { numbers: s.numbers || [], primary: main ? { label: main.label, run: function () { var fn = main.run; closeIt('action'); safe(fn); } } : null, note: s.note || null },
+        /* V8 fix round: the callout's links that run in the page ("+ Rencana kunjungan") stay reachable on a phone as
+           quick actions of the sheet (the sticky row) */
+        quick: runLinks((s.links || []).concat(s.runs || [])).slice(0, QUICK_MAX).map(function (l) {
+          return { label: l.label, title: l.title || null, run: function () { return l.run(); } };
+        })
       };
     }
     var handle = null;
@@ -3093,13 +3183,14 @@
     footInto(p.foot, model, c.sel, c);
     if (c.bar) { c.bar.eyebrow.textContent = model.eyebrow || ''; c.bar.demo.hidden = !(model.demo || (model.brief && model.brief.demo)); }
     c.title = model.title || c.title;
+    if (model.chipKind) c.chipKind = String(model.chipKind);
     c.dirty = true;
   }
   /** Live pins: rebuilt from section.cardFor(sel) after data, demo, filter, distance and privacy changes. */
   function refreshPins(keys) {
     var mod = curMod();
     CARDS.slice().forEach(function (c) {
-      if (c.isDrawer || !c.open) return;
+      if (c.isDrawer || !c.open || c.isPlan) return;      /* V8: the plan repaints itself (MCD.plan watches the veil) */
       if (!c.live) {
         if (keys.indexOf('privacy.veil') >= 0 || keys.indexOf('privacy.reveal') >= 0) { closeCard(c, 'privacy'); toast(T.veiled); }
         return;
@@ -3116,6 +3207,114 @@
       fillPin(c, m);
     });
     relayout('swap', { still: true });
+  }
+
+  /* ======================================================================= RENCANA KUNJUNGAN (V8 §4.6, V7 §7.3) */
+
+  var PLAN = null;          // {c, mode: 'pin' | 'sheet', onClose}
+  var PLAN_CHIP = false;    // the chip "Rencana · n" kept after a section switch
+  function planN() { var P = MCD.plan; var n = P && isFn(P.count) ? +safe(P.count, P) : 0; return isNum(n) && n > 0 ? Math.round(n) : 0; }
+  function planChipLabel() { return T.planChip(planN()); }
+  function planOpen() { return !!(PLAN && PLAN.c && PLAN.c.open); }
+  /** The survivor chip: a press reopens the plan in this section (MCD.plan.open picks the placement), × drops it. */
+  function planSurvivor() {
+    var t = T.planTitle;
+    var chip = h('button', { type: 'button', class: 'ws-chip ws-chip--plan', title: T.reopen(t), 'aria-label': T.reopen(t) + ', ' + planN() + ' tujuan' },
+      [icon('plan'), h('span', { class: 'ws-chip__t', text: planChipLabel() })]);
+    chip.addEventListener('click', function () {
+      PLAN_CHIP = false;
+      var P = MCD.plan;
+      if (P && isFn(P.open)) safe(P.open, P, [{ from: 'chip' }]);
+      renderTray();
+    });
+    var x = h('button', { type: 'button', class: 'ws-chip__x', title: T.closeCard(t), 'aria-label': T.closeCard(t) }, [icon('close')]);
+    x.addEventListener('click', function () { PLAN_CHIP = false; renderTray(); });
+    return h('span', { class: 'ws-chipwrap ws-chipwrap--plan' }, [chip, x]);
+  }
+  /**
+   * planCard({placement: {mode: 'pin' | 'sheet', side?}, title, root, onClose}) → handle | null (V7 §7.3, D14).
+   * 'pin' (≥ 1280 px, Detail): a pinned card in the column opposite the active sheet, the left column when no sheet is
+   * open; it counts as a pin. 'sheet' (1024–1279 px and Sederhana): the active sheet; the open card goes to the tray.
+   * null where windows.js shows no cards (pages, tablets, phones): plan.js then uses its own slide-over or full sheet.
+   * onClose(reason) is called when the card goes by itself (its ×, Esc, a resize, a section switch, the lock); a
+   * close plan.js asks for (handle.close) does not call it back.
+   */
+  function planCard(o) {
+    o = o || {};
+    var p = o.placement || {};
+    if (!DOC || !o.root || mode() !== 'desk' || SUSPENDED) return null;
+    var pm = p.mode === 'sheet' ? 'sheet' : 'pin';
+    if (pm === 'pin' && !caps().pins) return null;
+    if (planOpen()) closePlanCard('reopen', true);
+    PLAN_CHIP = false;
+    var side = 'right';
+    if (pm === 'pin') side = p.side === 'left' && caps().leftCol ? 'left' : (p.side === 'right' ? 'right' : (caps().leftCol ? 'left' : 'right'));
+    if (pm === 'sheet' && DCARD && DCARD.open && !DCARD.min && drawerOpen()) setMin(DCARD, true, { force: true });
+    var c = makePlanCard({ title: o.title, root: o.root, side: side, pinned: pm === 'pin' });
+    PLAN = { c: c, mode: pm, onClose: isFn(o.onClose) ? o.onClose : null };
+    renderTray();
+    return {
+      id: 'plan', el: c.el,
+      close: function (r) { if (PLAN && PLAN.c === c) closePlanCard(r || 'api', true); },
+      update: function (t) { if (t && c.titleEl) { c.title = String(t); c.titleEl.textContent = c.title; } },
+      minimise: function () { setMin(c, true); }, restore: function () { restore(c); },
+      front: function () { raise(c); },
+      rect: function () { return c.geo ? R(c.geo.x, c.geo.y, c.geo.w, c.geo.h) : null; },
+      get state() { return cardState(c); }
+    };
+  }
+  function makePlanCard(o) {
+    var el = h('section', { class: 'ws-win ws-pin ws-plan panel', role: 'dialog', 'aria-modal': 'false', 'data-map-occluder': '' });
+    var c = { id: 'plan', el: el, isDrawer: false, isPlan: true, open: true, min: false, pinned: !!o.pinned, side: o.side || 'right', float: null,
+      order: ++ORDER, z: 0, kind: 'plan', title: o.title || T.planTitle, sel: null, live: false };
+    el.appendChild(buildCardBar(c));
+    var titleId = uid('ws-t');
+    var h2 = h('h2', { class: 'dd-title', id: titleId, tabindex: '-1', text: c.title, title: c.title });
+    var titles = h('div', { class: 'drawer__titles' }, [h2]);
+    var bodyEl = h('div', { class: 'drawer__body ws-plan__body' }, [o.root]);
+    el.appendChild(h('header', { class: 'drawer__head' }, [titles]));
+    el.appendChild(bodyEl);
+    el.setAttribute('aria-labelledby', titleId);
+    c.titleEl = h2;
+    c.parts = { titles: titles, body: bodyEl, foot: null };
+    addResizers(c);
+    el.addEventListener('pointerdown', function () { raise(c); }, true);
+    el.addEventListener('focusin', function () { raise(c); });
+    el.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); closeCard(c, 'esc'); } });
+    if (c.bar) c.bar.eyebrow.textContent = '';
+    overlayRoot().appendChild(el);
+    var froms = CARDS.map(function (x) { return { c: x, r: x.open && !x.min ? rectOf(x.el) : null }; });
+    CARDS.push(c);
+    raise(c);
+    paintAllCards();
+    relayout('pin', { still: true, keep: true });
+    flipAll(froms, c);
+    if (!reduced()) { el.classList.add('is-entering'); raf(function () { raf(function () { el.classList.remove('is-entering'); }); }); }
+    focusTitle(c);
+    return c;
+  }
+  /**
+   * closePlanCard(reason, fromPlan): the card goes. 'section' keeps its chip (PLAN_CHIP); 'lock' drops everything.
+   * fromPlan: plan.js asked (handle.close), so its onClose is not called back.
+   */
+  function closePlanCard(reason, fromPlan) {
+    var pl = PLAN;
+    if (!pl || !pl.c) return false;
+    PLAN = null;
+    var c = pl.c;
+    stopMin(c);
+    c.open = false;
+    var i = CARDS.indexOf(c);
+    if (i >= 0) CARDS.splice(i, 1);
+    var el = c.el;
+    el.classList.add('is-out');
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, reduced() ? 0 : dur('fast') + 40);
+    PLAN_CHIP = reason === 'section';
+    if (!fromPlan && pl.onClose) safe(pl.onClose, null, [reason]);
+    renderTray();
+    if (DOC && DOC.body) relayout('close', { still: true });
+    paintAllCards();
+    return true;
   }
 
   /* ======================================================================= SEDERHANA: guide folds at ≤ 1440 */
@@ -3222,11 +3421,12 @@
     var b = body(), m = mode();
     /* one card system per width (§3.10): a desktop callout left on screen by a resize to a phone becomes the phone's
        bottom sheet with the same brief; on a page it goes */
-    if (CO && (m === 'phone' || m === 'off')) {
+    if (CO && (phoneish(m) || m === 'off')) {
       var spec0 = CO.spec;
-      closeCallout(m === 'phone' ? 'replace' : 'section', { silent: m === 'phone' });
-      if (m === 'phone') phoneCallout(spec0);
+      closeCallout(phoneish(m) ? 'replace' : 'section', { silent: phoneish(m) });
+      if (phoneish(m)) phoneCallout(spec0);
     }
+    b.classList.toggle('ws-land', m === 'phone-land');
     b.classList.toggle('ws-on', m === 'desk' || m === 'tablet');
     b.classList.toggle('ws-tablet', m === 'tablet');
     b.classList.toggle('ws-wide', (W.innerWidth || 0) >= WIDE);
@@ -3242,12 +3442,17 @@
     if (AD && AD.rail === 'slim' && (W.innerWidth || 0) >= WIDE && secPref().rail !== 'slim') { AD.rail = 'full'; paintRail(); }
     /* phones and pages: no pins and no tray (one sheet system) */
     if (!caps().pins) {
-      CARDS.slice().forEach(function (c) { if (!c.isDrawer && c.open) { c.open = false; CARDS.splice(CARDS.indexOf(c), 1); if (c.el.parentNode) c.el.parentNode.removeChild(c.el); } });
+      CARDS.slice().forEach(function (c) {
+        if (c.isDrawer || !c.open) return;
+        /* V8 §4.6: on a desk the plan stays as the active sheet (Sederhana, 1024–1279 px); elsewhere plan.js uses its own frame */
+        if (c.isPlan) { if (m === 'desk') { c.pinned = false; if (c.side === 'left' && !caps().leftCol) c.side = 'right'; } else closePlanCard('resize', false); return; }
+        c.open = false; CARDS.splice(CARDS.indexOf(c), 1); if (c.el.parentNode) c.el.parentNode.removeChild(c.el);
+      });
       if (DCARD) DCARD.pinned = false;
     }
     if (DCARD && !caps().minimise && DCARD.min) setMin(DCARD, false, { quiet: true, force: true });
     if (DCARD) {
-      if (m === 'phone' || m === 'off') { DCARD.el.classList.remove('ws-win'); unBox(DCARD.el); }
+      if (phoneish(m) || m === 'off') { DCARD.el.classList.remove('ws-win'); unBox(DCARD.el); }
       else if (drawerOpen()) DCARD.el.classList.add('ws-win');
       if (DCARD.side === 'left' && !caps().leftCol) DCARD.side = 'right';
       if (!DCARD.side && !caps().float && DCARD.open) DCARD.side = 'right';
@@ -3302,6 +3507,8 @@
         drawerUp = c.open && drawerOpen();
         return;
       }
+      /* V8 §4.6: a section switch closes the plan like a pin and keeps its chip; the veil keeps it (it masks itself) */
+      if (c.isPlan) { if (reason !== 'privacy') closePlanCard(reason, false); return; }
       c.open = false;
       CARDS.splice(CARDS.indexOf(c), 1);
       if (c.el.parentNode) c.el.parentNode.removeChild(c.el);
@@ -3310,6 +3517,7 @@
     /* §3.12: lock closes every sheet; a section switch too (the shell's own switch closes it silently as well) */
     if ((reason === 'lock' || reason === 'section') && drawerUp && MCD.app && isFn(MCD.app.closeDrawer)) safe(MCD.app.closeDrawer, MCD.app, [true, { force: true }]);
     if (reason === 'section' || reason === 'lock') { if (AD) unadopt(); }
+    if (reason === 'lock') PLAN_CHIP = false;
     GUIDE_FOLD = false;
     GUIDE_OPEN = false;
     if (GUIDE_SLIM) { if (GUIDE_SLIM.el.parentNode) GUIDE_SLIM.el.parentNode.removeChild(GUIDE_SLIM.el); GUIDE_SLIM = null; }
@@ -3465,7 +3673,13 @@
     var rz = 0;
     W.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { if (booted()) { obstacles(true); relayout('viewport', { still: true, instant: true }); } }, 140); });
   }
+  /* V8: the plan's chip counts its stops; the slim rail's crumb follows MCD.nav */
+  var planWatch = function () { if (booted() && (PLAN_CHIP || (PLAN && PLAN.c && PLAN.c.min))) renderTray(); };
+  if (MCD.plan && isFn(MCD.plan.on)) safe(MCD.plan.on, MCD.plan, [planWatch]);
+  if (MCD.nav && isFn(MCD.nav.on)) safe(MCD.nav.on, MCD.nav, [function () { if (booted()) paintCrumbs(); }]);
   if (DOC && isFn(DOC.addEventListener)) {
+    DOC.addEventListener('mcd:plan', planWatch);
+    DOC.addEventListener('mcd:nav', function () { if (booted()) paintCrumbs(); });
     DOC.addEventListener('mcd:gate-locking', function () { closeAll('lock'); });
     DOC.addEventListener('keydown', function (e) { LAST_INPUT = 'key'; if (e.key === 'Tab') body().classList.add('ws-kbd'); }, true);
     DOC.addEventListener('pointerdown', function (e) {
@@ -3481,8 +3695,12 @@
   /* ======================================================================= EXPORT */
 
   MCD.windows = {
-    version: '5.0.0',
+    version: '8.0.0',
     mode: mode, active: active,
+    /* V8 (docs/V8_SPEC.md §5.1 S7): two quick actions per head; the plan's card */
+    QUICK_MAX: QUICK_MAX,
+    planCard: planCard,
+    planChip: function () { return !!PLAN_CHIP; },
     // 1 callout
     callout: callout,
     // 2 sheet (the active one is the app drawer; pins are own cards)

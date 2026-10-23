@@ -46,10 +46,10 @@
 
   var LEVELS = [
     { i: 0, code: 'TK', short: 'TK', label: 'TK/PAUD', name: 'Taman kanak-kanak dan PAUD', glyph: 'circle', token: '--p-kpr', rgbKey: 'KPR' },
-    { i: 1, code: 'SD', short: 'SD', label: 'SD/MI', name: 'Sekolah dasar', glyph: 'circle', token: '--p-ksm', rgbKey: 'KSM' },
+    { i: 1, code: 'SD', short: 'SD', label: 'SD/MI', name: 'Sekolah dasar', glyph: 'circle', token: '--p-azure', rgbKey: 'AZURE' },
     { i: 2, code: 'SP', short: 'SMP', label: 'SMP/MTs', name: 'Sekolah menengah pertama', glyph: 'circle', token: '--p-cc', rgbKey: 'CC' },
     { i: 3, code: 'SA', short: 'SMA', label: 'SMA/MA', name: 'Sekolah menengah atas', glyph: 'circle', token: '--p-mg', rgbKey: 'MG' },
-    { i: 4, code: 'SK', short: 'SMK', label: 'SMK', name: 'Sekolah menengah kejuruan', glyph: 'circle', token: '--p-kkb', rgbKey: 'KKB' },
+    { i: 4, code: 'SK', short: 'SMK', label: 'SMK', name: 'Sekolah menengah kejuruan', glyph: 'circle', token: '--p-copper', rgbKey: 'COPPER' },
     { i: 5, code: 'LB', short: 'SLB', label: 'SLB', name: 'Sekolah luar biasa', glyph: 'diamond', token: '--plat-3', plat: 3 },
     { i: 6, code: 'PT', short: 'PT', label: 'Perguruan tinggi', name: 'Perguruan tinggi (PT)', glyph: 'square', token: '--plat-4', plat: 4 }
   ];

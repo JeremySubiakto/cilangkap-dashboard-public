@@ -57,7 +57,7 @@
   font: 600 13px/18px var(--font-sans); color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px;
 }
-.lu-link:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .lu-link:hover { text-decoration-color: var(--text-1); } }
 
 /* ── rule chips, the off line, the headline ─────────────────────────────── */
 .lu-rules { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -75,7 +75,7 @@
   height: 30px; padding: 0 10px; border: 1px solid var(--rule-strong); border-radius: var(--r-ctl); background: transparent;
   font: 500 12.5px/1 var(--font-sans); color: var(--text-2); cursor: pointer;
 }
-.lu-by__opt:hover { background: var(--surface-hover); color: var(--text-1); }
+@media (hover: hover) { .lu-by__opt:hover { background: var(--surface-hover); color: var(--text-1); } }
 .lu-by__opt[aria-pressed="true"] { background: var(--btn-primary-bg); border-color: var(--btn-primary-rule); color: var(--btn-primary-ink); }
 
 /* the table: counts as text only, never a bar or a width */
@@ -91,7 +91,7 @@
   justify-self: start; padding: 0; border: 0; background: none; cursor: pointer;
   font: 600 13px/18px var(--font-sans); color: var(--text-2);
 }
-.lu-back:hover { color: var(--text-1); }
+@media (hover: hover) { .lu-back:hover { color: var(--text-1); } }
 .lu-rows__h { margin: 2px 0 0; font: 600 14px/20px var(--font-sans); color: var(--text-1); }
 .lu-rows { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
 .lu-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 28px; border-bottom: 1px solid var(--rule); }
@@ -112,7 +112,7 @@
   font: 500 12.5px/18px var(--font-sans); color: var(--text-2); font-variant-numeric: tabular-nums;
   text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px;
 }
-.lu-rail__line:hover { color: var(--text-1); text-decoration-color: var(--text-1); }
+@media (hover: hover) { .lu-rail__line:hover { color: var(--text-1); text-decoration-color: var(--text-1); } }
 .lu-chip { font-variant-numeric: tabular-nums; }
 .lu-rail__line:focus-visible, .lu-link:focus-visible, .lu-back:focus-visible, .lu-by__opt:focus-visible, .lu-switch:focus-visible {
   outline: 2px solid var(--signal); outline-offset: 2px;

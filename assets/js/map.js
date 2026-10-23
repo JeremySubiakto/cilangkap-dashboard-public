@@ -74,6 +74,26 @@
  *     v6 (V6_SPEC D9): shape 'shield' (universitas, institut) and 'triangle' (sekolah tinggi, politeknik, akademi, desain
  *     dan kursus); hollow: true = an empty outline (other campus points of the same PT). Legend glyphs 'shield',
  *     'shieldHollow', 'tri', 'triHollow' (kit.glyphSVG), and legend rows {shape, rgb, hollow?} draw the sprite itself.
+ *     V8 (V8_SPEC P1; HEALTH_SPEC §2.1–§2.2, H1–H5): shape 'plus' (rumah sakit, a Greek cross) and 'sparkle' (klinik
+ *     kecantikan, a four-point star): unit polygons PLUS_PTS and SPARKLE_PTS (kit.shapes.plus, kit.shapes.sparkle; the same
+ *     points as MCD.health.sym), drawn with the stroked keyline of the shield and the triangle. Their hollow form keeps
+ *     the filled silhouette: a band of the fill colour along the edge, the keyline colour inside (H5, health-core.js's
+ *     look: a hollow hospital is exactly as large as a filled one; the Kampus band between two keylines would leave
+ *     nothing inside the arms of an 18 px plus). Legend glyphs 'plus', 'plusHollow', 'sparkle', 'sparkleHollow'; legend rows
+ *     {shape, rgb, hollow?, ring?, alpha?} draw the sprite (ring = its keyline colour, alpha = a faint symbol).
+ *   Selection kinds of Kesehatan (HEALTH_SPEC H24): 'health' (a facility) and 'hfStack' (rows on one point) are points
+ *     and draw their route; 'hfCluster' (a clinic bubble: zooms in) and 'hfKec' (a kecamatan: focus mode) draw no route
+ *     (NO_ROUTE_KINDS as it is). BUILTIN_POSTURES.health and .wealth (Calon Prioritas) are fallbacks: the 5 km camera
+ *     and the 15 km kecamatan zones; the sections register their own postures.
+ *   V8 (V7_SPEC §7.6, V8_SPEC P3), the visit plan on the map: setPlanOverlay({stops: [{seq, lon, lat}], line: true,
+ *     returnToStart, start?: {lon, lat}}) → boolean draws a numbered badge per stop (20 px: navy with white numbers on
+ *     the light street map, inverted on the dark map and the satellite; KCP keeps its own marker) and one thin dashed
+ *     order line (1,5 px, 4–4 px dashes, the badge ink at 70 %) from KCP Cilangkap through the stops in order, back to
+ *     KCP when returnToStart; straight segments, never green, never pickable, never a route. Only seq, lon and lat are
+ *     read. clearPlanOverlay(); planOverlay() → {stops, line, returnToStart} | null. Legend group "Rencana kunjungan".
+ *   V8 phones (MOBILE_UX_PLAN M4, M10 item 3): pickingRadius 14 px on a coarse pointer (4 px with a mouse), updated
+ *     when the pointer type changes; on a coarse pointer the map draws at most 2 device pixels per CSS pixel and
+ *     without MSAA (antialias off), as gate.js already does for its own map.
  *   MCD.map.tierSprite({level 1-4, basis:'biaya'|'jenis'|'perkiraan', theme:'day'|'night', px}) → the kelas biaya badge
  *     (V6_SPEC D6, §4.3): "signal bars", 4 Premium · 3 Atas · 2 Menengah · 1 Reguler, filled = from the published fee or
  *     the type, empty = perkiraan; one neutral ink (navy + white keyline in Terang, near-white + dark keyline in Gelap);
@@ -158,15 +178,17 @@
     bank: { BSI: [90, 107, 136], BNI: [74, 88, 115], BRI: [61, 73, 95], BTN: [51, 64, 85], BJB: [107, 90, 74], OTHER: [43, 52, 69] }
   };
   var HEAT_RGB = [[42, 27, 61], [90, 42, 78], [142, 59, 71], [194, 87, 58], [230, 138, 46], [242, 183, 5], [255, 231, 161]];
+  /* V8 D54: the palette slots of the two products D41 removed are named by colour (AZURE, COPPER; tokens --p-azure,
+     --p-copper); their keys never name a product again */
   var PRODUCT_RGB = {
-    KSM: [90, 169, 255], KPR: [63, 193, 165], KKB: [232, 135, 91], CC: [181, 140, 255],
+    AZURE: [90, 169, 255], KPR: [63, 193, 165], COPPER: [232, 135, 91], CC: [181, 140, 255],
     MG: [239, 122, 154], PEN: [184, 211, 90], OTH: [143, 153, 171], WS: [242, 183, 5], PR: [143, 153, 171]
   };
   var PRODUCT_GLYPH = {
-    KSM: 'circle', KPR: 'square', KKB: 'diamond', CC: 'triangle', MG: 'hexagon',
+    AZURE: 'circle', KPR: 'square', COPPER: 'diamond', CC: 'triangle', MG: 'hexagon',
     PEN: 'star4', OTH: 'dash', WS: 'ring', PR: 'diamondHollow'
   };
-  var PRODUCT_ORDER = ['KSM', 'KPR', 'KKB', 'CC', 'MG', 'PEN', 'OTH'];
+  var PRODUCT_ORDER = ['KPR', 'CC', 'MG', 'PEN', 'OTH'];
   /* SME groups (addendum A1 §2.4, AM-9): index = MCD_SME_POIS.meta.groups 0–11 */
   var SME_GROUP_RGB = [
     [217, 160, 102], [127, 179, 213], [169, 155, 214], [217, 140, 140], [140, 199, 161], [214, 162, 196],
@@ -688,9 +710,10 @@
   }
   function shapePath(ctx, shape, cx, cy, r) {
     ctx.beginPath();
-    if (shape === 'shield' || shape === 'triangle') {
-      /* v6 (V6_SPEC D9): the campus shapes, unit polygons shared with the legend glyphs (SHIELD_PTS, TRI_PTS) */
-      var pts = shape === 'shield' ? SHIELD_PTS : TRI_PTS;
+    if (POLY_SHAPES[shape]) {
+      /* v6 (V6_SPEC D9): the campus shapes, unit polygons shared with the legend glyphs (SHIELD_PTS, TRI_PTS); V8: the
+         Kesehatan plus and sparkle (PLUS_PTS, SPARKLE_PTS) */
+      var pts = shapePts(shape);
       for (var i = 0; i < pts.length; i++) { var x = cx + pts[i][0] * r, y = cy + pts[i][1] * r; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
       ctx.closePath();
     } else if (shape === 'diamond') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath(); }
@@ -719,7 +742,29 @@
     .concat(quadPts([0, 0.92], [-0.82, 0.58], [-0.84, -0.04], 6))
     .map(function (p) { return [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]; });
   var TRI_PTS = [[0, -0.9], [0.98, 0.8], [-0.98, 0.8]];
-  var SYMBOL_SHAPES = { circle: 1, diamond: 1, rsq: 1, shield: 1, triangle: 1 };
+  /* V8 (HEALTH_SPEC §2.1, H1): the Kesehatan shapes in the same unit box, the very points of health-core.js
+     (MCD.health.sym.PLUS_PTS, SPARKLE_PTS; tests/map-v8.test.mjs compares them): a Greek cross for rumah sakit (arm
+     half-width 0,34, arm length 0,98) and a four-point sparkle for klinik kecantikan (outer radius 1, inner 0,55, points
+     up, right, down and left). Klinik kesehatan is the circle. */
+  var PLUS_AW = 0.34, PLUS_AL = 0.98;
+  var PLUS_PTS = [[-PLUS_AW, -PLUS_AL], [PLUS_AW, -PLUS_AL], [PLUS_AW, -PLUS_AW], [PLUS_AL, -PLUS_AW], [PLUS_AL, PLUS_AW], [PLUS_AW, PLUS_AW],
+    [PLUS_AW, PLUS_AL], [-PLUS_AW, PLUS_AL], [-PLUS_AW, PLUS_AW], [-PLUS_AL, PLUS_AW], [-PLUS_AL, -PLUS_AW], [-PLUS_AW, -PLUS_AW]];
+  var SPARKLE_PTS = (function () {
+    var out = [];
+    for (var i = 0; i < 8; i++) {
+      var a = -Math.PI / 2 + i * Math.PI / 4, r = i % 2 ? 0.55 : 1;
+      out.push([Math.round(Math.cos(a) * r * 1e4) / 1e4, Math.round(Math.sin(a) * r * 1e4) / 1e4]);
+    }
+    return out;
+  })();
+  /* the plus inset by 0,17 on every side (the hollow legend glyph: an even band along the edge) */
+  var PLUS_IN = 0.17;
+  var PLUS_INNER_PTS = PLUS_PTS.map(function (p) {
+    return [p[0] < 0 ? p[0] + PLUS_IN : p[0] - PLUS_IN, p[1] < 0 ? p[1] + PLUS_IN : p[1] - PLUS_IN];
+  });
+  var POLY_SHAPES = { shield: 1, triangle: 1, plus: 1, sparkle: 1 };
+  function shapePts(shape) { return shape === 'shield' ? SHIELD_PTS : shape === 'plus' ? PLUS_PTS : shape === 'sparkle' ? SPARKLE_PTS : TRI_PTS; }
+  var SYMBOL_SHAPES = { circle: 1, diamond: 1, rsq: 1, shield: 1, triangle: 1, plus: 1, sparkle: 1 };
   /* the legend glyphs of the campus shapes (glyphSVG 'shield', 'shieldHollow', 'tri', 'triHollow'): the same points; the
      hollow ones cut the inside out (even-odd), around the shield's middle and the triangle's incentre */
   function scalePts(pts, f, cx, cy) { return pts.map(function (p) { return [cx + (p[0] - cx) * f, cy + (p[1] - cy) * f]; }); }
@@ -727,6 +772,12 @@
   GLYPHS.shieldHollow = [{ p: SHIELD_PTS }, { p: scalePts(SHIELD_PTS, 0.56, 0, -0.06) }];
   GLYPHS.tri = [{ p: TRI_PTS }];
   GLYPHS.triHollow = [{ p: TRI_PTS }, { p: scalePts(TRI_PTS, 0.5, 0, 0.234) }];
+  /* V8 (H1, H5): the Kesehatan legend glyphs from the same points; hollow = the plus inset by 0,17 and the sparkle at
+     half its size cut out (even-odd) */
+  GLYPHS.plus = [{ p: PLUS_PTS }];
+  GLYPHS.plusHollow = [{ p: PLUS_PTS }, { p: PLUS_INNER_PTS }];
+  GLYPHS.sparkle = [{ p: SPARKLE_PTS }];
+  GLYPHS.sparkleHollow = [{ p: SPARKLE_PTS }, { p: scalePts(SPARKLE_PTS, 0.5, 0, 0) }];
   /**
    * symbolSprite({shape:'circle'|'diamond'|'rsq'|'shield'|'triangle', fill:[r,g,b], ring?:[r,g,b], star?:bool, hollow?:bool, px})
    * → cached sprite {id, url, canvas, width, height, anchorX, anchorY, mask:false, px, dpr, shape, hollow} (device pixels;
@@ -734,6 +785,9 @@
    * map; `star` adds a small navy star at the top right (SMA yayasan TNI, item 34). v6 (V6_SPEC D9): 'shield' and
    * 'triangle' for Kampus; `hollow` draws the shape as an empty outline (a band in `fill` between two keylines, nothing
    * inside: "Titik kosong = kampus lain dari perguruan tinggi yang sama"). Unknown shapes are circles.
+   * V8 (HEALTH_SPEC H1–H5): 'plus' and 'sparkle' (Kesehatan) with the stroked keyline; hollow keeps the filled
+   * silhouette with a band of the fill colour along the edge (max(1,5, 0,09 × px) CSS px, the band of health-core.js) and
+   * the keyline colour inside, so a hollow hospital is exactly as large as a filled one.
    */
   function symbolSprite(spec) {
     spec = spec || {};
@@ -748,7 +802,23 @@
       var r = size / 2 - lw / 2 - (spec.star ? size * 0.06 : 0.5);
       var keyCss = cssRgb(ring || [255, 255, 255]);
       ctx.lineJoin = 'round';
-      if (hollow) {
+      if (shape === 'plus' || shape === 'sparkle') {
+        /* V8 (H1, H5): one silhouette, the polygon at rp with a stroke of lw around it (the stroked keyline of the shield).
+           Filled: the keyline stroke, the fill inside. Hollow (health-core.js's look): that outer stroke in the fill colour,
+           the keyline colour inside, and the fill band carried inward (clipped) to max(1,5, 0,09 × px) CSS px in all */
+        var rp = size / 2 - lw - 0.5 - (spec.star ? size * 0.06 : 0);
+        shapePath(ctx, shape, cx, cy, rp);
+        ctx.lineWidth = 2 * lw; ctx.strokeStyle = hollow ? cssRgb(fill) : keyCss; ctx.stroke();
+        ctx.fillStyle = hollow ? keyCss : cssRgb(fill); ctx.fill();
+        var bandIn = hollow ? Math.max(0, Math.max(1.5, px * 0.09) - (px >= 14 ? 1.5 : 1.2)) * dpr : 0;
+        if (bandIn > 0.25 && isFn(ctx.save) && isFn(ctx.clip)) {
+          ctx.save();
+          shapePath(ctx, shape, cx, cy, rp);
+          ctx.clip();
+          ctx.lineWidth = 2 * bandIn; ctx.strokeStyle = cssRgb(fill); ctx.stroke();
+          ctx.restore();
+        }
+      } else if (hollow) {
         /* the outline: a band of the fill colour on its centre line, a keyline on both sides of it, nothing inside */
         var band = Math.max(1.5 * dpr, size * 0.15), rc = size / 2 - 0.5 - (spec.star ? size * 0.06 : 0) - lw - band / 2;
         shapePath(ctx, shape, cx, cy, rc);
@@ -1468,17 +1538,21 @@
   function siteLayers(out, top) {
     var d = D(), atlas = buildAtlas(), vis = siteVisibility(), vk = S.siteVisKey;
     var getPos = function (s) { return s.position; };
+    /* V8 final fix (critic, 24 Oct 2026): a section whose own symbols are small (Kesehatan, Calon Prioritas) sets
+       posture.core.sitesDim: the TNI badges and place icons draw at 35 % opacity and 80 % size there, so they stop
+       competing with the hospitals (whose plus a badge corner also uses) */
+    var pc = (S.posture && S.posture.core) || {}, dim = pc.sitesDim === true, dimA = dim ? 0.35 : 1, dimS = dim ? 0.8 : 1, dk = vk + (dim ? '|dim' : '');
     out.push(new d.IconLayer({
       id: 'sites-keyline', data: vis.icons, iconAtlas: atlas.iconAtlas, iconMapping: atlas.iconMapping,
-      getIcon: function (s) { return s.glyph; }, getPosition: getPos, getSize: function (s) { return s.keySize * siteScale(); },
-      sizeUnits: 'pixels', getColor: function (s) { return rgba(s.key, s.keyA); }, updateTriggers: { getSize: vk, getColor: vk },
-      pickable: false, beforeId: DECK_BEFORE
+      getIcon: function (s) { return s.glyph; }, getPosition: getPos, getSize: function (s) { return s.keySize * siteScale() * dimS; },
+      sizeUnits: 'pixels', getColor: function (s) { return rgba(s.key, s.keyA); }, updateTriggers: { getSize: dk, getColor: vk },
+      opacity: dimA, pickable: false, beforeId: DECK_BEFORE
     }));
     out.push(new d.IconLayer({
       id: 'sites-icons', data: vis.icons, iconAtlas: atlas.iconAtlas, iconMapping: atlas.iconMapping,
-      getIcon: function (s) { return s.glyph; }, getPosition: getPos, getSize: function (s) { return s.size * siteScale(); },
-      sizeUnits: 'pixels', getColor: function (s) { return rgba(s.rgb, s.a); }, updateTriggers: { getSize: vk, getColor: vk },
-      pickable: true, beforeId: DECK_BEFORE
+      getIcon: function (s) { return s.glyph; }, getPosition: getPos, getSize: function (s) { return s.size * siteScale() * dimS; },
+      sizeUnits: 'pixels', getColor: function (s) { return rgba(s.rgb, s.a); }, updateTriggers: { getSize: dk, getColor: vk },
+      opacity: dimA, pickable: true, beforeId: DECK_BEFORE
     }));
     if (vis.badges.length) {
       /* pangkalan TNI (item 34): one round badge per site from the badge atlas of the current theme */
@@ -1487,8 +1561,8 @@
         out.push(new d.IconLayer({
           id: 'sites-badges', data: vis.badges, iconAtlas: bat.iconAtlas, iconMapping: bat.iconMapping,
           getIcon: function (s) { return bat.byName[s.pk.matra + '-' + s.pk.jenis]; }, getPosition: getPos,
-          getSize: function (s) { return badgePx(s, zq) / 0.84; }, sizeUnits: 'pixels', alphaCutoff: 0.02,
-          updateTriggers: { getIcon: vk, getSize: vk }, pickable: true, beforeId: DECK_BEFORE
+          getSize: function (s) { return badgePx(s, zq) / 0.84 * dimS; }, sizeUnits: 'pixels', alphaCutoff: 0.02,
+          updateTriggers: { getIcon: vk, getSize: dk }, opacity: dimA, pickable: true, beforeId: DECK_BEFORE
         }));
       }
     }
@@ -1566,6 +1640,167 @@
     return null;
   }
 
+  /* ---------------------------------------------------- the visit plan (V7_SPEC §7.6, V8_SPEC P3)
+   * While the Rencana kunjungan card is open on a map tab, plan.js hands the stops in visit order: a numbered badge per
+   * stop and one thin dashed order line from KCP Cilangkap through them (back to KCP with returnToStart). Straight
+   * segments: the road route is Google Maps' job. Only seq, lon and lat are read (no name, id or kind reaches the map);
+   * nothing here is pickable, so a badge never opens a callout or draws a route. The ink is one neutral navy (Mandiri
+   * navy with white numbers on the light street map; near-white with navy numbers on the dark map and the satellite,
+   * where light marks read best), never green, never the route blue, never gold. */
+  var PLAN_INK = {
+    day: { fill: [0, 61, 121], num: [255, 255, 255], key: [255, 255, 255], line: [0, 61, 121] },
+    night: { fill: [241, 245, 249], num: [0, 61, 121], key: [10, 15, 23], line: [241, 245, 249] }
+  };
+  var PLAN_BADGE_PX = 20, PLAN_LINE_W = 1.5, PLAN_LINE_A = 0.7, PLAN_DASH = [4, 4], PLAN_DASH_CAP = 3000, PLAN_SPREAD_PX = 22;
+  var PLAN = { stops: [], line: true, ret: false, start: null, key: '', dash: null, dashKey: '' };
+  function llOf(v) {
+    if (!v) return null;
+    var lon = Array.isArray(v) ? +v[0] : +v.lon, lat = Array.isArray(v) ? +v[1] : +v.lat;
+    return finite(lon) && finite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90 ? [lon, lat] : null;
+  }
+  /**
+   * setPlanOverlay({stops: [{seq, lon, lat}], line = true, returnToStart = false, start?: {lon, lat}}) → true while stops
+   * are drawn. Stops without a valid point are skipped; badges are numbered by seq (else their place in the list) and
+   * drawn in that order; stops on one point sit side by side. The start is KCP Cilangkap unless one is given.
+   */
+  function setPlanOverlay(o) {
+    o = o || {};
+    var list = Array.isArray(o.stops) ? o.stops : [], stops = [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i], ll = llOf(s);
+      if (!ll) continue;
+      var seq = s && finite(+s.seq) && +s.seq > 0 ? Math.round(+s.seq) : i + 1;
+      stops.push({ seq: seq, position: ll, at: i });
+    }
+    stops.sort(function (a, b) { return a.seq - b.seq || a.at - b.at; });
+    /* stops on one point (5 decimals): side by side, 22 px apart, so every number stays readable */
+    var groups = {};
+    stops.forEach(function (s) { var k = s.position[0].toFixed(5) + ',' + s.position[1].toFixed(5); (groups[k] = groups[k] || []).push(s); });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
+      g.forEach(function (s, j) { s.off = [Math.round((j - (g.length - 1) / 2) * PLAN_SPREAD_PX), 0]; delete s.at; });
+    });
+    var line = o.line !== false, ret = !!o.returnToStart, start = llOf(o.start);
+    var key = JSON.stringify([stops.map(function (s) { return [s.seq, s.position, s.off]; }), line, ret, start]);
+    if (key === PLAN.key) return stops.length > 0;
+    PLAN = { stops: stops, line: line, ret: ret, start: start, key: stops.length ? key : '', dash: null, dashKey: '' };
+    scheduleCompose();
+    queueLegend();
+    return stops.length > 0;
+  }
+  function clearPlanOverlay() {
+    if (!PLAN.stops.length && !PLAN.key) return;
+    PLAN = { stops: [], line: true, ret: false, start: null, key: '', dash: null, dashKey: '' };
+    scheduleCompose();
+    queueLegend();
+  }
+  /** planOverlay() → {stops: [{seq, lon, lat}], line, returnToStart} | null: what the map draws now (QA, tests). */
+  function planOverlay() {
+    if (!PLAN.stops.length) return null;
+    return { stops: PLAN.stops.map(function (s) { return { seq: s.seq, lon: s.position[0], lat: s.position[1] }; }), line: PLAN.line, returnToStart: PLAN.ret };
+  }
+  /** The order line's points: the start (KCP), the stops in order, the start again with returnToStart. */
+  function planPath() {
+    var st = PLAN.start || branchLL(), pts = [st];
+    PLAN.stops.forEach(function (s) { pts.push(s.position); });
+    if (PLAN.ret) pts.push(st);
+    return pts;
+  }
+  /**
+   * planDash(points, zoom, on, off, cap) → [{path: [[lon, lat], [lon, lat]]}]: the polyline cut into dashes of `on` px with
+   * `off` px gaps at this zoom, the rhythm running on across the corners (a dash that meets a corner bends as two
+   * pieces). Long lines at a close zoom keep at most `cap` pieces: the dashes and gaps then grow together.
+   */
+  function planDash(pts, zoom, on, off, cap) {
+    var segs = [], total = 0, i;
+    for (i = 1; i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i], len = legM(a, b) / (metersPerPixel(zoom, (a[1] + b[1]) / 2) || 1);
+      if (!(len > 0.25)) continue;
+      segs.push({ a: a, b: b, len: len });
+      total += len;
+    }
+    var step = on + off, out = [];
+    if (!segs.length || !(step > 0)) return out;
+    if (cap > 0 && total / step > cap) { var f = total / step / cap; on *= f; off *= f; step = on + off; }
+    var phase = 0;                                   /* distance into the current dash period */
+    for (i = 0; i < segs.length; i++) {
+      var sg = segs[i], t = 0;
+      while (t < sg.len - 1e-9) {
+        var room = sg.len - t;
+        if (phase < on) {
+          var take = Math.min(on - phase, room), t0 = t / sg.len, t1 = (t + take) / sg.len;
+          out.push({ path: [[lerp(sg.a[0], sg.b[0], t0), lerp(sg.a[1], sg.b[1], t0)], [lerp(sg.a[0], sg.b[0], t1), lerp(sg.a[1], sg.b[1], t1)]] });
+          t += take; phase += take;
+        } else {
+          var gap = Math.min(step - phase, room);
+          t += gap; phase += gap;
+        }
+        if (phase >= step - 1e-9) phase = 0;
+      }
+    }
+    return out;
+  }
+  /** planBadgeSprite({n, palette: 'day' | 'night', px}) → cached sprite: a 20 px disc with a keyline and its number. */
+  function planBadgeSprite(spec) {
+    spec = spec || {};
+    var n = Math.max(1, Math.min(99, Math.round(+spec.n) || 1)), pk = spec.palette === 'day' ? 'day' : 'night';
+    var px = clamp(finite(+spec.px) ? +spec.px : PLAN_BADGE_PX, 12, 40), dpr = spriteDpr();
+    /* the number is canvas text: drawn again once the web fonts are in, so it never keeps a fallback face */
+    var key = 'plan|' + pk + '|' + n + '|' + px + '|' + dpr + (S.fontsReady ? '|f' : '');
+    if (SPRITES[key]) return SPRITES[key];
+    var size = Math.ceil(px * dpr), c = newCanvas(size, size), ink = PLAN_INK[pk];
+    if (c) {
+      var ctx = c.ctx, cx = size / 2, cy = size / 2, r = size / 2 - 0.5, kw = Math.max(1, 1.5 * dpr);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = cssRgb(ink.key); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, r - kw, 0, Math.PI * 2); ctx.fillStyle = cssRgb(ink.fill); ctx.fill();
+      ctx.fillStyle = cssRgb(ink.num);
+      ctx.font = '600 ' + ((n >= 10 ? 10.5 : 12) * dpr) + 'px ' + FONT_SANS;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(n), cx, cy + 0.5 * dpr);
+    }
+    SPRITES[key] = lazyUrl({ id: key, canvas: c ? c.cv : null, width: size, height: size, anchorX: size / 2, anchorY: size / 2, mask: false, px: px, dpr: dpr,
+      seq: n, palette: pk }, c ? c.cv : null);
+    return SPRITES[key];
+  }
+  /** The plan's deck layers: the dashed order line under the section's points (with the route), the badges on top. */
+  function planLayers(out, top) {
+    if (!PLAN.stops.length) return;
+    var d = D(), pk = palKey(), ink = PLAN_INK[pk];
+    if (!d) return;
+    if (PLAN.line && d.PathLayer) {
+      var zq = quant(S.zoom, 0.25), dk = PLAN.key + '|' + zq + '|' + (PLAN.start ? '' : branchKey());
+      if (PLAN.dashKey !== dk) { PLAN.dashKey = dk; PLAN.dash = planDash(planPath(), zq, PLAN_DASH[0], PLAN_DASH[1], PLAN_DASH_CAP); }
+      if (PLAN.dash.length) {
+        out.push(new d.PathLayer({
+          id: 'plan-order-line', data: PLAN.dash, getPath: function (o) { return o.path; }, getColor: rgba(ink.line, Math.round(255 * PLAN_LINE_A)),
+          widthUnits: 'pixels', getWidth: PLAN_LINE_W, capRounded: false, jointRounded: false, updateTriggers: { getColor: pk },
+          pickable: false, beforeId: DECK_BEFORE
+        }));
+      }
+    }
+    if (!d.IconLayer) return;
+    var sprites = PLAN.stops.map(function (s) { return planBadgeSprite({ n: s.seq, palette: pk, px: PLAN_BADGE_PX }); });
+    var at = spriteAtlas(sprites);
+    if (!at || !at.iconAtlas) return;
+    var idOf = {};
+    sprites.forEach(function (sp) { idOf[sp.seq] = sp.id; });
+    top.push(new d.IconLayer({
+      id: 'plan-stops', data: PLAN.stops, iconAtlas: at.iconAtlas, iconMapping: at.iconMapping,
+      getIcon: function (s) { return idOf[Math.max(1, Math.min(99, s.seq))]; }, getPosition: function (s) { return s.position; },
+      getSize: PLAN_BADGE_PX, sizeUnits: 'pixels', getPixelOffset: function (s) { return s.off; }, billboard: true,
+      updateTriggers: { getIcon: pk + PLAN.key + (S.fontsReady ? 'f' : ''), getPixelOffset: PLAN.key }, pickable: false, beforeId: DECK_BEFORE
+    }));
+  }
+  /** The legend group while the plan is drawn (V7_SPEC §7.6). */
+  function planLegend() {
+    if (!PLAN.stops.length) return null;
+    var ink = PLAN_INK[palKey()];
+    return { id: 'plan', title: 'Rencana kunjungan', rows: [
+      { glyph: 'badge', text: '1', label: 'Nomor menunjukkan urutan kunjungan.' },
+      PLAN.line ? { line: ink.line, dash: '4 4', width: PLAN_LINE_W, alpha: PLAN_LINE_A, label: 'Garis urutan kunjungan. Rute jalan dari Google Maps.' } : null
+    ].filter(Boolean) };
+  }
+
   /* ---------------------------------------------------- section layers */
 
   function registeredFor(table, key) {
@@ -1612,6 +1847,8 @@
     var out = [], top = [];
     try {
       routeLayers(out, top);                                /* item 36: under the section points, origin on top */
+      var planTop = [];
+      planLayers(out, planTop);                             /* V8 P3: the plan's order line under the points, its badges last */
       var sec = sectionLayers();
       for (var i = 0; i < sec.base.length; i++) out.push(sec.base[i]);
       if (core.beacon !== false) beaconLayers(out);
@@ -1619,6 +1856,7 @@
       if (core.rings !== false && S.layers.rings) ringLabelLayers(top);
       selectionLayer(top);
       for (var j = 0; j < sec.top.length; j++) top.push(sec.top[j]);
+      for (var q = 0; q < planTop.length; q++) top.push(planTop[q]);
     } catch (e) {
       warn('compose failed', e);
     }
@@ -1827,7 +2065,7 @@
     var L0 = info && info.picked && info.layer, ov = S.overlay;
     if (!L0 || !ov || !isFn(ov.pickObject) || !finite(info.x) || !finite(info.y)) return info;
     var lid = String(L0.id || ''), meta = L0.props && L0.props.mcd;
-    if (!/-labels(-rank)?(-chip)?$/.test(lid) || !meta || !isKecKind(meta.kind)) return info;
+    if (!/-labels(-rank)?(-bars[1-3])?(-chip)?$/.test(lid) || !meta || !isKecKind(meta.kind)) return info;
     var at = -1, above = [], ids = [], i, L, p;
     for (i = 0; i < S.composed.length; i++) {
       L = S.composed[i];
@@ -3209,6 +3447,10 @@
     /* v6 (V6_SPEC §6.1, §6.3): Kampus opens on its 30 km scope, the 30 km kecamatan zones by default (the section still
        calls setZones: {mode: 'kecamatan15'} at 15 km) */
     campus: { imagery: 'full', camera: 'ring30', rings: 'schools', layerSet: 'campus', deck: true, zones: { mode: 'kecamatan', km: 30 } },
+    /* V8 (V8_SPEC §2.1, P2; HEALTH_SPEC §2.6 with H12 at 5 km): Kesehatan and Calon Prioritas open at 5 km on the 15 km
+       kecamatan zones; fallbacks only, both sections register their own posture (camera and zones per scope) */
+    health: { imagery: 'full', camera: '5', rings: 'schools', layerSet: 'health', deck: true, zones: { mode: 'kecamatan15' }, core: { sitesDim: true } },
+    wealth: { imagery: 'full', camera: '5', rings: 'schools', layerSet: 'wealth', deck: true, zones: { mode: 'kecamatan15' }, core: { sitesDim: true } },
     data: { imagery: 'dimmed', camera: null, rings: null, layerSet: null, deck: false }
   };
   /* ticker (beacon pulse, selection halo) runs only in Overview (§E.13) */
@@ -3729,6 +3971,9 @@
       try { flatten(fn(S.derived, mapState()), sec); } catch (e) { failOnce('legend:' + k, 'legend ' + k + ' failed', e); }
     });
     sec.forEach(function (g) { groups.push(g); });
+    /* V8 P3: the visit plan while it is drawn */
+    var pg = planLegend();
+    if (pg) groups.push(pg);
     if (core.sites !== false && S.layers.sites) {
       groups.push({ id: 'sites', title: 'Tempat penting', rows: [
         { glyph: 'diamond', rgb: C.gold, label: 'Bank Mandiri (titik terbesar: KCP Cilangkap)' },
@@ -3785,12 +4030,17 @@
     try { var ctx = cv.getContext('2d'); if (ctx) ctx.drawImage(src, 0, 0, cv.width, cv.height); } catch (e) { /* an empty square */ }
     return cv;
   }
-  /** A legend row {shape, rgb, hollow?}: the map's own sprite (symbolSprite at 18 px, copied from its canvas), else the SVG glyph. */
+  /** A legend row {shape, rgb, hollow?, ring?, alpha?}: the map's own sprite (symbolSprite at 18 px, copied from its canvas;
+      ring = its keyline colour, so a dark keyline in Gelap matches the map; alpha = a faint symbol), else the SVG glyph. */
   function shapeLegend(r) {
-    var sp = symbolSprite({ shape: r.shape, fill: Array.isArray(r.rgb) ? r.rgb : C.text2, hollow: !!r.hollow, px: 18 });
-    if (sp && sp.canvas) return legendCanvas(sp.canvas, 18);
-    var name = { shield: 'shield', triangle: 'tri', diamond: 'diamond', rsq: 'rsquare', circle: 'circle' }[r.shape] || 'circle';
-    if (r.hollow) name = { shield: 'shieldHollow', tri: 'triHollow', diamond: 'diamondHollow', rsquare: 'rsqOutline', circle: 'ring' }[name];
+    var sp = symbolSprite({ shape: r.shape, fill: Array.isArray(r.rgb) ? r.rgb : C.text2, ring: Array.isArray(r.ring) ? r.ring : null, hollow: !!r.hollow, px: 18 });
+    if (sp && sp.canvas) {
+      var cv = legendCanvas(sp.canvas, 18);
+      if (finite(r.alpha) && r.alpha < 1 && cv.style) cv.style.opacity = String(Math.max(0, r.alpha));
+      return cv;
+    }
+    var name = { shield: 'shield', triangle: 'tri', diamond: 'diamond', rsq: 'rsquare', circle: 'circle', plus: 'plus', sparkle: 'sparkle' }[r.shape] || 'circle';
+    if (r.hollow) name = { shield: 'shieldHollow', tri: 'triHollow', diamond: 'diamondHollow', rsquare: 'rsqOutline', circle: 'ring', plus: 'plusHollow', sparkle: 'sparkleHollow' }[name];
     return glyphSVG(name, r.rgb, 10, r.alpha);
   }
   /** The kelas biaya scale row {tiers: [{level, basis, word}], label?}: each badge over its word ("Reguler · Menengah · Atas ·
@@ -3814,7 +4064,7 @@
     var model = legendModel();
     /* colours are part of the key: status swatches read --status-* tokens, which change with the theme */
     var key = stableKey({ g: model.groups.map(function (g) { return [g.title, g.ramp, g.note, (g.rows || []).map(function (r) { return [r.label, r.count, r.glyph, r.rgb, r.line, r.alpha, r.width, r.text, r.imgKey || '', r.area, r.muted,
-      r.level, r.basis, r.tiers, r.shape, r.hollow]; })]; }), n: model.notes, t: S.theme });
+      r.level, r.basis, r.tiers, r.shape, r.hollow, r.ring, r.bars]; })]; }), n: model.notes, t: S.theme });
     if (key === S.legendKey) return;
     S.legendKey = key;
     while (el.firstChild) el.removeChild(el.firstChild);
@@ -3832,7 +4082,12 @@
         else if (r.canvas) gl.appendChild(legendCanvas(r.canvas, r.size || 18));
         else if (r.img) { var im = h('img', 'lg__img'); im.src = r.img; im.alt = ''; im.width = r.size || 18; im.height = r.size || 18; gl.appendChild(im); }
         else if (r.area) { var ar = h('span', 'lg__area'), veil = h('i', null); veil.style.background = r.area.color; veil.style.opacity = String(r.area.alpha); ar.appendChild(veil); gl.appendChild(ar); }
-        else if (r.glyph === 'chip') gl.appendChild(h('span', 'lg__chip' + (r.muted ? ' lg__chip--muted' : '')));
+        else if (r.glyph === 'chip') {
+          /* V8 (V7_SPEC §5.1): {glyph: 'chip', bars: 1-3} draws the kecamatan chip with its small bars (territory chipBars) */
+          var chipG = h('span', 'lg__chip' + (r.muted ? ' lg__chip--muted' : '')), nb = finite(+r.bars) ? clamp(Math.round(+r.bars), 0, 3) : 0;
+          if (nb) { chipG.classList.add('lg__chip--bars'); for (var bi = 0; bi < nb; bi++) chipG.appendChild(h('i', 'lg__chip-bar')); }
+          gl.appendChild(chipG);
+        }
         else if (r.glyph === 'badge') gl.appendChild(h('span', 'lg__badge', r.text || '1'));
         else if (r.glyph === 'tier') {
           /* one badge, or with basis 'both' a filled and an empty one side by side (the "Batang berisi … Batang kosong" row) */
@@ -3907,6 +4162,31 @@
 
   /* ------------------------------------------------------------------ init */
 
+  /* V8 phones (MOBILE_UX_PLAN M4): a fingertip lands several px beside a small point, and a miss closes the open sheet,
+     so a coarse pointer picks within 14 px (deck.gl returns the nearest object); a mouse keeps 4 px */
+  function pickRadius() { return W.matchMedia && W.matchMedia('(pointer: coarse)').matches ? 14 : 4; }
+  function coarsePointer() { try { return !!(W.matchMedia && W.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } }
+  /* M10 item 3: a phone with a device pixel ratio of 3 drew 9 pixels per CSS pixel with MSAA; on a coarse pointer the map
+     draws at most 2 per CSS pixel, antialias off (gate.js caps its own map at 2 already). A mouse keeps up to 3. */
+  function mapPixelRatio() { return Math.min(W.devicePixelRatio || 1, coarsePointer() ? 2 : 3); }
+  var PTR = { bound: false };
+  /** A pointer change (a tablet's keyboard cover, a phone joined to a screen): picking radius and pixel ratio follow. */
+  function watchPointer() {
+    if (PTR.bound || !W.matchMedia) return;
+    PTR.bound = true;
+    var mq = null;
+    try { mq = W.matchMedia('(pointer: coarse)'); } catch (e) { mq = null; }
+    if (!mq) return;
+    var onChange = function () {
+      if (S.overlay && isFn(S.overlay.setProps)) { try { S.overlay.setProps({ pickingRadius: pickRadius() }); } catch (e) { /* the old radius stays */ } }
+      if (S.map && isFn(S.map.setPixelRatio)) { try { S.map.setPixelRatio(mapPixelRatio()); } catch (e) { /* the old ratio stays */ } }
+    };
+    try {
+      if (isFn(mq.addEventListener)) mq.addEventListener('change', onChange);
+      else if (isFn(mq.addListener)) mq.addListener(onChange);
+    } catch (e) { /* older browsers keep the first values */ }
+  }
+
   function init(el, opts) {
     opts = opts || {};
     if (S.map) return true;
@@ -3934,7 +4214,9 @@
         container: el, style: style(),
         center: cam.center, zoom: cam.zoom, pitch: 0, bearing: 0,
         maxPitch: 0, minZoom: 9, maxZoom: 19.5, maxBounds: MAX_BOUNDS,
-        attributionControl: false, antialias: true, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+        /* V8 (M10 item 3): at most 2 device px per CSS px and no MSAA on a coarse pointer */
+        pixelRatio: mapPixelRatio(), antialias: !coarsePointer(),
+        attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
         fadeDuration: 200, refreshExpiredTiles: false,
         // MapLibre's own screen-reader words (canvas and marker titles) in Indonesian (COPY_STYLE item 19)
         locale: { 'Map.Title': 'Peta', 'Marker.Title': 'Penanda peta', 'Popup.Close': 'Tutup', 'ScrollZoomBlocker.CtrlMessage': 'Tekan Ctrl sambil menggulir untuk memperbesar peta',
@@ -3971,7 +4253,7 @@
     var m = S.map;
     try {
       S.overlay = new W.deck.MapboxOverlay({
-        interleaved: true, layers: [], pickingRadius: 4,
+        interleaved: true, layers: [], pickingRadius: pickRadius(),
         onHover: onDeckHover, onClick: onDeckClick,
         getCursor: function (st) { return st.isHovering ? 'pointer' : (st.isDragging ? 'grabbing' : ''); }
       });
@@ -3980,6 +4262,7 @@
       warn('deck overlay failed', e);
       S.overlay = null; S.deckOK = false;
     }
+    watchPointer();
     S.ready = true;
     warmStart();
     addOfm();
@@ -4899,7 +5182,7 @@
    * was sliced by the veil wherever it reached past the border (a phone: "acas · 970 merch"). While a focus is on, that
    * chip is an HTML plate above the veil instead (its deck copy is hidden), placed where it fits inside the kecamatan,
    * with the name only when the whole chip is wider than the kecamatan on screen. */
-  var FXC = { root: null, card: null, name: null, rest: null, mk: null, key: '', w: 0, wn: 0, h: 0, short: false, on: false };
+  var FXC = { root: null, card: null, name: null, rest: null, bars: null, mk: null, key: '', w: 0, wn: 0, h: 0, short: false, on: false };
   function fxChipData(layers) {
     if (!FX.id || !FX.geo) return null;
     for (var i = 0; i < layers.length; i++) {
@@ -4910,7 +5193,9 @@
         if (String(data[j].kec) !== FX.id) continue;
         var txt = acc(p.getText, data[j], j, info), pos = acc(p.getPosition, data[j], j, info);
         if (!Array.isArray(pos) || txt == null || txt === '') return null;
-        return { d: data[j], text: String(txt), pos: pos, layerId: L.id };
+        /* V8: the chip's bars (territory chipBars) ride on its leader layer (props.mcdBars, 1-3) */
+        var nb = finite(+p.mcdBars) ? clamp(Math.round(+p.mcdBars), 0, 3) : 0;
+        return { d: data[j], text: String(txt), pos: pos, layerId: L.id, bars: nb };
       }
     }
     return null;
@@ -5018,12 +5303,21 @@
       try { mk = new W.maplibregl.Marker({ element: root, anchor: 'center' }).setLngLat(c.pos).addTo(S.map); } catch (e) { warn('focus chip', e); return; }
       FXC.root = root; FXC.card = card; FXC.name = nm; FXC.rest = rs; FXC.mk = mk;
     }
-    var key = c.text + '@' + c.pos[0] + ',' + c.pos[1];
+    var nbars = c.bars > 0 ? c.bars : 0;
+    var key = c.text + '@' + c.pos[0] + ',' + c.pos[1] + '#' + nbars;
     if (key !== FXC.key) {
       var i = c.text.indexOf(' · ');
       FXC.key = key;
       FXC.name.textContent = i > 0 ? c.text.slice(0, i) : c.text;
       FXC.rest.textContent = i > 0 ? c.text.slice(i) : '';
+      /* V8: the same small bars as the map chip (Calon Prioritas: daya beli area), after the words */
+      if (FXC.bars) { if (FXC.bars.parentNode) FXC.bars.parentNode.removeChild(FXC.bars); FXC.bars = null; }
+      if (nbars) {
+        var bars = h('span', 'map-focus-chip__bars');
+        for (var bi = 0; bi < nbars; bi++) bars.appendChild(h('i', null));
+        FXC.card.appendChild(bars);
+        FXC.bars = bars;
+      }
       FXC.rest.hidden = false; FXC.short = false; FXC.w = 0;
       try { FXC.mk.setLngLat(c.pos); } catch (e) { /* ignore */ }
     }
@@ -6206,7 +6500,9 @@
     atlas: buildAtlas, glyphSVG: glyphSVG, glyphNames: GLYPH_ORDER.slice(),
     symbolSprite: symbolSprite, badgeSprite: badgeSprite, spriteAtlas: spriteAtlas, matraRGB: MATRA_RGB,
     tierSprite: tierSprite, tierAtlas: tierAtlas, tierGeom: tierGeom, tierOffset: tierOffset, tierSVG: tierSVG, tierInk: TIER_INK,
-    shapes: { shield: SHIELD_PTS, triangle: TRI_PTS },
+    shapes: { shield: SHIELD_PTS, triangle: TRI_PTS, plus: PLUS_PTS, sparkle: SPARKLE_PTS },
+    /* V8 P3: the plan overlay's ink, badge and line (QA, tests) */
+    plan: { ink: PLAN_INK, badgePx: PLAN_BADGE_PX, lineWidth: PLAN_LINE_W, lineAlpha: PLAN_LINE_A, dash: PLAN_DASH, badgeSprite: planBadgeSprite },
     easing: { outExpo: outExpo, inOutCubic: inOutCubic, camera: easeCamera, standard: easeStandard },
     geo: { haversineKm: haversineKm, bearingDeg: bearingDeg, destination: destination, circle: circleRing, bbox: bboxOf, pointInRing: pointInRing },
     fmt: { int: fmtInt, dec: fmtDec, rp: fmtRp, km: fmtKm, pct: fmtPct, coord: fmtCoord, bandRp: bandRp },
@@ -6241,8 +6537,16 @@
         setLayout(pad, {still: true}) keeps the map content still on screen. A point inside the focused kecamatan, or with
         extra.trail, keeps the focus (signal 'trail'); the route chip waits while MCD.windows.calloutKey() is its point. */
     positionOf: positionOf, keepTargets: keepTargets, routeScreen: routeScreen, nudge: nudge, fitRoute: fitRoute,
-    /** item 34: cached canvas sprites for deck IconLayer and legends (v6: shapes 'shield' and 'triangle', `hollow`) */
+    /** item 34: cached canvas sprites for deck IconLayer and legends (v6: shapes 'shield' and 'triangle', `hollow`;
+        V8: 'plus' and 'sparkle' for Kesehatan) */
     symbolSprite: symbolSprite, badgeSprite: badgeSprite, spriteAtlas: spriteAtlas,
+    /** V8 (V7_SPEC §7.6, V8_SPEC P3): the visit plan's numbered badges and dashed order line (never pickable).
+        setPlanOverlay({stops: [{seq, lon, lat}], line, returnToStart, start?}) → boolean; clearPlanOverlay();
+        planOverlay() → {stops, line, returnToStart} | null */
+    setPlanOverlay: setPlanOverlay, clearPlanOverlay: clearPlanOverlay, planOverlay: planOverlay,
+    /** V8 (MOBILE_UX_PLAN M4, M10 item 3): the picking radius in px (14 on a coarse pointer, else 4) and the map's pixel
+        ratio (at most 2 on a coarse pointer, 3 with a mouse) */
+    pickRadius: pickRadius, pixelRatio: mapPixelRatio,
     /** fix round 19 Oct 2026: the GPU's MAX_TEXTURE_SIZE as probed at init (0 = not known yet) */
     maxTextureSize: function () { return S.maxTexture || 0; },
     /** v6 (V6_SPEC D6, §4.3): the kelas biaya badge. tierSprite({level 1-4, basis, theme, px}) → sprite | null (level 0);
@@ -6286,6 +6590,9 @@
       routeLayers: routeLayers, selectionChanged: selectionChanged, motionEase: motionEase, flightMs: flightMs, FX: FX, RT: RT,
       atlasCanvasFor: function (url) { return ATLAS_URL ? ATLAS_URL.get(url) || null : null; },
       fxJudge: fxJudge, flightEase: flightEase, WARM: WARM, buildAtlas: buildAtlas, layoutLabels: layoutLabels },
+    /* internal, for tests/map-v8.test.mjs (V8 P3, P5): not a public API */
+    _v8: { planDash: planDash, planPath: planPath, planLayers: planLayers, planLegend: planLegend, fxChipData: fxChipData,
+      PLAN: function () { return PLAN; }, coarsePointer: coarsePointer },
     /* internal, for tests/map-v5.test.mjs (item 43): not a public API */
     _v5: { shiftLL: shiftLL, rectLTRB: rectLTRB, tipKey: tipKey, tipSuppressed: tipSuppressed, trailOf: trailOf, routePathD: routePathD,
       routeTailPts: routeTailPts, screenAff: screenAff, freeClient: freeClient, calloutRect: calloutRect, routeChipHushed: routeChipHushed,

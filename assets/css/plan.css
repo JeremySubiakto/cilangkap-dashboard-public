@@ -69,7 +69,9 @@
   border: 0; background: none; cursor: pointer; text-align: left; color: var(--text-1);
   font: 600 12px/16px var(--font-sans);
 }
-.pl-fold__btn:hover .pl-fold__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+@media (hover: hover) {
+  .pl-fold__btn:hover .pl-fold__t { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+}
 .pl-fold__chev { width: 14px; height: 14px; flex: none; color: var(--text-3); transition: rotate var(--dur-fast) var(--ease-out); }
 .pl-fold.is-open .pl-fold__chev { rotate: 90deg; }
 .pl-fold__t { flex: none; }
@@ -122,7 +124,10 @@
 .pl-more { width: 32px; cursor: pointer; touch-action: auto; }
 .pl-grip .icon { width: 14px; height: 14px; }
 .pl-more__g { font: 600 16px/1 var(--font-sans); }
-.pl-grip:hover, .pl-more:hover, .pl-more[aria-expanded="true"] { color: var(--text-1); background: var(--glass-card-hover); }
+.pl-more[aria-expanded="true"] { color: var(--text-1); background: var(--glass-card-hover); }
+@media (hover: hover) {
+  .pl-grip:hover, .pl-more:hover { color: var(--text-1); background: var(--glass-card-hover); }
+}
 .pl-num {
   display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
   font: 600 12px/1 var(--font-sans); font-variant-numeric: tabular-nums;
@@ -156,7 +161,10 @@
   min-height: 36px; padding: 0 var(--s-3); border: 0; border-radius: var(--r-ctl); background: none; text-align: left; cursor: pointer;
   font: 500 13px/18px var(--font-sans); color: var(--text-1);
 }
-.pl-menu__i:hover:not(:disabled), .pl-menu__i:focus-visible { background: var(--glass-card-hover); }
+.pl-menu__i:focus-visible { background: var(--glass-card-hover); }
+@media (hover: hover) {
+  .pl-menu__i:hover:not(:disabled) { background: var(--glass-card-hover); }
+}
 .pl-menu__i:disabled { color: var(--text-3); cursor: default; }
 
 /* ── 4 · Lines, footer and links ──────────────────────────────────────────── */
@@ -188,7 +196,13 @@ body[data-view="overview"] .pl-seg .pl-seg__opt, body[data-view="overview"] .pl-
 body[data-view="overview"] .pl-grip, body[data-view="overview"] .pl-more { width: 40px; height: 40px; }
 body[data-view="overview"] .pl-stop__l1 { grid-template-columns: 40px 22px 16px minmax(0, 1fr) 40px; }
 body[data-view="overview"] .pl-stop__l2, body[data-view="overview"] .pl-stop .pl-warn { padding-left: calc(40px + 6px + 22px + 6px); }
+/* M3 (MOBILE_UX_PLAN): 44 px selects on touch screens (the 16 px text is the global field rule of shell.css) */
+@media (pointer: coarse) {
+  .pl-select { min-height: 44px; }
+}
 @media (max-width: 767px) {
+  /* M6: while the on-screen keyboard is up (app.js sets body.is-typing), the sticky Maps row steps aside */
+  body.is-typing .pl-frame__sticky { display: none; }
   .pl-card .btn, .pl-fold__btn, .pl-seg .pl-seg__opt, .pl-menu__i, .pl-select { min-height: 44px; }
   .pl-grip, .pl-more { width: 44px; height: 44px; }
   .pl-stop__l1 { grid-template-columns: 44px 22px 16px minmax(0, 1fr) 44px; }

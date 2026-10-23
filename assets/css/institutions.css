@@ -46,14 +46,14 @@
   font: inherit; font-weight: 600; color: var(--text-1);
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
 }
-.inst-linkbtn:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .inst-linkbtn:hover { text-decoration-color: var(--text-1); } }
 
 .inst-ext, .inst-tel, .inst-mail {
   color: var(--text-1); font-weight: 500;
   text-decoration: underline; text-decoration-color: var(--rule-platinum); text-underline-offset: 3px;
   overflow-wrap: anywhere;
 }
-.inst-ext:hover, .inst-tel:hover, .inst-mail:hover { text-decoration-color: var(--text-1); }
+@media (hover: hover) { .inst-ext:hover, .inst-tel:hover, .inst-mail:hover { text-decoration-color: var(--text-1); } }
 .inst-ext { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
 .inst-ext__t { min-width: 0; overflow-wrap: anywhere; }
 .inst-ext__i.icon { flex: none; width: 12px; height: 12px; color: var(--text-3); }
@@ -165,4 +165,9 @@ body[data-section] .inst-tierf__chip.chip[aria-pressed="true"] .chip__count { co
 @media (forced-colors: active) {
   .inst-bars__off { opacity: .4; }
   .inst-tier { border-color: CanvasText; }
+}
+
+/* ── V8 phones (MOBILE_UX_PLAN M7): the scope options 5 · 15 · 30 km are 44 px tall ───────────── */
+@media (max-width: 767px) {
+  .scope-field .scope:not(.scope--v) .seg__opt { min-height: 44px; }
 }

@@ -66,6 +66,9 @@
  * Engine: assets/js/schools-core.js (MCD.schools). Public data always shows with its source; bank data
  * only from the vault, an import or the opt-in Data contoh switch (then tagged CONTOH). Storage:
  * mcd.schools.* (the distance is not stored, UX_FIX_PLAN D14); the scope in sessionStorage (mcd.scope.v1).
+ * V8 (docs/V8_SPEC.md §4.6, §2.5, §5.7): "+ Rencana kunjungan" (MCD.plan.quick, stop npsn:… or app:<lon>,<lat>) beside
+ *   "+ Tindak lanjut" in the card head and in the callout's link row; landing schools:tab:<tab>[:half[:<sort>]]; phones: search
+ *   keyboard attributes (M3), the decimal share fields as text with the decimal keypad (M16).
  * ========================================================================== */
 (function (MCD) {
   'use strict';
@@ -107,6 +110,8 @@
   var LIST_FULL_MAX_H = 900;            /* "Lihat daftar …" opens the drawer to full height up to this window height */
   var LIST_SORTS = [{ v: 'near', label: 'Terdekat dari KCP' }, { v: 'k17', label: 'Siswa 17+ terbanyak' }, { v: 'stu', label: 'Siswa terbanyak' }, { v: 'tier', label: 'Kelas biaya tertinggi' }];
   var JENIS_WORD = { sma: 'SMA', ma: 'MA', smk: 'SMK' };
+  /* M3 (MOBILE_UX_PLAN): the keyboard does not capitalise or "correct" school names; its Enter key reads "Cari" */
+  var SEARCH_KEYS = { enterkeyhint: 'search', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false' };
   var JENIS_LEVEL = { sma: 'SMA', smk: 'SMK', ma: 'MA' };
   var JENIS_ORDER = ['sma', 'smk', 'ma'];
   var JENIS_NAME = { sma: 'SMA', smk: 'SMK (sekolah menengah kejuruan)', ma: 'MA (madrasah aliyah)' };
@@ -1525,7 +1530,7 @@
   /**
    * One coverage language (COPY_STYLE item 18, as in Merchant and Ringkasan): the kecamatan with at least
    * half their area within 15 km and SMA in them are ranked by the share of their SMA that bank with Mandiri
-   * (SMA nasabah ÷ SMA) and split into thirds: green strongest, amber middle, red weakest (prioritas kunjungan),
+   * (SMA nasabah ÷ SMA) and split into thirds: green strongest, amber middle, red weakest (urutan kecamatan),
    * ties in the lower third, grey = not ranked. Same cut rule as MCD.territory.terciles; when the shares do not
    * vary enough (fewer than 3 different values) the fixed 50% / 20% bands apply and the legend says so.
    * Sets a.band3 ('acquired' | 'partly' | 'notYet' | 'noData') and a.ranked on each row.
@@ -2803,7 +2808,7 @@
     s.sortSel.addEventListener('change', function () { var v = s.sortSel.value; st.listSort = v; saveUi(); if (v === 'tier') needTiers(); renderList(); });
     s.sort = { el: s.sortSel, set: function (v) { if (s.sortSel.value !== v) s.sortSel.value = v; } };
     s.sw = distToggles();
-    s.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari sekolah atau yayasan', title: 'Cari menurut nama sekolah, NPSN atau yayasan', aria: { label: 'Cari sekolah menurut nama, NPSN atau yayasan' }, value: st.sq || '' });
+    s.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari sekolah atau yayasan', title: 'Cari menurut nama sekolah, NPSN atau yayasan', aria: { label: 'Cari sekolah menurut nama, NPSN atau yayasan' }, value: st.sq || '', attrs: SEARCH_KEYS });
     s.q.addEventListener('input', debounce(function () { st.sq = s.q.value; renderList(); }, 150));
     s.exportB = guard(btn('Ekspor daftar SMA (CSV)', 'download', function () { exportSchools(); }, 'btn--secondary btn--bar', 'Daftar sekolah untuk dikunjungi, dalam CSV. Tidak tersedia saat Data contoh aktif atau nama disamarkan.'));
     s.ex.el.insertBefore(E('div', { class: 'sk-tools sk-tools--list' }, E('label', { class: 'search sk-search' }, icon('search'), s.q),
@@ -3098,7 +3103,7 @@
     var b = {};
     b.ex = exhibit({ eyebrow: 'Urutan yayasan · SMA saja', cls: 'sk-ex--fill' });
     b.sort = seg('Urutkan menurut', [{ v: 'schools', label: 'SMA' }, { v: 'students', label: 'Siswa' }, { v: 'nearest', label: 'Terdekat' }, { v: 'score', label: 'Skor' }], function (v) { st.sort = v; saveUi(); renderYay(); });
-    b.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari yayasan atau NPYP', aria: { label: 'Cari yayasan' }, value: st.q || '' });
+    b.q = E('input', { class: 'input sk-search__in', type: 'search', placeholder: 'Cari yayasan atau NPYP', aria: { label: 'Cari yayasan' }, value: st.q || '', attrs: SEARCH_KEYS });
     b.q.addEventListener('input', debounce(function () { st.q = b.q.value; renderYay(); }, 150));
     b.exportB = guard(btn('Ekspor daftar yayasan (CSV)', 'download', function () { exportYay(); }, 'btn--secondary btn--bar', 'Daftar yayasan untuk dikunjungi, dalam CSV. Tidak tersedia saat Data contoh aktif atau nama disamarkan.'));
     b.ex.el.insertBefore(E('div', { class: 'sk-tools' }, b.sort.el), b.ex.body);
@@ -3203,7 +3208,8 @@
     c.form = E('div', { class: 'sk-calc__form' });
     c.inputs = {};
     SC.config.calcFields.forEach(function (fd) {
-      var inp = E('input', { class: 'input input--num sk-calc__in', type: 'number', inputmode: 'decimal', min: fd.min, max: fd.max, step: fd.step, id: 'sk-calc-' + fd.k, aria: { describedby: 'sk-calc-h-' + fd.k } });
+      /* M16: every calculator field is a whole number (steps 1, 100, 1.000): a number field with the numeric keypad */
+      var inp = E('input', { class: 'input input--num sk-calc__in', type: 'number', inputmode: 'numeric', min: fd.min, max: fd.max, step: fd.step, id: 'sk-calc-' + fd.k, aria: { describedby: 'sk-calc-h-' + fd.k } });
       var err = E('span', { class: 'sk-calc__err', id: 'sk-calc-e-' + fd.k });
       inp.addEventListener('input', debounce(function () {
         var raw = inp.value.trim(), v = raw === '' ? null : Number(raw);
@@ -3656,6 +3662,7 @@
     if (V && V.hasBank) tags.push(chipEl(code));
     else { var tt = tierOf(i); if (tt) tags.push(tierChipEl(tt)); }
     var gm = veil() ? null : { lat: I.lat[i], lon: I.lon[i] };
+    var planQ = planQuick(i), planL = planLinkOf(planQ);
     var src = I.src[i] === 1 ? 'Sumber: OpenStreetMap (ODbL) / Overture Maps · diambil 12 Okt 2026' : 'Sumber: Kemendikdasmen Dapodik · diambil 12 Okt 2026';
     return {
       kind: 'sma', key: 'smaSchool:' + i,
@@ -3664,7 +3671,9 @@
       prov: src + (sInfo(i) ? ' · ' + STU_SRC.replace('Data siswa: ', 'siswa: ') : '') + (TD() ? ' · kelas biaya: situs resmi sekolah, jenis sekolah dan perkiraan' : '') + (CD() ? ' · kontak: Sekolah Kita (Dapodik), Data Referensi · 18 Okt 2026' : ''),
       provBadge: { src: DAPODIK_LOGO, alt: DAPODIK_ALT, width: 51, height: 24 },
       brief: schoolBrief(i, pkey, distShort, r),
-      quick: [pipeQuick(pkey, I.name[i], isSmaRow)],
+      /* V8 §4.6: "+ Rencana kunjungan" beside "+ Tindak lanjut" (MCD.windows.QUICK_MAX = 2) and in the callout's link row */
+      quick: [pipeQuick(pkey, I.name[i], isSmaRow), planQ].filter(Boolean),
+      links: planL ? [planL] : [],
       crumb: o.trail ? trailCrumb(o.trail) : null,
       anchor: [I.lon[i], I.lat[i]],
       hints: hints
@@ -3714,6 +3723,18 @@
 
   /* ---- "+ Tindak lanjut" (v5, §3.3.4): one click adds the SMA at stage "Belum dihubungi" (MCD.schools.pipeline) */
 
+  /* ---- "+ Rencana kunjungan" (V8 §4.6, V7 §7): SMA, SMK and MA with an NPSN or the app id (coordinates only) */
+
+  function planQuick(i) {
+    var P = MCD.plan, I = SC && SC.idx, id = I ? rowId(i) : null;
+    if (!P || !isFn(P.quick) || !id) return null;
+    try { return P.quick({ id: id, kind: 'sekolah', label: I.name[i], lon: I.lon[i], lat: I.lat[i] }) || null; } catch (e) { return null; }
+  }
+  /** The callout's link row entry {label, run} (MCD.windows runLinks) while the school is not in today's plan. */
+  function planLinkOf(q) {
+    if (!q || q.done || !isFn(q.run)) return null;
+    return { label: q.label, title: q.title || null, run: function () { q.run(); } };
+  }
   function pipeQuick(key, label, isSma) {
     var noKey = isSma === false ? NO_NPSN_SK : NO_NPSN;
     var q = { id: 'pipe', label: '+ Tindak lanjut', title: key ? 'Tambahkan ' + (isSma === false ? 'sekolah' : 'SMA') + ' ini ke daftar tindak lanjut. Tersimpan di komputer ini.' + (pipeSealed() ? ' ' + SC.pipelineLines.sealed : '') : noKey,
@@ -4087,7 +4108,8 @@
 
   /* ---- "?" for students aged 17+: the method in plain words and the editable per-grade shares (item 26) */
 
-  function pctIn(x) { return isNum(x) ? String(Math.round(x * 1000) / 10) : ''; }
+  /* M16: "37,5" with the decimal comma; the field is text with the decimal keypad and accepts "," or "." */
+  function pctIn(x) { return isNum(x) ? String(Math.round(x * 1000) / 10).replace('.', ',') : ''; }
   function sharesEditor(S0) {
     var fmt = fm(), cur = S0.shares(), def = S0.defaults(), inputs = {};
     var total = E('p', { class: 'sk-shares__total', aria: { live: 'polite' } });
@@ -4098,7 +4120,7 @@
     var grid = E('div', { class: 'sk-shares' });
     [['k10', 'Kelas 10'], ['k11', 'Kelas 11'], ['k12', 'Kelas 12']].forEach(function (d) {
       var id = 'sk-share-' + d[0];
-      var inp = E('input', { class: 'input input--num sk-shares__in', type: 'number', inputmode: 'decimal', min: 0, max: 100, step: 0.1, id: id, value: pctIn(cur[d[0]]), aria: { describedby: 'sk-share-hint' } });
+      var inp = E('input', { class: 'input input--num sk-shares__in', type: 'text', inputmode: 'decimal', id: id, value: pctIn(cur[d[0]]), aria: { describedby: 'sk-share-hint' }, attrs: { autocomplete: 'off' } });
       var err = E('span', { class: 'sk-calc__err' });
       inp.addEventListener('input', debounce(function () {
         var raw = inp.value.trim().replace(',', '.'), v = raw === '' ? NaN : Number(raw);
@@ -4767,6 +4789,16 @@
       if (km) { showKec(km[1]); return true; }
       if (action === 'filters:reset') { resetF(); return true; }
       if (action === 'schools:list') { goTab('list'); return true; }
+      /* V8 §2.5 landing grammar: schools:tab:<tab>[:half[:<sort>]] (Posisi cabang: 'schools:tab:list:half:k17'); an unknown
+         tab opens the list, an unknown sort or part is ignored */
+      var tl = /^schools:tab:([A-Za-z-]+)((?::[A-Za-z0-9_-]*)*)$/.exec(String(action || ''));
+      if (tl) {
+        var parts = tl[2].split(':').filter(Boolean), tab = TABS.some(function (t) { return t.id === tl[1]; }) ? tl[1] : 'list';
+        var sort = parts.length > 1 && parts[0] === 'half' ? parts[1] : null;
+        if (tab === 'list' && sort && LIST_SORTS.some(function (o) { return o.v === sort; })) { st.listSort = sort; if (sort === 'tier') needTiers(); }
+        goTab(tab);
+        return true;
+      }
       return false;
     },
     onEscape: function () {

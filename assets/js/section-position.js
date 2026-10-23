@@ -6,10 +6,13 @@
  * counts that MCD.leadsUi shows), D24 (rank only, no peer branch names; amounts veiled by "Samarkan nama"), D28
  * (not printed, not translated), D32 ("Lihat ..." chip words, "Mendekati Prioritas"), §10.5, §11.4. User
  * decision of 19 Oct 2026: Posisi cabang is visible to every signed-in staff member, rank only, never printable.
- * D39 (22 Oct 2026, the KSM & KKB section removed): the KSM, KKB and KPR rows of the KPI file stay as branch facts;
- * there is no KSM concentration line, no policy limit line and no link to a removed tab. A KSM or KKB row points
- * to the Leads panel ("Calon KSM di Leads: {n}", "Calon KKB di Leads: {n}") while the lead list shows that count,
- * else it carries no chip.
+ * D39, D41, D50, D57 (22–23 Oct 2026; docs/V8_SPEC.md §4.3): the removed credit section and its two products
+ * left the UI and the logic. MCD.kpi still reads their columns to check the file but never shows them
+ * (MCD.kpi.HIDDEN: homeRows and visibleWarnings leave them out), so this page draws no row, booking line, share,
+ * card, chip or lead line for them. The booking card shows the total and one product line, KPR, with the lead chip
+ * "Calon KPR di Leads: {n}" (only while the KPR section is hidden, D17). There is no "Booking per produk" and no
+ * "Kredit menurut produk" (a share bar of the rest would show the removed products under another name). Giro and
+ * FBI gaps point at merchants and at hospitals (Kesehatan, "Lihat rumah sakit", D57).
  *
  * One page in a fixed order (the Kepala cabang reads the same order every month):
  *   1. Head: eyebrow "POSISI CABANG · {PERIODE} · AREA {AREA}", the file line "File KPI: {Terbaru | Perlu
@@ -17,8 +20,7 @@
  *      ⓘ Sumber) and "Skor KPI: peringkat {r} dari {n}".
  *   2. Goal line as a KPI card: "Kredit consumer {x}% dari DPK" with the two amounts as its helper line.
  *   3. Four gap cards, always in this order: Booking kredit consumer · DPK · CASA · NPL retail.
- *   4. Detail only: "Booking per produk, {periode}" (KSM, KPR, KKB glass bars against target with their chips)
- *      beside "Kredit menurut produk" (one share bar of kredit consumer), then the fold "Semua KPI ({n})".
+ *   4. Detail only: the fold "Semua KPI ({n})" (D50; "Lihat semua KPI" on the consumer rows opens it at Booking).
  *   Sederhana shows the head, the goal line and the four cards.
  *
  * Chips carry an id only (a gapTarget token, a task id or a lead rule id), never a value. A place chip resolves
@@ -63,12 +65,10 @@
     print: 'Halaman ini memuat data bank dan tidak dicetak dari dashboard.',
     freshTitle: 'Terbaru berarti data bulan lalu atau dua bulan lalu.',
     goalTitle: 'Kredit consumer dibagi DPK, dihitung dashboard dari file KPI.',
-    mixTitleAttr: 'Saldo kredit setiap produk dibagi kredit consumer cabang, dihitung dashboard dari file KPI.',
     nplLine: 'Kualitas kredit ditangani melalui proses penagihan cabang.',
     nplAreaMissing: 'NPL area belum ada di file ini.',
-    prodTitle: 'Booking per produk',
-    mixTitle: 'Kredit menurut produk',
     allTitle: 'Semua KPI',
+    seeAll: 'Lihat semua KPI',
     sumber: 'Sumber',
     peerLine: ' catatan tentang cabang lain di file KPI.',
     notes: ' catatan impor',
@@ -82,47 +82,31 @@
   /* The four gap cards, in the one fixed order (D12). */
   var CARD_KEYS = ['booking.consumer', 'dpk', 'casa', 'nplRetail'];
   var CARD_TITLE = { 'booking.consumer': 'Booking kredit consumer', dpk: 'DPK', casa: 'CASA', nplRetail: 'NPL retail' };
-  /* KSM · KPR · KKB, always in this order (the booking card lines and "Booking per produk"). */
-  var PRODUCTS = [
-    { key: 'booking.ksm', short: 'KSM', id: 'ksm', tone: 'ksm' },
-    { key: 'booking.kpr', short: 'KPR', id: 'kpr', tone: 'kpr' },
-    { key: 'booking.autoloan', short: 'KKB', id: 'kkb', tone: 'kkb' }
-  ];
-  /* "Kredit menurut produk": shares of kredit consumer; the rest is "lainnya". */
-  var MIX = [
-    { key: 'kredit.ksm', label: 'KSM', tone: 'ksm' },
-    { key: 'kredit.kpr', label: 'KPR', tone: 'kpr' },
-    { key: 'kredit.autoloan', label: 'KKB', tone: 'kkb' },
-    { key: 'kredit.kartu', label: 'Kartu Kredit', tone: 'cc' }
-  ];
-  /* "Semua KPI" groups (§6.4). */
+  /* The booking card's one product line (D50): KPR. */
+  var BOOKING_LINES = [{ key: 'booking.kpr', short: 'KPR', id: 'kpr' }];
+  /* "Semua KPI" groups (§6.4; the keys MCD.kpi.HIDDEN never reach this page, D41). */
   var GROUPS = [
     { id: 'dana', label: 'Dana', keys: ['dpk', 'tabungan', 'giro', 'deposito', 'casa', 'casaRatio', 'cof', 'dpkRetail'] },
-    { id: 'kredit', label: 'Kredit', keys: ['kredit.consumer', 'kredit.ksm', 'kredit.kpr', 'kredit.autoloan', 'kredit.kartu'] },
-    { id: 'booking', label: 'Booking', keys: ['booking.consumer', 'booking.ksm', 'booking.kpr', 'booking.autoloan'] },
+    { id: 'kredit', label: 'Kredit', keys: ['kredit.consumer', 'kredit.kpr', 'kredit.kartu'] },
+    { id: 'booking', label: 'Booking', keys: ['booking.consumer', 'booking.kpr'] },
     { id: 'kualitas', label: 'Kualitas', keys: ['nplRetail', 'nplConsumer'] },
     { id: 'akuisisi', label: 'Akuisisi', keys: ['newCifTabungan', 'rekeningBersaldo', 'ureg', 'usak', 'fbi', 'skorKpi'] }
   ];
 
-  /* Chips per KPI (§6.5 as changed by D39): the place chip, then the task chip; ids only. 'per-produk' scrolls to
-     "Booking per produk"; a lead chip is drawn by MCD.leadsUi.chip(rule) with its own count. KSM and KKB have
-     no place or task chip (their section is removed, D39): only the lead chip, which is absent unless the lead
-     list shows that count. */
+  /* Chips per KPI (§6.5 as changed by D39, D41, D50, D57): place chips, then the task chip; ids only, at most two per
+     row (V7 D12). 'semua-kpi' opens the fold "Semua KPI" at the Booking group; a lead chip is drawn by
+     MCD.leadsUi.chip(rule) with its own count. The KPR place and task chips resolve only while KPR is shown (MCD.nav);
+     the Calon KPR lead chip is drawn only while KPR is hidden (onlyHidden). */
   function P(target, label) { return { type: 'place', target: target, label: label }; }
   function T(target, label) { return { type: 'task', target: target, label: label }; }
-  function L(rule, label) { return { type: 'lead', target: 'leads:' + rule, rule: rule, label: label }; }
+  function L(rule, label, onlyHidden) { return { type: 'lead', target: 'leads:' + rule, rule: rule, label: label, onlyHidden: onlyHidden || null }; }
   var LEAD_PRIO = L('calonPrioritas', 'Mendekati Prioritas di Leads');
-  var LEAD_KSM = L('calonKsm', 'Calon KSM di Leads');
-  var LEAD_KKB = L('calonKkb', 'Calon KKB di Leads');
+  var LEAD_KPR = L('calonKpr', 'Calon KPR di Leads', 'property');
   var CHIPS = {
-    'booking.ksm': [LEAD_KSM],
-    'kredit.ksm': [LEAD_KSM],
-    'booking.autoloan': [LEAD_KKB],
-    'kredit.autoloan': [LEAD_KKB],
-    'booking.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR')],
-    'kredit.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR')],
-    'booking.consumer': [P('per-produk', 'Lihat per produk')],
-    'kredit.consumer': [P('per-produk', 'Lihat per produk')],
+    'booking.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR'), LEAD_KPR],
+    'kredit.kpr': [P('property', 'Lihat proyek KPR'), T('kpr-calc', 'Buka kalkulator KPR'), LEAD_KPR],
+    'booking.consumer': [P('semua-kpi', 'Lihat semua KPI')],
+    'kredit.consumer': [P('semua-kpi', 'Lihat semua KPI')],
     dpk: [P('wealth', 'Lihat calon Prioritas'), LEAD_PRIO],
     deposito: [P('wealth', 'Lihat calon Prioritas'), LEAD_PRIO],
     dpkRetail: [P('wealth', 'Lihat calon Prioritas'), LEAD_PRIO],
@@ -134,17 +118,18 @@
     casaRatio: [P('merchants', 'Lihat merchant'), P('campus', 'Lihat kampus')],
     rekeningBersaldo: [P('schools', 'Lihat sekolah'), P('merchants', 'Lihat merchant')],
     cof: [P('merchants', 'Lihat merchant'), P('schools', 'Lihat sekolah')],
-    giro: [P('merchants', 'Lihat merchant')],
-    fbi: [P('merchants', 'Lihat merchant')],
+    giro: [P('merchants', 'Lihat merchant'), P('health', 'Lihat rumah sakit')],
+    fbi: [P('merchants', 'Lihat merchant'), P('health', 'Lihat rumah sakit')],
     ureg: [P('merchants', 'Lihat merchant')],
     nplRetail: [], nplConsumer: [], skorKpi: []
   };
   /* The lead rules this page asks MCD.leadsUi about (its redraw signature). */
-  var LEAD_RULES = ['calonPrioritas', 'calonKsm', 'calonKkb'];
+  var LEAD_RULES = ['calonPrioritas', 'calonKpr'];
   var CAMPUS_DOSEN = { casa: 1, casaRatio: 1, tabungan: 1 };
   var MERCHANT_PRIO = { ureg: 1, usak: 1, rekeningBersaldo: 1 };
-  /* The only sections a place or task chip may open (D39: nothing else, whatever a resolver answers). */
-  var CHIP_SECTIONS = { wealth: 1, schools: 1, campus: 1, merchants: 1, property: 1 };
+  /* The only sections a place or task chip may open (D39: nothing else, whatever a resolver answers; D57: health). */
+  var CHIP_SECTIONS = { wealth: 1, schools: 1, campus: 1, merchants: 1, health: 1, property: 1 };
+  var MAX_CHIPS = 2;                                 // per row (V7 D12)
   var TASKS = { 'kpr-calc': 1 };
   /* Import notes that may name another office (§6.2); they are counted, never shown. */
   var PEER_CODES = { NO_DATA: 1, BY_NAME: 1, DUP_CODE: 1, RANK_FILE: 1 };
@@ -288,6 +273,8 @@
         var tab = MERCHANT_PRIO[kpi] ? 'prio' : 'edc';
         return target('merchants', 'merchants:tab:' + tab + ':half', { drawerTab: tab, drawer: 'half' }, 'Lihat merchant');
       }
+      case 'health':
+        return target('health', 'health:tab:rs:half:rsBesar', { drawerTab: 'rs', drawer: 'half', sort: 'rsBesar' }, 'Lihat rumah sakit');
       case 'property':
         return target('property', 'property:tab:projects:half:gap', { drawerTab: 'projects', drawer: 'half', sort: 'gap' }, 'Lihat proyek KPR');
       default:
@@ -300,9 +287,11 @@
     return null;
   }
   function sectionKnown(id) {
+    var N = MCD.nav;
+    if (N && isFn(N.shown)) return !!safe(N.shown, N, [id]);
     var list = MCD.config && MCD.config.sections;
     if (!Array.isArray(list)) return true;
-    return list.some(function (s) { return s && s.id === id; });
+    return list.some(function (s) { return s && s.id === id && !s.hidden; });
   }
   /** Where a chip leads: {section, view, action, …} or null (unknown token or task, a section outside
       CHIP_SECTIONS, or a section not in the registry). */
@@ -366,20 +355,20 @@
       actual: isNum(r.actual) ? r.actual : null, target: isNum(r.target) ? r.target : null, capaian: cap,
       kurang: isNum(r.kurang) ? r.kurang : null, lebih: isNum(lebih) ? lebih : null, met: met,
       status: statusOf(cap), rank: isNum(r.rank) ? r.rank : null, of: isNum(r.of) ? r.of : null,
-      chips: (CHIPS[r.key] || []).map(function (c) { return { type: c.type, label: c.label, target: c.target }; }),
+      chips: (CHIPS[r.key] || []).map(function (c) { return { type: c.type, label: c.label, target: c.target, onlyHidden: c.onlyHidden || null }; }),
       source: fieldSource(kpi, r.key)
     };
   }
 
   /**
    * MCD.position.model() → {state: 'empty' | 'demo' | 'ready', reason, kpi, period, periodLabel, area, freshness,
-   * importedAt, rank, goal: {consumer, dpk, ratio}, cards: [4], products: [3], mix, rows, groups, warnings,
-   * peerWarnings, warningCount, source}. Pure: reads MCD.data and MCD.kpi, writes nothing.
+   * importedAt, rank, goal: {consumer, dpk, ratio}, cards: [4], rows, groups, warnings, peerWarnings, warningCount,
+   * source}. Pure: reads MCD.data and MCD.kpi, writes nothing. rows and warnings leave out MCD.kpi.HIDDEN (D41).
    * state 'empty' has reason 'no-file' (no KPI dataset) or 'home-missing' (the file has no row for 12903).
    */
   function model() {
     var M = { state: 'empty', reason: 'no-file', kpi: null, period: null, periodLabel: null, area: null, freshness: null, importedAt: null,
-      rank: null, goal: null, cards: [], products: [], mix: null, rows: [], groups: GROUPS,
+      rank: null, goal: null, cards: [], rows: [], groups: GROUPS,
       warnings: [], peerWarnings: 0, warningCount: 0, source: null };
     if (demoOn()) { M.state = 'demo'; M.reason = null; return M; }
     var D = MCD.data, K = MCD.kpi;
@@ -396,7 +385,8 @@
     M.importedAt = meta.importedAt || null;
     M.source = 'Sumber: file KPI ' + (M.area ? 'Area ' + M.area : 'area') + (M.periodLabel ? ', ' + M.periodLabel : '') + '. Sheet setiap angka ada di ⓘ.';
     var marks = peerMarks(kpi);
-    (kpi.warnings || []).forEach(function (w) {
+    var shownWarnings = isFn(K.visibleWarnings) ? K.visibleWarnings(kpi) : (kpi.warnings || []);
+    shownWarnings.forEach(function (w) {
       if (!w) return;
       if (isPeerWarning(w, kpi, marks)) M.peerWarnings++;
       else M.warnings.push({ level: w.level || 'info', code: w.code || null, text: String(w.text || '') });
@@ -442,24 +432,9 @@
         if (c.missing) c.chips = [];
       }
       if (k === 'casa') c.ratio = by.casaRatio ? by.casaRatio.actual : null;
-      if (c.kind === 'booking') c.sub = PRODUCTS.map(function (p) { return { key: p.key, short: p.short, id: p.id, row: by[p.key] || null }; });
+      if (c.kind === 'booking') c.sub = BOOKING_LINES.map(function (p) { return { key: p.key, short: p.short, id: p.id, row: by[p.key] || null }; });
       return c;
     });
-    M.products = PRODUCTS.map(function (p) {
-      var r = by[p.key] || { key: p.key, chips: [] };
-      return { key: p.key, short: p.short, id: p.id, tone: p.tone, row: r, missing: !isNum(r.capaian) };
-    });
-    if (isNum(cons) && cons > 0) {
-      var known = 0;
-      var parts = MIX.map(function (m) {
-        var v = by[m.key] ? by[m.key].actual : null;
-        if (isNum(v) && v > 0) known += v;
-        return { key: m.key, label: m.label, tone: m.tone, value: isNum(v) ? v : null, share: isNum(v) ? Math.max(0, v) / cons : null };
-      });
-      var other = Math.max(0, cons - known);
-      parts.push({ key: 'lainnya', label: 'lainnya', tone: 'oth', value: other, share: other / cons });
-      M.mix = { consumer: cons, parts: parts };
-    }
     return M;
   }
 
@@ -486,10 +461,17 @@
     if (isFn(el.focus)) safe(el.focus, el, [{ preventScroll: true }]);
     return true;
   }
-  /** Follows a chip: a place chip through gapTarget, a task chip through task, 'per-produk' scrolls. */
+  /** Opens the fold "Semua KPI" (Detail) at one group (default Booking) and moves there. */
+  function openAll(group) {
+    if (S.ctx && isFn(S.ctx.setView) && !deep()) S.ctx.setView('deep');
+    S.allOpen = true;
+    if (S.allFold) S.allFold.refresh();
+    return scrollToId('pos-grp-' + (group || 'booking')) || scrollToId('pos-all-body-btn');
+  }
+  /** Follows a chip: a place chip through gapTarget, a task chip through task, 'semua-kpi' opens the fold. */
   function follow(chip, kpi) {
     if (!chip) return false;
-    if (chip.type === 'place' && chip.target === 'per-produk') return scrollToId('pos-prod');
+    if (chip.type === 'place' && chip.target === 'semua-kpi') return openAll('booking');
     if (chip.type === 'lead') {
       var LU = MCD.leadsUi;
       if (LU && isFn(LU.open)) { safe(LU.open, LU, [{ rule: chip.target.replace(/^leads:/, '') }]); return true; }
@@ -501,8 +483,8 @@
   /* ------------------------------------------------------------- the DOM */
 
   function chipUsable(chip, kpi, isDeep) {
-    if (chip.type === 'lead') return leadsUsable();
-    if (chip.type === 'place' && chip.target === 'per-produk') return !!isDeep;
+    if (chip.type === 'lead') return leadsUsable() && !(chip.onlyHidden && sectionKnown(chip.onlyHidden));
+    if (chip.type === 'place' && chip.target === 'semua-kpi') return !!isDeep;
     return !!resolve(chip, kpi);
   }
   function chipEl(chip, kpi) {
@@ -515,10 +497,10 @@
     b.addEventListener('click', function () { follow(chip, kpi); });
     return b;
   }
-  /** The chips of one KPI as a group, or null when none can be followed here. */
+  /** The chips of one KPI as a group (at most MAX_CHIPS), or null when none can be followed here. */
   function chipsEl(chips, kpi, isDeep, only) {
     var list = (chips || []).filter(function (c) { return (!only || only(c)) && chipUsable(c, kpi, isDeep); });
-    var els = list.map(function (c) { return chipEl(c, kpi); }).filter(Boolean);
+    var els = list.map(function (c) { return chipEl(c, kpi); }).filter(Boolean).slice(0, MAX_CHIPS);
     if (!els.length) return null;
     return h('div', { class: 'pos-chips', role: 'group', 'aria-label': 'Garap di' }, els);
   }
@@ -585,16 +567,10 @@
     } else if (c.kind === 'booking') {
       kids.push(bigRow(r, [h('span', { text: capText(r.capaian) }), h('span', { class: 'pos-card__u', text: ' dari target' })], r.source));
       kids.push(h('p', { class: 'pos-card__m pos-card__m--' + c.tone, text: kurangLine(r, veil) }));
-      kids.push(h('ul', { class: 'pos-sub', 'aria-label': 'Booking per produk' }, c.sub.map(function (s) {
+      kids.push(h('ul', { class: 'pos-sub', 'aria-label': 'Booking KPR' }, c.sub.map(function (s) {
         var sr = s.row, text = !sr || !isNum(sr.capaian) ? TXT.missing : kurangLine(sr, veil);
-        if (isDeep) {
-          var line = h('button', { type: 'button', class: 'pos-sub__go', 'aria-controls': 'pos-prod-' + s.id },
-            h('span', { class: 'pos-sub__k', text: s.short }), h('span', { class: 'pos-sub__t', text: text }), h('span', { class: 'pos-sub__a', 'aria-hidden': 'true', text: '↓' }));
-          line.addEventListener('click', function () { scrollToId('pos-prod-' + s.id); });
-          return h('li', { class: 'pos-sub__row' }, line);
-        }
-        /* Sederhana: the line's place chip (KPR), or its lead chip (KSM, KKB) while the lead list shows that count */
-        var chip = sr ? chipsEl(sr.chips, s.key, false, function (x) { return x.type !== 'task'; }) : null;
+        /* the KPR line with its place chip while KPR is shown, else its lead chip while the lead list shows that count */
+        var chip = sr ? chipsEl(sr.chips, s.key, isDeep, function (x) { return x.type !== 'task'; }) : null;
         return h('li', { class: 'pos-sub__row' }, h('span', { class: 'pos-sub__line' }, h('span', { class: 'pos-sub__k', text: s.short }), h('span', { class: 'pos-sub__t', text: text })), chip);
       })));
       if (isDeep) { var pc = chipsEl(c.chips, c.key, true); if (pc) kids.push(pc); }
@@ -609,46 +585,6 @@
       h('h2', { class: 'pos-card__t', text: c.title }), kids);
   }
 
-  function prodEl(M, veil) {
-    var caps = M.products.map(function (p) { return p.row && isNum(p.row.capaian) ? p.row.capaian : 0; });
-    /* one scale for the three bars, with room past the target so its tick stays inside the track */
-    var scale = Math.min(1.5, Math.max(1.1, Math.max.apply(null, caps)));
-    var rows = M.products.map(function (p) {
-      var r = p.row || {}, kids = [];
-      kids.push(h('div', { class: 'pos-prow__h' }, h('span', { class: 'pos-prow__k', text: p.short }),
-        h('span', { class: 'pos-prow__c', text: p.missing ? '' : capText(r.capaian) + ' dari target' })));
-      if (p.missing) kids.push(h('p', { class: 'pos-card__miss', text: TXT.missing }));
-      else {
-        var fill = Math.max(0, Math.min(r.capaian, scale)) / scale * 100, tick = 100 / scale;
-        kids.push(h('div', { class: 'pos-bar', role: 'img', 'aria-label': 'Booking ' + p.short + ' ' + capText(r.capaian) + ' dari target' },
-          h('span', { class: 'pos-bar__fill pos-fill--' + p.tone, style: { width: fill.toFixed(2) + '%' } }),
-          h('span', { class: 'pos-bar__tick', title: 'Target', style: { left: tick.toFixed(2) + '%' } })));
-      }
-      var info = [];
-      if (!p.missing) info.push(h('p', { class: 'pos-prow__m pos-card__m--' + toneOf(r.status), text: kurangLine(r, veil) }));
-      var ch = p.missing ? null : chipsEl(r.chips, p.key, true);
-      if (info.length || ch) kids.push(h('div', { class: 'pos-prow__f' }, info.length ? h('div', { class: 'pos-prow__i' }, info) : null, ch));
-      return h('div', { class: 'pos-prow', id: 'pos-prod-' + p.id, tabindex: '-1' }, kids);
-    });
-    return h('section', { class: 'pos-x pos-prod', id: 'pos-prod', tabindex: '-1', 'aria-labelledby': 'pos-prod-t' },
-      h('h2', { class: 'pos-x__t', id: 'pos-prod-t', text: TXT.prodTitle + (M.periodLabel ? ', ' + M.periodLabel : '') }), rows);
-  }
-  function mixEl(M) {
-    var kids = [h('h2', { class: 'pos-x__t', id: 'pos-mix-t', text: TXT.mixTitle })];
-    if (!M.mix) kids.push(h('p', { class: 'pos-card__miss', text: TXT.missing }));
-    else {
-      var label = function (p) { return p.label + ' ' + (isNum(p.share) ? pct(p.share) : '—'); };
-      var aria = 'Kredit consumer menurut produk: ' + M.mix.parts.map(label).join(', ') + '.';
-      kids.push(h('div', { class: 'pos-share', role: 'img', 'aria-label': aria, title: TXT.mixTitleAttr }, M.mix.parts.filter(function (p) { return isNum(p.share) && p.share > 0; }).map(function (p) {
-        return h('span', { class: 'pos-share__seg pos-fill--' + p.tone, style: { width: (p.share * 100).toFixed(2) + '%' }, title: label(p) });
-      })));
-      kids.push(h('ul', { class: 'pos-legend' }, M.mix.parts.map(function (p) {
-        return h('li', { class: 'pos-legend__i', title: isNum(p.share) ? null : TXT.missing },
-          h('span', { class: 'pos-legend__sw pos-fill--' + p.tone, 'aria-hidden': 'true' }), h('span', { text: label(p) }));
-      })));
-    }
-    return h('section', { class: 'pos-x pos-mix', 'aria-labelledby': 'pos-mix-t' }, kids);
-  }
   function allRows(M, veil) {
     var by = {};
     M.rows.forEach(function (r) { by[r.key] = r; });
@@ -676,7 +612,7 @@
         trs.push(h('tr', { class: 'pos-tbl__r', data: { kpi: r.key } }, [name].concat(cells,
           [h('td', { class: 'pos-tbl__chips', attrs: { 'data-label': TXT.cols[6] } }, ch || h('span', { class: 'pos-dim', text: '—' }))])));
       });
-      return h('tbody', { class: 'pos-tbl__grp', data: { group: g.id } }, trs);
+      return h('tbody', { class: 'pos-tbl__grp', id: 'pos-grp-' + g.id, tabindex: '-1', data: { group: g.id } }, trs);
     });
     return h('div', { class: 'pos-tbl__wrap' }, h('table', { class: 'pos-tbl' },
       h('caption', { class: 'sr-only', text: TXT.allTitle + (M.periodLabel ? ', ' + M.periodLabel : '') }), head, bodies));
@@ -740,10 +676,7 @@
     else {
       kids = [headEl(M, veil), goalEl(M, veil),
         h('div', { class: 'pos-cards', role: 'list', 'aria-label': 'Empat kekurangan utama' }, M.cards.map(function (c) { return cardEl(c, veil, isDeep); }))];
-      if (isDeep) {
-        kids.push(h('div', { class: 'pos-panels' }, prodEl(M, veil), mixEl(M)));
-        kids.push(allEl(M, veil));
-      }
+      if (isDeep) kids.push(allEl(M, veil));
       kids.push(srcEl(M));
     }
     S.root = h('div', { class: 'pos notranslate pos--' + (isDeep ? 'deep' : 'simple') + ' pos--' + M.state + (veil ? ' is-veiled' : ''), attrs: { translate: 'no' } }, kids);
@@ -781,7 +714,7 @@
     crumbs: false,
     breadcrumb: false,
     shows: ['Capaian cabang terhadap target dari file KPI bulanan area', 'Kekurangan DPK, CASA, booking kredit consumer dan NPL retail',
-      'Booking per produk (Detail)', 'Peringkat cabang di area, tanpa nama cabang lain'],
+      'Semua KPI per kelompok (Detail)', 'Peringkat cabang di area, tanpa nama cabang lain'],
     needs: [],
     cards: function () { return []; },
     primary: null,
@@ -815,7 +748,7 @@
         c.registerCommands(function () {
           return [
             { label: 'Impor file KPI area', kw: 'kpi posisi cabang impor file bulanan target', run: importKpi },
-            { label: 'Posisi cabang: booking per produk', kw: 'booking ksm kpr kkb posisi cabang', run: function () { if (S.ctx && isFn(S.ctx.setView) && !deep()) S.ctx.setView('deep'); scrollToId('pos-prod'); } }
+            { label: 'Posisi cabang: semua KPI', kw: 'booking kpr posisi cabang semua kpi', run: function () { openAll('booking'); } }
           ];
         });
       }
@@ -840,7 +773,7 @@
     onResize: function () { if (S.slot && signature() !== S.sig) render(); },
     onAction: function (action) {
       var a = String(action || '');
-      if (a === 'position:produk') { if (S.ctx && isFn(S.ctx.setView) && !deep()) S.ctx.setView('deep'); return scrollToId('pos-prod'); }
+      if (a === 'position:produk') return openAll('booking');            // older bookmarks: "Booking per produk" left (D50)
       if (a === 'position:semua') { S.allOpen = true; if (S.allFold) S.allFold.refresh(); return scrollToId('pos-all-body-btn'); }
       return false;
     }
@@ -857,6 +790,7 @@
     follow: follow,
     isPeerWarning: isPeerWarning,
     CHIPS: CHIPS,
+    CHIP_SECTIONS: CHIP_SECTIONS,
     CARD_KEYS: CARD_KEYS,
     GROUPS: GROUPS,
     TXT: TXT,

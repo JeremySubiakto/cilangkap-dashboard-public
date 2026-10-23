@@ -8,7 +8,8 @@
  *
  *   MCD.saldo.rows()     → the imported records (Merchant › Saldo merchant draws them)
  *   MCD.saldo.summary()  → {n, asOf, dates[], drop, growth, total, totalPrev} or null without data
- *   MCD.saldo.schema     the importer schema (type 'saldo')
+ *   MCD.saldo.schema     the importer schema (type 'saldo'; schema.via = 'funding': V8 D45, read through the one import
+ *                        row "Funding merchant (cabang)", never offered alone)
  *
  * Merged into the private repository on 23 Oct 2026 (private/merge-public/MERGE_NOTES.md), with three guards of the
  * private funding module (docs/MERCHANT_FUNDING.md §2, §5): only rows of KCP Jakarta Cilangkap (12903) are kept, the
@@ -70,6 +71,9 @@
       /* merge 23 Oct 2026: never kept either (MERCHANT_FUNDING §5) */
       'alamat', 'alamat_merchant', 'alamat_usaha', 'address', 'actype', 'sccode'],
     daily: { saldo: '' },
+    /* V8 D45 (docs/V8_SPEC.md §3.2, §3.3): one import row "Funding merchant (cabang)" reads this file with the funding
+       report; importer.js never offers this schema on its own and hands such a file to that row */
+    via: 'funding',
     /* the balance columns (dates) make it this file; without them it is not */
     detect: function (keys, heads, m) {
       /* the region report's MID table (one row per EDC terminal, two blocks of the same dates) is not this file */

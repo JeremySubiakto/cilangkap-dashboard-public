@@ -40,14 +40,24 @@
  *   audit(x) → [paths of forbidden keys]             empty when nothing personal is in x
  *   bandOf(rupiah, hasAccount?) · trendOf(now, before) · periodLabel('2026-10-18') → '18 Okt 2026'
  *   workbookReader = {TYPE:'funding', HOME, label, what, detect, read, toRecords, apply, periodLabel, summary}
- *     (not registered anywhere: the shell wires it in later)
+ *     (Data & Privasi asks it after MCD.lvm.workbookReader and MCD.kpi.workbookReader, V8 §4.2.3)
+ *   V8 (docs/V8_SPEC.md §3.1; D44–D48, D63, D64):
+ *   register()  at load: the bank dataset 'funding_merchant' and the importer schema 'funding' (vault path only:
+ *               records → fromRecords, forbidden keys dropped at any depth; schema.via 'funding'; never detects a file)
+ *   importFiles([{file: {name, size}, sheets}]) → {ok, error?: 'not-funding' | 'home-missing', model,
+ *               saldoSheet: {sheet, file} | null, report: model.report + {files: [{name, layout}], saldo: 'branch' | 'region' | null}}
+ *   current() → model | null (the dataset; null while Data contoh is on) · links() → match() result with listing links
+ *   ofListing(i) → [record] | null · points() → [{id, lon, lat, src, ref, n, band, trendMom, trendMtd, idle, edc, cat, kecId}]
+ *   idle() → [{id, name, lob, cat, kecId, edc, band, poi, lvm, lon, lat}] · kec(kecId) → counts · rank() → ranks only
+ *   on(fn) → off  fn({reason: 'apply' | 'vault' | 'clear' | 'demo'}); document event 'mcd:funding' {reason}; then at idle
+ *               MCD.omzet.setFunding(current(), links()) (the one wiring place)
  *   BANDS · TIERS · HOLDERS · DROP_COLUMNS · MIN_GROUP · DATASET · HOME · VERSION
  * UMD: MCD.funding in the browser (classic script), module.exports in Node.
  * ========================================================================== */
 (function (root, factory) {
   var api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
-  if (root) { root.MCD = root.MCD || {}; root.MCD.funding = api; }
+  if (root) { root.MCD = root.MCD || {}; root.MCD.funding = api; api.register(); }
 })(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : null), function (root) {
   'use strict';
 
@@ -967,7 +977,7 @@
     rep.asOfTitle = title;
     m.asOf = rep.asOfColumns || title || null;
     if (title && rep.asOfColumns && title !== rep.asOfColumns) {
-      rep.warnings.push({ level: 'warn', code: 'ASOF_MISMATCH', text: 'Tanggal posisi di judul (' + periodLabel(title) + ') berbeda dengan tanggal kolom saldo (' + periodLabel(rep.asOfColumns) + ').\nTanggal kolom saldo yang dipakai.' });
+      rep.warnings.push({ level: 'warn', code: 'ASOF_MISMATCH', text: 'Tanggal posisi di judul (' + periodLabel(title) + ') berbeda dengan tanggal kolom saldo (' + periodLabel(rep.asOfColumns) + ').\nTanggal kolom saldo yang digunakan.' });
     }
     uniqueIds(m.merchants);
     m.ok = m.merchants.length > 0 || !!m.peers;
@@ -1004,14 +1014,14 @@
     if (rep.droppedColumns.length) out.push({ level: 'info', code: 'DROPPED', text: 'Kolom data pribadi yang dihapus, tidak pernah disimpan: ' + rep.droppedColumns.join(', ') + '.' });
     if (rep.transientColumns.indexOf('Alamat') >= 0) out.push({ level: 'info', code: 'ADDRESS', text: 'Alamat hanya dibaca untuk mencari kecamatan dan kelurahan, lalu tidak disimpan.' });
     var P = (A && A.byProduct) || {}, hidden = Object.keys(P).some(function (k) { return P[k] && P[k].suppressed; });
-    out.push({ level: 'info', code: 'BANDS', text: 'Saldo per merchant disimpan sebagai rentang saja.\n' +
+    out.push({ level: 'info', code: 'BANDS', text: 'Peta dan kartu merchant menampilkan saldo per merchant sebagai rentang saja.\n' +
       (hidden || !Object.keys(P).length ? 'Angka pasti hanya untuk total cabang.' : 'Angka pasti hanya untuk total cabang serta Tabungan dan Giro cabang.') +
       '\nPer LOB dan per kecamatan hanya jumlah merchant dan rentang saldonya.' });
-    if (hidden) out.push({ level: 'info', code: 'SPLIT_HIDDEN', text: 'Pembagian Tabungan dan Giro tidak ditampilkan.\nSalah satunya berisi saldo kurang dari ' + MIN_GROUP + ' merchant atau rekening, sehingga saldo satu merchant bisa terbaca.' });
+    if (hidden) out.push({ level: 'info', code: 'SPLIT_HIDDEN', text: 'Pembagian Tabungan dan Giro tidak ditampilkan.\nSalah satunya berisi saldo kurang dari ' + MIN_GROUP + ' merchant atau rekening, sehingga saldo satu merchant dapat terbaca.' });
     if (A && A.basis === 'commonname') {
-      out.push({ level: 'info', code: 'CN_BASIS', text: 'Total dari file ini adalah jumlah saldo per nama merchant.\nSatu nama merchant bisa mencakup MID di cabang lain, sehingga total ini bisa berbeda dengan total CASA cabang di laporan region.' });
+      out.push({ level: 'info', code: 'CN_BASIS', text: 'Total dari file ini adalah jumlah saldo per nama merchant.\nSatu nama merchant dapat mencakup MID di cabang lain, sehingga total ini dapat berbeda dengan total CASA cabang di laporan region.' });
     }
-    if (m.peers && m.peers.rank) out.push({ level: 'info', code: 'RANK_ONLY', text: 'Cabang lain hanya dipakai untuk peringkat. Nama dan angkanya tidak disimpan.' });
+    if (m.peers && m.peers.rank) out.push({ level: 'info', code: 'RANK_ONLY', text: 'Cabang lain hanya digunakan untuk peringkat. Nama dan angkanya tidak disimpan.' });
     return out.concat(rep.warnings);
   }
   /**
@@ -1059,7 +1069,7 @@
     rep.warnings.forEach(function (w) { seen[w.code + '|' + w.text] = 1; });
     brep.warnings.forEach(function (w) { if (!seen[w.code + '|' + w.text]) { seen[w.code + '|' + w.text] = 1; rep.warnings.push(w); } });
     if (branch.asOf && m.asOf && branch.asOf !== m.asOf) {
-      rep.warnings.push({ level: 'warn', code: 'ASOF_FILES', text: 'Kedua file berbeda tanggal posisi (' + periodLabel(m.asOf) + ' dan ' + periodLabel(branch.asOf) + ').\nTotal cabang memakai laporan region.' });
+      rep.warnings.push({ level: 'warn', code: 'ASOF_FILES', text: 'Kedua file berbeda tanggal posisi (' + periodLabel(m.asOf) + ' dan ' + periodLabel(branch.asOf) + ').\nTotal cabang menggunakan laporan region.' });
     }
     m.ok = true;
     return m;
@@ -1277,7 +1287,7 @@
       return I.read(file).then(function (sheets) {
         var m = parse(sheets, { file: file && file.name });
         if (!m.layout) {
-          var e = new Error('File ini tidak terbaca sebagai laporan funding merchant.\nPakai file “Funding Merchant Mass Retail” dari region atau daftar merchant cabang.');
+          var e = new Error('File ini tidak terbaca sebagai laporan funding merchant.\nGunakan file “Funding Merchant Mass Retail” dari region atau daftar merchant cabang.');
           e.user = true;
           throw e;
         }
@@ -1294,6 +1304,366 @@
     }
   };
 
+  /* =====================================================================================
+   * V8 wiring (docs/V8_SPEC.md §3.1, D44–D48, D63, D64). One import row "Funding merchant (cabang)" (Data & Privasi)
+   * calls importFiles(); the dataset 'funding_merchant' feeds current(); Merchant (map ring, card fold, the list
+   * "EDC tidak bertransaksi", the rank line), the kecamatan card and Kesehatan read the views below. Every view outside
+   * idle() and ofListing() carries bands, directions, counts and the rank only: no name, cn, dba, MID or amount.
+   * ===================================================================================== */
+
+  var SAFE_NO = { ok: false };
+  function safeCall(fn) { try { return fn(); } catch (e) { return SAFE_NO; } }
+  function data() { var m = M(); return m && m.data ? m.data : null; }
+  function demoOn() { var Dd = data(); return !!(Dd && typeof Dd.demoActive === 'function' && Dd.demoActive()); }
+
+  /* ------------------------------------------------ the vault path: dataset and importer schema */
+
+  var VAULT_KEYS = KEEP.concat(['isMeta', 'version', 'kind', 'layout', 'asOf', 'home', 'aggregates', 'peers', 'report']).filter(function (k, i, a) { return a.indexOf(k) === i; });
+  /* records → fromRecords → toRecords: unknown keys never map, forbidden keys go at any depth (strip), never a file */
+  var SCHEMA = {
+    label: 'Funding merchant cabang', dataKey: DATASET, via: 'funding', vaultOnly: true,
+    description: 'Funding merchant KCP Jakarta Cilangkap tersimpan di brankas (saldo sebagai rentang).\nFile funding merchant diimpor hanya melalui baris "Funding merchant (cabang)" di Data & Privasi.',
+    columns: VAULT_KEYS.map(function (k) { return { key: k, type: 'tersimpan', req: false, syn: [], personal: true, note: 'Kolom funding merchant tersimpan (brankas)' }; }),
+    deny: ['merchantofficialname', 'merchant_official_name', 'official_name', 'nama_pemilik', 'owner', 'owner_name', 'cif', 'cifno', 'cif_no', 'no_cif',
+      'norekening', 'no_rekening', 'norek', 'rekening', 'account', 'account_no', 'account_number', 'alamat', 'address', 'actype', 'sccode'],
+    detect: function () { return false; },
+    build: function (rows, ctx) {
+      var recs = (rows || []).map(function (r) {
+        var o = {};
+        Object.keys(r || {}).forEach(function (k) { if (k.charAt(0) !== '_') o[k] = r[k]; });
+        return o;
+      });
+      var m = fromRecords(recs);
+      if (ctx && ctx.report) {
+        if (m.asOf) ctx.report.asOf = m.asOf;
+        if (!m.ok) ctx.report.notes.push('Data funding merchant tersimpan tidak dapat dibaca. Impor ulang file funding merchant di Data & Privasi.');
+      }
+      return m.ok ? toRecords(m) : [];
+    }
+  };
+  var registered = { data: false, schema: false, listen: false };
+  /**
+   * register() → boolean: the bank dataset 'funding_merchant' (MCD.data) and the importer schema 'funding' (vault path
+   * only, never offered for a file: schema.via 'funding', vaultOnly). Feature-detected; safe to call again.
+   */
+  function register() {
+    var mc = M();
+    if (!mc) return false;
+    var Dd = mc.data;
+    if (!registered.data && Dd && typeof Dd.registerDataset === 'function') {
+      if (!(Dd.keyFor && Dd.keyFor(DATASET))) Dd.registerDataset(DATASET, { types: ['funding'], label: 'Funding merchant cabang', bank: true });
+      registered.data = true;
+    }
+    var I = mc.importer;
+    if (!registered.schema && I && typeof I.registerSchema === 'function') { I.registerSchema('funding', SCHEMA); registered.schema = true; }
+    if (!registered.listen) listen();
+    return registered.data;
+  }
+
+  /* ------------------------------------------------ the one import row (DATA lane draws it) */
+
+  /** A copy of the sheet re-headed at the header row classify() found; the row arrays are the file's own (untouched). */
+  function reheaded(sheet, fileName) {
+    var c = classify(sheet);
+    if (!c) return null;
+    var g = c.g, hdr = (g.rows[c.h] || []).map(function (v) {
+      if (v && typeof v.getTime === 'function') { var d = dateOf(v); return d || ''; }
+      return v == null ? '' : v;
+    });
+    return { name: sheet.name, file: fileName || sheet.file || null, kind: sheet.kind || null, headers: hdr,
+      rows: g.rows.slice(c.h + 1), rowNos: g.nos.slice(c.h + 1), headerRow: g.nos[c.h] || null };
+  }
+  /** The merchant-name table of a file: the 'cn' sheet ("Sheet1" of the branch file, "Commonname" of the region file). */
+  function cnSheetOf(sheets) {
+    var cls = sheets.map(function (s) { try { return classify(s); } catch (e) { return null; } });
+    var k = choose(sheets, cls, 'cn');
+    return k >= 0 ? sheets[k] : null;
+  }
+  /**
+   * importFiles(list) → {ok, error?: 'not-funding' | 'home-missing', model, saldoSheet: {sheet, file} | null, report}.
+   * list = [{file: {name, size}, sheets}] as MCD.importer.read gives them (one or two files). Pure: nothing is stored.
+   * Detects each file's layout, parses both (join by merchant name), keeps 12903 only. saldoSheet is the merchant-name
+   * table for the Saldo merchant schema: the branch file's sheet when given, else the region file's "Commonname".
+   */
+  function importFiles(list) {
+    var items = (Array.isArray(list) ? list : [list]).filter(function (x) { return x && Array.isArray(x.sheets); });
+    var names = {}, all = [], files = [], byLayout = {};
+    items.forEach(function (it, k) {
+      var f = it.file || {}, nm = str(f.name || it.name) || 'file ' + (k + 1);
+      while (has(names, nm)) nm = nm + ' (' + (k + 1) + ')';
+      names[nm] = 1;
+      var sheets = it.sheets.filter(Boolean).map(function (s) { return Object.assign({}, s, { file: nm }); });
+      var lay = detect(sheets);
+      files.push({ name: nm, layout: lay });
+      if (lay && !byLayout[lay]) byLayout[lay] = { name: nm, sheets: sheets };
+      all = all.concat(sheets);
+    });
+    var model = parse(all, {});
+    var saldo = null, saldoSheet = null;
+    var pick = byLayout['funding-branch'] ? ['branch', byLayout['funding-branch']] : (byLayout['funding-region'] ? ['region', byLayout['funding-region']] : null);
+    if (pick) {
+      var cs = cnSheetOf(pick[1].sheets), re = cs ? reheaded(cs, pick[1].name) : null;
+      if (re) { saldo = pick[0]; saldoSheet = { sheet: re, file: pick[1].name }; }
+    }
+    var report = Object.assign({}, model.report, { files: files, saldo: saldo });
+    var out = { ok: false, model: model, saldoSheet: saldoSheet, report: report };
+    if (!model.layout) { out.error = 'not-funding'; out.saldoSheet = null; out.report.saldo = null; return out; }
+    if (!model.merchants.length) { out.error = 'home-missing'; return out; }
+    out.ok = true;
+    return out;
+  }
+
+  /* ------------------------------------------------ the dataset as a model */
+
+  var CUR = { rows: null, model: null };
+  /** current() → the model of MCD.data.funding_merchant (memoised per dataset), or null without data and while Data contoh is on. */
+  function current() {
+    var Dd = data();
+    if (!Dd || demoOn()) return null;
+    var rows = Dd[DATASET];
+    if (!Array.isArray(rows) || !rows.length) { CUR.rows = null; CUR.model = null; return null; }
+    if (CUR.rows !== rows) {
+      CUR.rows = rows;
+      var m = fromRecords(rows);
+      CUR.model = m.ok ? m : null;
+    }
+    return CUR.model;
+  }
+
+  /* ------------------------------------------------ links to the map: EDC, LVM stores and public listings */
+
+  function lvmApi() { var mc = M(); return mc && mc.lvm ? mc.lvm : null; }
+  /** MCD.lvm.match() (cached by MCD.lvm until its data change). Costly the first time: never call in a mount frame. */
+  function lvmResult() {
+    var L = lvmApi();
+    if (!L || typeof L.match !== 'function') return null;
+    var R = safeCall(function () { return L.match(); });
+    return R && R !== SAFE_NO && typeof R === 'object' ? R : null;
+  }
+  /** Public listings with a kecamatan id, from the matcher's prepared listing table (merchants only: X.ok). */
+  function poiList(R) {
+    var X = R && R.X, L = lvmApi();
+    if (!X || !X.rows || !L || typeof L.poiStatus !== 'function') return [];
+    var kecId = {}, out = [];
+    for (var i = 0; i < X.n; i++) {
+      if (!X.ok[i] || X.kec[i] < 0) continue;
+      var k = X.kec[i];
+      if (!has(kecId, k)) { var ps = safeCall(function () { return L.poiStatus(i, R); }); kecId[k] = ps && ps !== SAFE_NO ? ps.kecamatanId : null; }
+      if (!kecId[k]) continue;
+      var row = X.rows[i];
+      out.push({ ref: i, name: row ? row[3] : null, kecId: kecId[k], kelId: null });
+    }
+    return out;
+  }
+  var LINKS = { model: null, R: null, out: null };
+  /**
+   * links() → {byId, poi, lvm, edc, counts} | null: match() of current() against the EDC merchants and LVM stores of
+   * MCD.lvm and the public listings. A merchant matched (by MID or name) to an EDC merchant or LVM store that sits on a
+   * public listing is linked to that listing too (via 'edc' | 'lvm'). Memoised per (dataset, MCD.lvm.match() result);
+   * costly the first time: never in a mount frame.
+   */
+  function links() {
+    var m = current();
+    if (!m) return null;
+    var R = lvmResult();
+    if (LINKS.out && LINKS.model === m && LINKS.R === R) return LINKS.out;
+    var L = lvmApi();
+    var src = {
+      edc: R ? (R.edcMerchants || []).map(function (e) { return { id: e.id, mid: e.mid, name: e.name, kecamatanId: e.kecamatanId, kelurahanId: e.kelurahanId }; }) : [],
+      lvm: R ? (R.lvmRef || []).map(function (r) { return r ? { id: r.id, mid: r.mid, name: r.name, kecamatanId: r.kecamatanId, kelurahanId: r.kelurahanId } : null; }).filter(Boolean) : [],
+      poi: poiList(R)
+    };
+    var look = buildLookups(src);
+    if (L && typeof L.similarity === 'function') look.similarity = L.similarity;
+    var out = match(m, look);
+    /* our merchant on a listing through its EDC merchant or LVM store */
+    if (R && R.byId) {
+      m.merchants.forEach(function (rec) {
+        var b = out.byId[rec.id];
+        if (!b || b.poi) return;
+        var via = null, i = -1;
+        ['edc', 'lvm'].forEach(function (kind) {
+          if (via || !b[kind]) return;
+          var x = R.byId[b[kind].ref];
+          if (x && isNum(x.poi) && x.poi >= 0) { via = kind; i = x.poi; }
+        });
+        if (!via) return;
+        b.poi = { ref: i, via: via, score: b[via].score };
+        (out.poi[i] = out.poi[i] || []).push(rec.id);
+        out.counts.poi++;
+      });
+    }
+    LINKS.model = m; LINKS.R = R; LINKS.out = out;
+    PTS.key = null;
+    return out;
+  }
+  var BYID = { model: null, by: null };
+  /** ofListing(i) → our merchants (records) linked to public listing i, or null. */
+  function ofListing(i) {
+    var m = current(), lk = m ? links() : null;
+    if (!lk || i == null) return null;
+    var ids = lk.poi[+i];
+    if (!ids || !ids.length) return null;
+    if (BYID.model !== m) {
+      BYID.model = m; BYID.by = {};
+      m.merchants.forEach(function (r) { BYID.by[r.id] = r; });
+    }
+    var out = ids.map(function (id) { return BYID.by[id]; }).filter(Boolean);
+    return out.length ? out : null;
+  }
+  function bandIx(b) { for (var k = 0; k < BANDS.length; k++) if (BANDS[k].id === b) return k; return -1; }
+  function balOf(rec) { return (rec.bal && rec.bal.band) ? rec.bal : (rec.cnBal || rec.bal || {}); }
+  function isIdle(rec) { return rec.tierFreq === 'nihil' && (rec.edc | 0) >= 1; }
+  var PTS = { key: null, out: null };
+  /**
+   * points() → [{id, lon, lat, src: 'poi' | 'lvm', ref, n, band, trendMom, trendMtd, idle, edc, cat, kecId}]: one per
+   * place (a public listing, else an LVM store with a street-level point); several records on one place give n and
+   * the strongest band. No name, cn, dba, MID or amount.
+   */
+  function points() {
+    var m = current(), lk = m ? links() : null;
+    if (!lk) return [];
+    if (PTS.key === lk && PTS.out) return PTS.out;
+    var R = LINKS.R, X = R && R.X, L = lvmApi(), places = {}, order = [];
+    m.merchants.forEach(function (rec) {
+      var b = lk.byId[rec.id];
+      if (!b) return;
+      var lon = null, lat = null, srcK = null, ref = null;
+      if (b.poi && X && b.poi.ref >= 0 && b.poi.ref < X.n) { srcK = 'poi'; ref = b.poi.ref; lon = X.lon[ref]; lat = X.lat[ref]; }
+      else if (b.lvm && L && typeof L.locationOf === 'function') {
+        var loc = safeCall(function () { return L.locationOf(b.lvm.ref); });
+        if (loc && loc !== SAFE_NO && !loc.approximate && isNum(loc.lon) && isNum(loc.lat)) { srcK = 'lvm'; ref = b.lvm.ref; lon = loc.lon; lat = loc.lat; }
+      }
+      if (!srcK || !isNum(lon) || !isNum(lat)) return;
+      var key = srcK + ':' + ref, bal = balOf(rec), p = places[key];
+      if (!p) {
+        p = places[key] = { id: rec.id, lon: lon, lat: lat, src: srcK, ref: ref, n: 0, band: null, trendMom: null, trendMtd: null,
+          idle: false, edc: 0, cat: rec.cat || null, kecId: rec.kecId || null };
+        order.push(key);
+      }
+      p.n++;
+      p.edc += rec.edc | 0;
+      if (isIdle(rec)) p.idle = true;
+      if (bandIx(bal.band) > bandIx(p.band)) { p.band = bal.band; p.trendMom = bal.trendMom || null; p.trendMtd = bal.trendMtd || null; }
+      if (!p.kecId && rec.kecId) p.kecId = rec.kecId;
+    });
+    PTS.key = lk;
+    PTS.out = order.map(function (k) { return places[k]; });
+    return PTS.out;
+  }
+  /**
+   * idle() → [{id, name, lob, cat, kecId, edc, band, poi: i | null, lvm: id | null, lon, lat}]: Tier Freq Nihil with at
+   * least one EDC (V8 D48). name: the DBA, else the merchant name; it stays in the Status list (D63). lon / lat only
+   * from a public listing or an LVM store point (null otherwise); only rows with poi go to the visit plan.
+   */
+  function idle() {
+    var m = current();
+    if (!m) return [];
+    var lk = links(), R = LINKS.R, X = R && R.X, L = lvmApi();
+    return m.merchants.filter(isIdle).map(function (rec) {
+      var b = lk && lk.byId[rec.id], poi = b && b.poi ? b.poi.ref : null, lvm = b && b.lvm ? b.lvm.ref : null, lon = null, lat = null;
+      if (poi != null && X && poi >= 0 && poi < X.n) { lon = X.lon[poi]; lat = X.lat[poi]; }
+      else if (lvm != null && L && typeof L.locationOf === 'function') {
+        var loc = safeCall(function () { return L.locationOf(lvm); });
+        if (loc && loc !== SAFE_NO && !loc.approximate && isNum(loc.lon)) { lon = loc.lon; lat = loc.lat; }
+      }
+      return { id: rec.id, name: rec.dba || rec.cn || null, lob: rec.lob || null, cat: rec.cat || null, kecId: rec.kecId || null,
+        edc: rec.edc | 0, band: balOf(rec).band || null, poi: poi, lvm: lvm, lon: isNum(lon) ? lon : null, lat: isNum(lat) ? lat : null };
+    });
+  }
+  /** kec(kecId) → {merchants, mids, edc, idle, byBand, trend: {mom: {naik, turun, tetap}}} | null: counts only. */
+  function kec(kecId) {
+    var m = current();
+    if (!m || kecId == null) return null;
+    var g = m.aggregates && m.aggregates.byKec ? m.aggregates.byKec[kecId] : null;
+    var list = m.merchants.filter(function (r) { return r.kecId === kecId; });
+    if (!g && !list.length) return null;
+    var mom = { naik: 0, turun: 0, tetap: 0 }, byBand = {};
+    list.forEach(function (r) {
+      var b = balOf(r);
+      if (b.trendMom && has(mom, b.trendMom)) mom[b.trendMom]++;
+      var k = b.band || '?';
+      byBand[k] = (byBand[k] || 0) + 1;
+    });
+    var cn = {}, merchants = 0;
+    list.forEach(function (r) { var k = cnKey(r.cn) || r.id; if (!cn[k]) { cn[k] = 1; merchants++; } });
+    return {
+      merchants: g && isNum(g.merchants) ? g.merchants : merchants, mids: g && isNum(g.mids) ? g.mids : list.filter(function (r) { return r.level === 'mid'; }).length,
+      edc: g && isNum(g.edc) ? g.edc : list.reduce(function (a, r) { return a + (r.edc | 0); }, 0),
+      idle: list.filter(isIdle).length, byBand: byBand, trend: { mom: mom }
+    };
+  }
+  /** rank() → {casa: {rank, of}, mom: {rank, of}, mid: {rank, of}, scope, asOf} | null: our place in the area, rank only (V7 D24). */
+  function rank() {
+    var m = current(), p = m && m.peers, r = p && p.rank;
+    if (!r) return null;
+    var one = function (k) { return r[k] && isNum(r[k].rank) ? { rank: r[k].rank, of: isNum(r[k].of) ? r[k].of : (isNum(p.of) ? p.of : null) } : null; };
+    return { casa: one('casa'), mom: one('mom'), mid: one('mid'), scope: p.scope || null, asOf: m.asOf || null };
+  }
+
+  /* ------------------------------------------------ changes: on('data'), document event 'mcd:funding', omzet */
+
+  var LISTENERS = [];
+  /** on(fn) → off: fn({reason}) after an import is applied, a vault load, a clear or a Data contoh switch. */
+  function on(fn) {
+    if (typeof fn !== 'function') return function () {};
+    LISTENERS.push(fn);
+    return function () { LISTENERS = LISTENERS.filter(function (f) { return f !== fn; }); };
+  }
+  function later(fn) {
+    if (root && typeof root.requestIdleCallback === 'function') return root.requestIdleCallback(fn, { timeout: 2000 });
+    return setTimeout(fn, 0);
+  }
+  var WIRE = { pending: false };
+  /**
+   * The one wiring place of MCD.omzet (§3.1): setFunding(current(), links()) when both exist, setFunding(null) when the
+   * data went. Run at idle, after MCD.lvm.matchAsync() when the matcher is loaded, so it never blocks a frame.
+   */
+  function wireOmzet() {
+    if (WIRE.pending) return;
+    WIRE.pending = true;
+    later(function () {
+      WIRE.pending = false;
+      var O = M() && M().omzet;
+      if (!O || typeof O.setFunding !== 'function') return;
+      if (!current()) { safeCall(function () { return O.setFunding(null); }); return; }
+      var L = lvmApi(), go = function () { var m = current(); if (m) safeCall(function () { return O.setFunding(m, links()); }); };
+      if (L && typeof L.matchAsync === 'function') { var p = safeCall(function () { return L.matchAsync(); }); if (p && typeof p.then === 'function') { p.then(go, go); return; } }
+      go();
+    });
+  }
+  var SIG = { rows: undefined, demo: undefined };
+  var REASON = { 'import': 'apply', vault: 'vault', revert: 'clear', reference: 'clear', demo: 'demo', 'demo-off': 'demo' };
+  function emit(reason) {
+    LISTENERS.slice().forEach(function (fn) { try { fn({ reason: reason }); } catch (e) { /* a listener's error is its own */ } });
+    try {
+      var d = root && root.document;
+      if (d && typeof d.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') d.dispatchEvent(new root.CustomEvent('mcd:funding', { detail: { reason: reason } }));
+    } catch (e) { /* no document */ }
+  }
+  function onData(e) {
+    var Dd = data();
+    if (!Dd) return;
+    var rows = Array.isArray(Dd[DATASET]) && Dd[DATASET].length ? Dd[DATASET] : null, demo = demoOn();
+    if (rows !== SIG.rows || demo !== SIG.demo) {
+      SIG.rows = rows; SIG.demo = demo;
+      CUR.rows = null; CUR.model = null; LINKS.out = null; PTS.key = null;
+      emit(REASON[e && e.source] || (e && e.source) || 'data');
+      wireOmzet();
+      return;
+    }
+    var types = (e && e.types) || [];
+    if (rows && (types.indexOf('lvm') >= 0 || types.indexOf('edc') >= 0)) wireOmzet();   // links change with the LVM / EDC files
+  }
+  function reset() { CUR.rows = null; CUR.model = null; LINKS.model = null; LINKS.R = null; LINKS.out = null; PTS.key = null; PTS.out = null; BYID.model = null; BYID.by = null; }
+  function listen() {
+    var Dd = data();
+    if (!Dd || typeof Dd.on !== 'function') return;
+    Dd.on(onData);
+    registered.listen = true;
+    try { var d = root && root.document; if (d && typeof d.addEventListener === 'function') d.addEventListener('mcd:gate-locking', reset); } catch (e) { /* no document */ }
+  }
+
   return {
     VERSION: VERSION, HOME: HOME, HOME_NAME: HOME_NAME, DATASET: DATASET, MIN_GROUP: MIN_GROUP,
     BANDS: BANDS, TIERS: TIERS, HOLDERS: HOLDERS, TRENDS: TRENDS, DROP_COLUMNS: DROP_COLUMNS,
@@ -1301,6 +1671,10 @@
     parse: parse, merge: merge, match: match, buildLookups: buildLookups, similarity: simpleSimilarity,
     toRecords: toRecords, fromRecords: fromRecords, audit: audit, apply: apply, workbookReader: workbookReader,
     bandOf: bandOf, trendOf: trendOf, dateOf: dateOf, posisiOf: posisiOf, basesOf: basesOf, periodLabel: periodLabel,
-    areaOfAddress: areaOfAddress, categoryOf: categoryOf
+    areaOfAddress: areaOfAddress, categoryOf: categoryOf,
+    /* V8 (docs/V8_SPEC.md §3.1) */
+    schema: SCHEMA, register: register, importFiles: importFiles, current: current, links: links, ofListing: ofListing,
+    points: points, idle: idle, kec: kec, rank: rank, on: on,
+    _wireOmzet: wireOmzet, _reset: reset
   };
 });

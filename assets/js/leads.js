@@ -1,7 +1,12 @@
 /* ==========================================================================
  * MCD.leads: the masked lead list (docs/COPY_STYLE_EN.md items 48 and 49,
- * docs/LEADS_MASKED.md). Pure logic, no DOM. v7 groundwork: not loaded by
- * index.html yet; load it after importer.js.
+ * docs/LEADS_MASKED.md). Pure logic, no DOM. Loaded after importer.js (index.html, V8 §3.7).
+ *
+ * D39, D41 (docs/V7_SPEC.md; docs/V8_SPEC.md §3.5, D51): the two credit products of the former TNI section left
+ * the UI and the logic. Two rules remain (Calon KPR, Mendekati Prioritas). Their fields (the payroll segment, the
+ * remaining tenor and the two product flags) are not on the allowlist any more: a column that names one is
+ * reported "diabaikan" ("Kolom ini tidak digunakan oleh aturan daftar leads.") and never read, and older stored
+ * records drop them (sanitizeStored). Groupings: Kode satuan · Saldo · Penghasilan.
  *
  * The feature ships SWITCHED OFF. The user turns it on in Data & Privasi and
  * imports the branch's own customer report on the branch laptop. Only an
@@ -13,13 +18,10 @@
  *                    so staff look the customer up in their own file and the bank's own system
  *   kodeSatuan     → the unit code as written (short code only; a column that reads like names, plates or
  *                    one value per customer is denied)
- *   product flags  → tabungan, giro, deposito, ksm, kkb, kpr, kartuKredit, livin, prioritas: true | false | null
+ *   product flags  → tabungan, giro, deposito, kpr, kartuKredit, livin, prioritas: true | false | null
  *   saldo          → saldoBand: 'lt50' | '50to80' | '80to100' | 'gte100' of the Prioritas threshold (a setting)
  *   penghasilan    → penghasilanBand '<lo>-<hi>' (Rp a month, lower bound included)
  *   kolektibilitas → lancar: true (Kol 1) | false (Kol 2-5) | null
- * AWAITING CONFIRMATION by Kepala cabang (not named in item 48; the KSM rules need them, docs/LEADS_MASKED.md §3):
- *   segmen         → 'tni' | 'lain' | 'umum' (Payroll TNI / Payroll lain / Umum): calonKsm
- *   sisaTenorKsm   → tenorBand '<lo>-<hi>' (months, upper bound included): calonTopUpKsm
  * NOT APPROVED, never read or kept: age (usia, umur, date of birth) and kecamatan or any other part of the
  * customer's address. Such columns are ignored at import, dropped on the vault path and offer no grouping.
  * Every other column is dropped before anything is stored. A column is DENIED (reported, dropped,
@@ -35,7 +37,7 @@
  *     enabled() · setEnabled(on) · settings() · configure(patch) · normSettings(patch, base) · DEFAULTS
  *     setKey(key, crypto?) → Promise<true> · hasKey() · newKeyBytes(crypto?) → Uint8Array(32) · reset()
  *   Mapping (the user confirms it at import time; no cell values in any result)
- *     FIELDS · FIELD_LABELS · FIELD_KIND · PRODUCTS · STORED_FIELDS · SEGMEN · DETECTORS
+ *     FIELDS · FIELD_LABELS · FIELD_KIND · PRODUCTS · STORED_FIELDS · DETECTORS · REMOVED_WHY
  *     normHeader(h) · headerDenied(h) → {why, label} | null · fieldForHeader(h) → field | null
  *     classifyValue(v, kind) → null | 'nik' | 'telepon' | 'email' | 'rekening' | 'nomor' | 'nopol' | 'lokasi'
  *     scanColumn(values, kind) → {filled, hits, total, denied, detector}
@@ -54,11 +56,12 @@
  *   Bands (every threshold is a setting; no bank policy in this file)
  *     nearPrioritas(saldo, threshold) · bandOf(field, value, settings) · edgesFor(field, settings)
  *     bandBounds(id) → {lo, hi} | null · bandLabel(field, id)
- *   Rules (pure): RULES · rules.{calonKsm, calonTopUpKsm, calonKkb, calonKpr, calonPrioritas}(record, settings)
+ *   Rules (pure): RULES · rules.{calonKpr, calonPrioritas}(record, settings)
  *     ruleStatus(settings) → [{id, label, what, active, why}]
  *   Aggregates with the k = 5 rule (groups of 1-4 show "<5" and are left out of the totals; complementary
  *   hiding, always on, marks more groups "–" until no hidden count can be worked out from the headline)
  *     aggregate(records, by, {rule?, settings?}) → {by, k, rule, groups, total, totalText, hidden, withheld, note}
+ *       by: kodeSatuan | saldoBand | penghasilanBand (any other → error NO_GROUPING)
  *     summary(records, settings?) → {k, total, rules}
  *     list(records, {rule, where?: {<by>: value}, settings?}) → {rule, where, n, text, suppressed, why, rows: [{key, sourceRow}]}
  *       (a rule is required; where names one group that the rule's table shows)
@@ -99,34 +102,29 @@
 
   /* ================================================================ fields */
 
-  var PRODUCTS = ['tabungan', 'giro', 'deposito', 'ksm', 'kkb', 'kpr', 'kartuKredit', 'livin', 'prioritas'];
-  // Item 48 allowlist. segmen and sisaTenorKsm (tenorBand) await the user's confirmation with Kepala cabang (see the
-  // header). Age and kecamatan are NOT approved: never add them back without a new decision recorded in item 49.
-  var FIELDS = ['cif', 'segmen', 'kodeSatuan'].concat(PRODUCTS, ['saldo', 'penghasilan', 'sisaTenorKsm', 'kolektibilitas']);
-  var STORED_FIELDS = ['key', 'sourceRow', 'fp', 'segmen', 'kodeSatuan'].concat(PRODUCTS,
-    ['saldoBand', 'penghasilanBand', 'tenorBand', 'lancar']);
-  var BAND_FIELDS = { saldoBand: 'saldo', penghasilanBand: 'penghasilan', tenorBand: 'sisaTenorKsm' };
+  var PRODUCTS = ['tabungan', 'giro', 'deposito', 'kpr', 'kartuKredit', 'livin', 'prioritas'];
+  // Item 48 allowlist, as trimmed by D41 (no payroll segment, no remaining tenor, no flags of the two removed products).
+  // Age and kecamatan are NOT approved: never add them back without a new decision recorded in item 49.
+  var FIELDS = ['cif', 'kodeSatuan'].concat(PRODUCTS, ['saldo', 'penghasilan', 'kolektibilitas']);
+  var STORED_FIELDS = ['key', 'sourceRow', 'fp', 'kodeSatuan'].concat(PRODUCTS, ['saldoBand', 'penghasilanBand', 'lancar']);
+  var BAND_FIELDS = { saldoBand: 'saldo', penghasilanBand: 'penghasilan' };
 
   // Detector kinds: 'id' (the CIF), 'text' (short words and codes: strict), 'flag' / 'amount' / 'number'.
-  var FIELD_KIND = { cif: 'id', segmen: 'text', kodeSatuan: 'text', kolektibilitas: 'text',
-    saldo: 'amount', penghasilan: 'amount', sisaTenorKsm: 'number' };
+  var FIELD_KIND = { cif: 'id', kodeSatuan: 'text', kolektibilitas: 'text', saldo: 'amount', penghasilan: 'amount' };
   PRODUCTS.forEach(function (p) { FIELD_KIND[p] = 'flag'; });
 
   var FIELD_LABELS = {
-    cif: 'CIF (disamarkan)', segmen: 'Segmen', kodeSatuan: 'Kode satuan',
-    tabungan: 'Tabungan', giro: 'Giro', deposito: 'Deposito', ksm: 'KSM', kkb: 'KKB', kpr: 'KPR',
+    cif: 'CIF (disamarkan)', kodeSatuan: 'Kode satuan',
+    tabungan: 'Tabungan', giro: 'Giro', deposito: 'Deposito', kpr: 'KPR',
     kartuKredit: 'Kartu Kredit', livin: 'Livin’ by Mandiri', prioritas: 'Prioritas',
     saldo: 'Saldo (disimpan sebagai kelompok)', penghasilan: 'Penghasilan atau gaji (disimpan sebagai kelompok)',
-    sisaTenorKsm: 'Sisa tenor KSM (disimpan sebagai kelompok)', kolektibilitas: 'Kolektibilitas (disimpan sebagai lancar ya/tidak)'
+    kolektibilitas: 'Kolektibilitas (disimpan sebagai lancar ya/tidak)'
   };
-  var SEGMEN = { tni: 'Payroll TNI', lain: 'Payroll lain', umum: 'Umum' };
 
   var FLAG_ALIASES = {
     tabungan: ['tabungan', 'tab', 'savings', 'saving', 'tabungan_mandiri'],
     giro: ['giro', 'current_account', 'ca', 'giro_mandiri'],
     deposito: ['deposito', 'depo', 'deposit', 'time_deposit', 'td'],
-    ksm: ['ksm', 'kredit_serbaguna_mandiri', 'kredit_serba_guna_mandiri', 'kredit_serbaguna'],
-    kkb: ['kkb', 'kredit_kendaraan', 'kredit_kendaraan_bermotor', 'auto_loan', 'car_loan'],
     kpr: ['kpr', 'kredit_pemilikan_rumah', 'kredit_rumah', 'mortgage', 'home_loan'],
     kartuKredit: ['kartu_kredit', 'kartukredit', 'credit_card', 'cc'],
     livin: ['livin', 'livin_by_mandiri', 'livin_mandiri', 'mobile_banking', 'mbanking', 'm_banking'],
@@ -135,8 +133,6 @@
   var SYN = {
     cif: ['cif', 'no_cif', 'nomor_cif', 'kode_cif', 'cif_no', 'cif_number', 'cif_nasabah', 'id_cif', 'nocif', 'cifno',
       'customer_id', 'cust_id', 'id_nasabah', 'nomor_nasabah', 'no_nasabah', 'customer_number', 'customer_no'],
-    segmen: ['segmen', 'segment', 'segmentasi', 'segmen_nasabah', 'kategori_nasabah', 'jenis_nasabah', 'tipe_nasabah', 'kelompok_nasabah',
-      'golongan_nasabah', 'jenis_payroll', 'status_payroll', 'segmen_payroll', 'kategori_payroll', 'tipe_payroll', 'customer_segment'],
     kodeSatuan: ['kode_satuan', 'kd_satuan', 'kodesatuan', 'kode_satker', 'kd_satker', 'satker', 'kode_kesatuan', 'kesatuan', 'satuan',
       'satuan_kerja', 'kode_unit', 'unit_kerja', 'kode_instansi', 'instansi', 'nama_satuan', 'nama_satker', 'nama_kesatuan', 'nama_instansi',
       'kode_korporasi', 'kode_payroll', 'kode_perusahaan', 'perusahaan', 'corporate_code', 'company_code'],
@@ -145,8 +141,6 @@
       'ratas_saldo', 'rata_rata_saldo', 'saldo_rekening', 'account_balance', 'saldo_posisi', 'posisi_saldo'],
     penghasilan: ['penghasilan', 'penghasilan_bulanan', 'penghasilan_per_bulan', 'pendapatan', 'pendapatan_bulanan', 'income', 'monthly_income',
       'gaji', 'gaji_pokok', 'gaji_bersih', 'gaji_bulanan', 'gaji_kotor', 'salary', 'take_home_pay', 'thp', 'net_salary'],
-    sisaTenorKsm: ['sisa_tenor', 'sisa_tenor_ksm', 'tenor_sisa', 'sisa_tenor_bulan', 'sisa_jangka_waktu', 'sisa_jw', 'remaining_tenor', 'sisa_bulan',
-      'jatuh_tempo', 'jatuh_tempo_ksm', 'tgl_jatuh_tempo', 'tanggal_jatuh_tempo', 'maturity', 'maturity_date'],
     kolektibilitas: ['kolektibilitas', 'kolektabilitas', 'kol', 'kolek', 'kol_cif', 'kolektibilitas_cif', 'kol_terburuk', 'kol_tertinggi',
       'worst_kol', 'collectibility', 'collectability', 'coll', 'kualitas_kredit']
   };
@@ -154,15 +148,30 @@
   // on the vault path they are on the deny list too (SCHEMA_DENY), so a stored row that carries one shows it removed.
   var NOT_APPROVED = ['usia', 'umur', 'age', 'usia_tahun', 'umur_tahun', 'usia_nasabah', 'umur_nasabah', 'usia_band', 'usiaband',
     'kecamatan', 'kec', 'nama_kecamatan', 'kecamatan_nasabah', 'district', 'subdistrict'];
-  Object.keys(FLAG_ALIASES).forEach(function (f) {
+  function flagForms(list) {
     var out = [];
-    FLAG_ALIASES[f].forEach(function (a) {
+    list.forEach(function (a) {
       out.push(a, 'flag_' + a, a + '_flag', 'punya_' + a, 'memiliki_' + a, 'has_' + a, 'produk_' + a, 'status_' + a, a + '_aktif', 'ada_' + a);
     });
-    SYN[f] = out;
-  });
+    return out;
+  }
+  Object.keys(FLAG_ALIASES).forEach(function (f) { SYN[f] = flagForms(FLAG_ALIASES[f]); });
   var LOOKUP = {};
   FIELDS.forEach(function (f) { (SYN[f] || [f]).forEach(function (n) { if (!has(LOOKUP, n)) LOOKUP[n] = f; }); });
+  // Headers of the fields D41 removed: such a column is reported "diabaikan" with REMOVED_WHY, never read or stored.
+  var REMOVED_WHY = 'Kolom ini tidak digunakan oleh aturan daftar leads.';
+  var REMOVED_SYN = {
+    segmen: ['segmen', 'segment', 'segmentasi', 'segmen_nasabah', 'kategori_nasabah', 'jenis_nasabah', 'tipe_nasabah', 'kelompok_nasabah',
+      'golongan_nasabah', 'jenis_payroll', 'status_payroll', 'segmen_payroll', 'kategori_payroll', 'tipe_payroll', 'customer_segment'],
+    sisaTenor: ['sisa_tenor', 'sisa_tenor_ksm', 'tenor_sisa', 'sisa_tenor_bulan', 'sisa_jangka_waktu', 'sisa_jw', 'remaining_tenor',   // D41: header only
+      'sisa_bulan', 'jatuh_tempo', 'jatuh_tempo_ksm', 'tgl_jatuh_tempo', 'tanggal_jatuh_tempo', 'maturity', 'maturity_date'],           // D41: header only
+    serbaguna: flagForms(['ksm', 'kredit_serbaguna_mandiri', 'kredit_serba_guna_mandiri', 'kredit_serbaguna']),   // D41: removed product, header only
+    kendaraan: flagForms(['kkb', 'kredit_kendaraan', 'kredit_kendaraan_bermotor', 'auto_loan', 'car_loan'])            // D41: removed product, header only
+  };
+  // Keys a mapping may still name from an older screen (D41): their column is reported with REMOVED_WHY.
+  var REMOVED_FIELDS = { segmen: 1, sisaTenorKsm: 1, ksm: 1, kkb: 1 };   // D41: the four removed field names
+  var REMOVED_LOOKUP = {};
+  Object.keys(REMOVED_SYN).forEach(function (f) { REMOVED_SYN[f].forEach(function (n) { if (!has(LOOKUP, n) && !has(REMOVED_LOOKUP, n)) REMOVED_LOOKUP[n] = f; }); });
 
   /** Same normalisation as MCD.importer: lowercase, no diacritics, non-alphanumerics → '_', trimmed. */
   function normHeader(h) {
@@ -215,11 +224,16 @@
   var JOINED_START = /^(?:no|nomor|nmr|nr)?(hp|nik|ktp|telp|tlp)/, JOINED_END = /(hp|nik|ktp|telp|tlp)$/;
   var JOINED_NM = /^nm(lengkap|nasabah|debitur|debitor|pemilik|cust|customer|ibu)/;
   var SHORT_WHY = { hp: 'telepon', telp: 'telepon', tlp: 'telepon', nik: 'identitas', ktp: 'identitas' };
-  var JOINED_OK = {}, JOINED_FIELD = {};
+  var JOINED_OK = {}, JOINED_FIELD = {}, JOINED_REMOVED = {};
   Object.keys(LOOKUP).forEach(function (n) {
     var j = n.replace(/_/g, '');
     JOINED_OK[j] = 1;
     if (!has(JOINED_FIELD, j)) JOINED_FIELD[j] = LOOKUP[n];
+  });
+  Object.keys(REMOVED_LOOKUP).forEach(function (n) {
+    var j = n.replace(/_/g, '');
+    JOINED_OK[j] = 1;
+    if (!has(JOINED_FIELD, j) && !has(JOINED_REMOVED, j)) JOINED_REMOVED[j] = REMOVED_LOOKUP[n];
   });
   ['nama', 'name', 'nm'].forEach(function (p) { NAMA_OK.split('|').forEach(function (w) { JOINED_OK[p + w] = 1; }); });
   /** The spellings a header is checked under: as written, camelCase and digits split, dotted acronyms joined, digit suffix gone. */
@@ -259,17 +273,25 @@
     }
     return why ? { why: why, label: DENY_LABEL[why] } : null;
   }
-  /** fieldForHeader(header) → allowlisted field | null (exact synonyms; "KSM (Y/N)", "Saldo (Rp)", "SaldoAkhir", "NAMASATKER" too). */
-  function fieldForHeader(h) {
-    if (headerDenied(h)) return null;
+  function lookupHeader(h, table, joined) {
     var f = headerForms(h), forms = f.forms;
     for (var i = 0; i < forms.length; i++) {
       var n = forms[i];
-      if (has(LOOKUP, n)) return LOOKUP[n];
+      if (has(table, n)) return table[n];
       var t = n.replace(/_(y_n|yn|ya_tidak|1_0|flag|rp|idr|rupiah|th|thn|tahun|bln|bulan)$/, '');
-      if (t !== n && has(LOOKUP, t)) return LOOKUP[t];
+      if (t !== n && has(table, t)) return table[t];
     }
-    return f.joined && has(JOINED_FIELD, f.joined) ? JOINED_FIELD[f.joined] : null;
+    return f.joined && has(joined, f.joined) ? joined[f.joined] : null;
+  }
+  /** fieldForHeader(header) → allowlisted field | null (exact synonyms; "KPR (Y/N)", "Saldo (Rp)", "SaldoAkhir", "NAMASATKER" too). */
+  function fieldForHeader(h) {
+    if (headerDenied(h)) return null;
+    return lookupHeader(h, LOOKUP, JOINED_FIELD);
+  }
+  /** removedForHeader(header) → the name of a field D41 removed when the header names one, else null. */
+  function removedForHeader(h) {
+    if (headerDenied(h)) return null;
+    return lookupHeader(h, REMOVED_LOOKUP, JOINED_REMOVED);
   }
 
   /* ---------------------------------------------------- deny by cell value */
@@ -441,14 +463,15 @@
         return columnEntry(i, label(h, i), null, 'diabaikan', HEADERLESS_WHY);
       }) };
     }
-    var auto = !mapping, want = {}, taken = {};
+    var auto = !mapping, want = {}, taken = {}, gone = {};
     if (auto) {
       sheet.headers.forEach(function (h, i) { var f = looks[i] ? null : fieldForHeader(h); if (f && !has(want, f)) want[f] = i; });
     } else {
       Object.keys(mapping).forEach(function (f) {
-        if (FIELDS.indexOf(f) < 0) return;
         var v = mapping[f], idx = typeof v === 'number' ? v : sheet.headers.indexOf(v);
-        if (!(idx >= 0 && idx < sheet.headers.length) || Math.floor(idx) !== idx || has(taken, idx)) return;
+        if (!(idx >= 0 && idx < sheet.headers.length) || Math.floor(idx) !== idx) return;
+        if (has(REMOVED_FIELDS, f)) { gone[idx] = 1; return; }          // D41: a mapping from an older screen
+        if (FIELDS.indexOf(f) < 0 || has(taken, idx)) return;
         want[f] = idx; taken[idx] = f;
       });
     }
@@ -463,7 +486,8 @@
       if (!scan.denied && f === 'kodeSatuan') scan = codeColumnCheck(vals);
       if (scan.denied) { columns.push(columnEntry(i, lab, f, 'ditolak', valueWhy(scan), scan)); return; }
       if (f) { out[f] = i; columns.push(columnEntry(i, lab, f, 'dipakai', FIELD_LABELS[f])); return; }
-      columns.push(columnEntry(i, lab, null, 'diabaikan', IGNORED_WHY));
+      var removed = has(gone, i) || (!looks[i] && nLooks < 2 && !!removedForHeader(h));
+      columns.push(columnEntry(i, lab, null, 'diabaikan', removed ? REMOVED_WHY : IGNORED_WHY));
     });
     var missing = has(out, 'cif') ? [] : ['cif'];
     return { mapping: out, columns: columns, missing: missing, ok: !missing.length, headerless: false };
@@ -520,18 +544,6 @@
     var x = parseAmount(s);
     return isNum(x) ? x > 0 : undefined;
   }
-  /** Segmen text → 'tni' | 'lain' | 'umum'; '' → null; unknown → undefined. The stored codes read back as themselves. */
-  function parseSegmen(v) {
-    if (v == null) return null;
-    var s = fold(v).replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!s || s === '-') return null;
-    if (has(SEGMEN, s)) return s;
-    if (/(^| )non ?payroll( |$)|bukan payroll|(^| )umum( |$)|reguler|regular|retail|ritel|individu|perorangan|(^| )mass( |$)|non gaji/.test(s)) return 'umum';
-    if (/(^| )(non|bukan) ?tni( |$)/.test(s)) return /payroll|gaji/.test(s) ? 'lain' : undefined;
-    if (/(^| )tni( |$)|(^| )tni(al|ad|au)( |$)|militer|mabes|kodam|lantamal|lanud|kostrad|marinir|kopassus|angkatan (darat|laut|udara)/.test(s)) return 'tni';
-    if (/payroll|gaji|(^| )pns( |$)|(^| )asn( |$)|bumn|bumd|swasta|korporasi|corporate|polri|instansi|pegawai|(^| )lain( |$)/.test(s)) return 'lain';
-    return undefined;
-  }
   /** Kolektibilitas → true (Kol 1, Lancar) | false (Kol 2-5, DPK, Kurang Lancar, Diragukan, Macet); '' or 0 → null; unknown → undefined. */
   function parseKol(v) {
     if (v == null || typeof v === 'boolean' || isDateObj(v)) return v == null ? null : undefined;
@@ -558,26 +570,6 @@
     return null;
   }
   function validYmd(p) { return !!p && p[1] >= 1 && p[1] <= 12 && p[2] >= 1 && p[2] <= 31 && p[0] >= 1990 && p[0] <= 2100; }
-  /** Whole months from asOf to a maturity date; a part month counts as one instalment left; past dates → 0. */
-  function monthsUntil(asOf, to) {
-    var m = (to[0] - asOf[0]) * 12 + (to[1] - asOf[1]) + (to[2] > asOf[2] ? 1 : 0);
-    return Math.max(0, m);
-  }
-  /** Sisa tenor → months: 12, '12 bulan', '1 tahun', or a maturity date (counted from asOf). */
-  function parseTenor(v, asOf) {
-    if (v == null) return null;
-    if (isDateObj(v)) { var dp = ymdOf(v); return validYmd(dp) ? monthsUntil(asOf, dp) : undefined; }
-    if (typeof v === 'number') return isFinite(v) && v >= 0 && v <= 600 ? Math.ceil(v) : undefined;
-    var s = fold(v).trim();
-    if (!s || s === '-') return null;
-    var d = ymdOf(s);
-    if (d) return validYmd(d) ? monthsUntil(asOf, d) : undefined;
-    var m = /^(\d+(?:[.,]\d+)?)\s*(bulan|bln|bl|b|months?|mos?|tahun|thn|th|t|years?|yrs?|y)?\.?$/.exec(s);
-    if (!m) return undefined;
-    var n = parseFloat(m[1].replace(',', '.'));
-    if (m[2] && /^(tahun|thn|th|t|years?|yrs?|y)$/.test(m[2])) n *= 12;
-    return n >= 0 && n <= 600 ? Math.ceil(n) : undefined;
-  }
   /**
    * Kode satuan: a short code or unit name as written (≤ 40 characters, letters, digits, space . / - & ( )).
    * Dates, decimal numbers (coordinates), number plates and personal numbers are not unit codes (undefined).
@@ -614,20 +606,19 @@
   /* ============================================================== settings */
 
   // Display bands are descriptive, not bank policy. Policy numbers (the Prioritas threshold and the
-  // minimum income for KKB and KPR) start as null: the branch enters them, and they live in the vault.
+  // minimum income for KPR) start as null: the branch enters them, and they live in the vault.
+  // D41: the minimum income of the removed vehicle loan and the top-up tenor are gone; older settings that carry
+  // them load without them (normSettings ignores unknown keys).
   var DEFAULTS = {
     enabled: false,                // the switch in Data & Privasi; ships OFF (item 49)
     prioritasThreshold: null,      // Rp: saldo for Mandiri Prioritas (branch setting)
-    kkbMinIncome: null,            // Rp a month: calonKkb needs an income band at or above this (branch setting)
-    kprMinIncome: null,            // Rp a month: calonKpr likewise (branch setting)
+    kprMinIncome: null,            // Rp a month: calonKpr needs an income band at or above this (branch setting)
     incomeEdges: [5e6, 10e6, 20e6, 50e6],
-    tenorEdges: [6, 12, 24, 36],   // months
-    topUpMaxTenor: 12,             // months: calonTopUpKsm needs a sisa tenor band at or below this
-    kolUnknownOk: false,           // true: a blank kolektibilitas counts as lancar for calonKsm / calonTopUpKsm
+    kolUnknownOk: false,           // true: a blank kolektibilitas counts as lancar for calonKpr (V7 D31: off by default)
     k: MIN_K                       // smallest group shown; never below 5 (complementary hiding is always on)
   };
-  var NUM_OR_NULL = { prioritasThreshold: 1, kkbMinIncome: 1, kprMinIncome: 1 };
-  var EDGE_KEYS = { incomeEdges: 1, tenorEdges: 1 };
+  var NUM_OR_NULL = { prioritasThreshold: 1, kprMinIncome: 1 };
+  var EDGE_KEYS = { incomeEdges: 1 };
   var BOOL_KEYS = { enabled: 1, kolUnknownOk: 1 };
   function edges(a) {
     if (!Array.isArray(a)) return null;
@@ -646,7 +637,6 @@
       if (has(BOOL_KEYS, k)) { if (typeof v === 'boolean') o[k] = v; return; }
       if (has(NUM_OR_NULL, k)) { if (v === null || (isNum(v) && v > 0)) o[k] = v; return; }
       if (has(EDGE_KEYS, k)) { var e = edges(v); if (e) o[k] = e; return; }
-      if (k === 'topUpMaxTenor') { if (isNum(v) && v > 0 && v <= 600) o[k] = Math.round(v); return; }
       if (k === 'k') { if (isNum(v)) o[k] = Math.max(MIN_K, Math.round(v)); }
     });
     return o;
@@ -674,24 +664,22 @@
     if (a < threshold * 100) return '80to100';
     return 'gte100';
   }
-  function upper(field) { return field === 'tenorBand'; }    // tenor bands include their upper bound (≤ 12 bulan)
   /** edgesFor(field, settings) → the cut points used at import (policy minimums are merged in, so rules stay exact). */
   function edgesFor(field, s) {
     s = S(s);
-    if (field === 'penghasilanBand') return edges(s.incomeEdges.concat([s.kkbMinIncome, s.kprMinIncome].filter(isNum))) || [];
-    if (field === 'tenorBand') return edges(s.tenorEdges.concat([s.topUpMaxTenor])) || [];
+    if (field === 'penghasilanBand') return edges(s.incomeEdges.concat([s.kprMinIncome].filter(isNum))) || [];
     return [];
   }
   function idOf(lo, hi) { return (lo == null ? '' : lo.toFixed(0)) + '-' + (hi == null ? '' : hi.toFixed(0)); }
-  /** bandOf(field, value, settings) → band id ('5000000-10000000', '-6', '36-', 'lt50' …) | null (unknown field → null). */
+  /** bandOf(field, value, settings) → band id ('5000000-10000000', '-5000000', '50000000-', 'lt50' …) | null (unknown field → null). */
   function bandOf(field, v, s) {
     s = S(s);
     if (field === 'saldoBand') return nearPrioritas(v, s.prioritasThreshold);
     if (!isNum(v) || v < 0) return null;
-    var e = edgesFor(field, s), lo = null, hi = null, up = upper(field);
+    var e = edgesFor(field, s), lo = null, hi = null;
     if (!e.length) return null;
     for (var i = 0; i < e.length; i++) {
-      if (up ? v <= e[i] : v < e[i]) { hi = e[i]; break; }
+      if (v < e[i]) { hi = e[i]; break; }
       lo = e[i];
     }
     return idOf(lo, hi);
@@ -717,7 +705,7 @@
     return { n: fmtInt(x), u: '' };
   }
   function rpText(x) { var p = rpShort(x); return 'Rp ' + p.n + (p.u ? ' ' + p.u : ''); }
-  /** bandLabel(field, id) → plain Indonesian ('Rp 5–10 jt', '7–12 bulan', '80–100% ambang Prioritas'). */
+  /** bandLabel(field, id) → plain Indonesian ('Rp 5–10 jt', '80–100% ambang Prioritas'). */
   function bandLabel(field, id) {
     if (id == null) return 'Tidak diketahui';
     if (field === 'saldoBand') return NEAR_LABEL[id] || 'Tidak diketahui';
@@ -729,11 +717,6 @@
       var a = rpShort(b.lo), z = rpShort(b.hi);
       return a.u === z.u ? 'Rp ' + a.n + '–' + z.n + (a.u ? ' ' + a.u : '') : rpText(b.lo) + '–' + z.n + (z.u ? ' ' + z.u : '');
     }
-    if (field === 'tenorBand') {
-      if (b.lo == null) return '≤ ' + fmtInt(b.hi) + ' bulan';
-      if (b.hi == null) return '> ' + fmtInt(b.lo) + ' bulan';
-      return fmtInt(b.lo + 1) + '–' + fmtInt(b.hi) + ' bulan';
-    }
     return 'Tidak diketahui';
   }
 
@@ -743,7 +726,7 @@
   function bool3(v) { return v === true ? true : (v === false ? false : null); }
   /**
    * sanitizeStored(obj) → a record with exactly STORED_FIELDS, or null when the masked key or the row number is
-   * not valid. Anything else in obj (an age band or a kecamatan included) is dropped; values are re-checked one by
+   * not valid. Anything else in obj (an age band, a kecamatan, and the four fields D41 removed) is dropped; values are re-checked one by
    * one: a unit code that is a personal number, a number plate, a date or a decimal number is dropped. Checks that
    * need the whole column (unit codes that read like names, or one per customer: codeColumnCheck) run in apply()
    * and on the vault path (importer type 'leads').
@@ -756,8 +739,6 @@
     r.key = key;
     r.sourceRow = row;
     r.fp = /^[0-9a-f]{12}$/.test(str(o.fp).toLowerCase()) ? str(o.fp).toLowerCase() : null;
-    var seg = parseSegmen(o.segmen);
-    r.segmen = seg || null;
     var code = o.kodeSatuan == null ? null : cleanCode(o.kodeSatuan);
     r.kodeSatuan = code && !classifyValue(code, 'text') ? code : null;
     PRODUCTS.forEach(function (p) { var f = parseFlag(o[p]); r[p] = f === true || f === false ? f : null; });
@@ -840,8 +821,9 @@
     NO_WEBCRYPTO: 'Browser ini tidak mendukung penyamaran CIF. Gunakan Chrome atau Edge versi terbaru.',
     BAD_SHEET: 'File tidak dapat dibaca sebagai tabel. Pastikan formatnya CSV atau XLSX.',
     NO_DATA: 'Data dashboard belum siap. Muat ulang halaman, lalu coba lagi.',
-    NO_RULE: 'Pilih aturan dahulu: daftar baris hanya tersedia per aturan (misalnya Calon KSM).',
-    BAD_WHERE: 'Daftar hanya dapat dipersempit dengan satu kelompok: kode satuan, segmen atau satu kelompok angka.',
+    NO_RULE: 'Pilih aturan dahulu: daftar baris hanya tersedia per aturan (misalnya Calon KPR).',
+    BAD_WHERE: 'Daftar hanya dapat dipersempit dengan satu kelompok: kode satuan atau satu kelompok angka.',
+    NO_GROUPING: 'Pengelompokan ini tidak tersedia. Pilih kode satuan, saldo atau penghasilan.',
     NO_SUBGROUP: 'Rincian kelompok di dalam kelompok lain tidak tersedia, karena dapat membuka kelompok di bawah 5.'
   };
   var REASONS = {
@@ -849,17 +831,14 @@
     CIF_TIDAK_VALID: 'Format CIF tidak dikenali: baris dilewati.',
     CIF_NOTASI_ILMIAH: 'CIF tertulis sebagai notasi ilmiah (misalnya 1,23E+12): simpan kolom CIF sebagai teks, lalu impor ulang.',
     CIF_GANDA: 'CIF muncul lebih dari sekali: digabung dengan baris pertama.',
-    SEGMEN_TIDAK_DIKENAL: 'Segmen tidak dikenali: dibiarkan kosong.',
     PRODUK_TIDAK_DIKENAL: 'Isi kolom produk tidak dikenali (gunakan Y/N atau 1/0): dibiarkan kosong.',
     ANGKA_TIDAK_VALID: 'Angka tidak dapat dibaca: dibiarkan kosong.',
     NILAI_NEGATIF: 'Nilai negatif: dibiarkan kosong.',
-    TENOR_TIDAK_VALID: 'Sisa tenor tidak dapat dibaca (isi jumlah bulan): dibiarkan kosong.',
     KOL_TIDAK_DIKENAL: 'Kolektibilitas tidak dikenali (gunakan 1–5 atau Lancar): dibiarkan kosong.',
     KODE_SATUAN_TIDAK_VALID: 'Kode satuan terlalu panjang, berisi tanda yang tidak dikenali, atau terlihat seperti tanggal, angka desimal atau nomor pribadi: dibiarkan kosong.',
     KUNCI_BENTROK: 'Dua CIF berbeda menghasilkan kunci samaran yang sama: keduanya tetap disimpan terpisah.'
   };
-  var CODE_FOR = { segmen: 'SEGMEN_TIDAK_DIKENAL', kodeSatuan: 'KODE_SATUAN_TIDAK_VALID', sisaTenorKsm: 'TENOR_TIDAK_VALID',
-    kolektibilitas: 'KOL_TIDAK_DIKENAL' };
+  var CODE_FOR = { kodeSatuan: 'KODE_SATUAN_TIDAK_VALID', kolektibilitas: 'KOL_TIDAK_DIKENAL' };
   PRODUCTS.forEach(function (p) { CODE_FOR[p] = 'PRODUK_TIDAK_DIKENAL'; });
 
   function todayYmd() { var d = new Date(); return [d.getFullYear(), d.getMonth() + 1, d.getDate()]; }
@@ -888,10 +867,8 @@
       var v = r[map[f]], x;
       if (typeof v === 'string') v = v.trim();
       if (v === '' || v == null) { o[f] = null; return; }
-      if (f === 'segmen') x = parseSegmen(v);
-      else if (f === 'kodeSatuan') x = cleanCode(v);
+      if (f === 'kodeSatuan') x = cleanCode(v);
       else if (f === 'kolektibilitas') x = parseKol(v);
-      else if (f === 'sisaTenorKsm') x = parseTenor(v, asOf);
       else if (f === 'saldo' || f === 'penghasilan') {
         x = parseAmount(v);
         if (x === undefined) { issue(row, f, 'ANGKA_TIDAK_VALID'); x = null; }
@@ -903,25 +880,22 @@
     return o;
   }
   // Duplicate CIFs (one row per account in some reports): flags yes > no > blank, the highest saldo and income,
-  // the shortest sisa tenor, the worst kolektibilitas (any Kol 2-5 → not lancar), else the first value.
+  // the worst kolektibilitas (any Kol 2-5 → not lancar), else the first value.
   function merge(e, o) {
     PRODUCTS.forEach(function (p) { if (o[p] === true || (o[p] === false && e[p] == null)) e[p] = o[p]; });
     ['saldo', 'penghasilan'].forEach(function (f) { if (isNum(o[f]) && (!isNum(e[f]) || o[f] > e[f])) e[f] = o[f]; });
-    if (isNum(o.sisaTenorKsm) && (!isNum(e.sisaTenorKsm) || o.sisaTenorKsm < e.sisaTenorKsm)) e.sisaTenorKsm = o.sisaTenorKsm;
     if (o.kolektibilitas === false || (o.kolektibilitas === true && e.kolektibilitas == null)) e.kolektibilitas = o.kolektibilitas;
-    ['segmen', 'kodeSatuan'].forEach(function (f) { if (e[f] == null && o[f] != null) e[f] = o[f]; });
+    if (e.kodeSatuan == null && o.kodeSatuan != null) e.kodeSatuan = o.kodeSatuan;
   }
   function toRecord(key, e, fp, s) {
     var r = blankRecord();
     r.key = key;
     r.sourceRow = e.row;
     r.fp = fp;
-    r.segmen = e.segmen || null;
     r.kodeSatuan = e.kodeSatuan || null;
     PRODUCTS.forEach(function (p) { r[p] = bool3(e[p]); });
     r.saldoBand = bandOf('saldoBand', e.saldo, s);
     r.penghasilanBand = bandOf('penghasilanBand', e.penghasilan, s);
-    r.tenorBand = bandOf('tenorBand', e.sisaTenorKsm, s);
     r.lancar = bool3(e.kolektibilitas);
     return r;
   }
@@ -964,7 +938,7 @@
       };
       report.asOf = opts.asOf ? ymdText(asOf) : null;
       // the cut points of this import: after a settings change the UI can ask for a fresh import
-      report.cuts = { prioritas: isNum(s.prioritasThreshold), penghasilan: edgesFor('penghasilanBand', s), tenor: edgesFor('tenorBand', s) };
+      report.cuts = { prioritas: isNum(s.prioritasThreshold), penghasilan: edgesFor('penghasilanBand', s) };
       report.columns = chk.columns;
       chk.columns.forEach(function (col) {
         var o = { col: col.col, header: col.header, field: col.field, why: col.why };
@@ -975,7 +949,7 @@
       report.missing = chk.missing.slice();
       if (chk.headerless) {
         report.headerless = true;
-        return stop('Baris pertama terlihat seperti data nasabah; tambahkan baris judul kolom (CIF, Segmen, KSM, …), lalu baca dan impor ulang file.');
+        return stop('Baris pertama terlihat seperti data nasabah. Tambahkan baris judul kolom (CIF, Kode satuan, KPR, …), lalu baca dan impor ulang file.');
       }
       if (report.denied.length) report.notes.push(fmtInt(report.denied.length) + ' kolom berisi data pribadi dan tidak disimpan.');
       if (report.ignored.length) report.notes.push(fmtInt(report.ignored.length) + ' kolom lain tidak termasuk data yang boleh disimpan dan dilewati.');
@@ -1059,20 +1033,6 @@
 
   function lancarOk(r, s) { return r.lancar === true || (s.kolUnknownOk === true && r.lancar == null); }
   var rules = {
-    /** Payroll TNI, kolektibilitas lancar, no KSM (known: ksm === false). */
-    calonKsm: function (r, s) { s = S(s); return !!r && r.segmen === 'tni' && r.ksm === false && lancarOk(r, s); },
-    /** Has a KSM whose sisa tenor band ends at or below topUpMaxTenor (12 bulan), kolektibilitas lancar. */
-    calonTopUpKsm: function (r, s) {
-      s = S(s);
-      var b = r ? bandBounds(r.tenorBand) : null;
-      return !!r && r.ksm === true && !!b && b.hi != null && b.hi <= s.topUpMaxTenor && lancarOk(r, s);
-    },
-    /** No KKB, income band at or above kkbMinIncome (a branch setting), kolektibilitas known lancar (V7 D31: a blank is not lancar). */
-    calonKkb: function (r, s) {
-      s = S(s);
-      var b = r ? bandBounds(r.penghasilanBand) : null;
-      return !!r && isNum(s.kkbMinIncome) && r.kkb === false && !!b && b.lo != null && b.lo >= s.kkbMinIncome && lancarOk(r, s);
-    },
     /** No KPR, income band at or above kprMinIncome (a branch setting), kolektibilitas known lancar (V7 D31: a blank is not lancar). */
     calonKpr: function (r, s) {
       s = S(s);
@@ -1083,13 +1043,9 @@
     calonPrioritas: function (r, s) { s = S(s); return !!r && isNum(s.prioritasThreshold) && r.prioritas !== true && r.saldoBand === '80to100'; }
   };
   var RULES = [
-    { id: 'calonKsm', label: 'Calon KSM', what: 'Payroll TNI, kolektibilitas lancar, belum memiliki KSM.' },
-    { id: 'calonTopUpKsm', label: 'Calon top up KSM', what: 'Memiliki KSM dengan sisa tenor paling lama 12 bulan, kolektibilitas lancar.' },
-    { id: 'calonKkb', label: 'Calon KKB', what: 'Belum memiliki KKB, penghasilan di atas batas KKB, tanpa kredit bermasalah.', needs: 'kkbMinIncome',
-      off: 'Isi batas penghasilan KKB di Data & Privasi.' },
     { id: 'calonKpr', label: 'Calon KPR', what: 'Belum memiliki KPR, penghasilan di atas batas KPR, tanpa kredit bermasalah.', needs: 'kprMinIncome',
       off: 'Isi batas penghasilan KPR di Data & Privasi.' },
-    { id: 'calonPrioritas', label: 'Calon Prioritas', what: 'Belum Prioritas, saldo 80–100% dari ambang Prioritas.', needs: 'prioritasThreshold',
+    { id: 'calonPrioritas', label: 'Mendekati Prioritas', what: 'Belum Prioritas, saldo 80–100% dari ambang Prioritas.', needs: 'prioritasThreshold',
       off: 'Isi ambang saldo Prioritas di Data & Privasi, lalu impor ulang.' }
   ];
   /** ruleStatus(settings?) → [{id, label, what, active, why}] (a rule that needs a branch setting is off until it is entered). */
@@ -1097,20 +1053,16 @@
     s = S(s);
     return RULES.map(function (d) {
       var on = !d.needs || isNum(s[d.needs]);
-      var what = d.id === 'calonTopUpKsm' ? d.what.replace('12 bulan', fmtInt(s.topUpMaxTenor) + ' bulan') : d.what;
-      return { id: d.id, label: d.label, what: what, active: on, why: on ? null : d.off };
+      return { id: d.id, label: d.label, what: d.what, active: on, why: on ? null : d.off };
     });
   }
 
   /* ================================================== aggregates and lists */
 
-  var BY = { kodeSatuan: 1, segmen: 1, saldoBand: 1, penghasilanBand: 1, tenorBand: 1 };   // no area or age grouping (item 48)
+  var BY = { kodeSatuan: 1, saldoBand: 1, penghasilanBand: 1 };   // no area or age grouping (item 48); D41: no segment or tenor
   var INF = Infinity;
   var POOL = '\u0000pool';
   var POOL_LABEL = 'Kelompok kecil lainnya';
-  // Rules that never share a customer (KSM no / KSM yes). Their counts are guarded together, because "neither"
-  // (all customers − one − the other) can be worked out when both are shown.
-  var FAMILY = { calonKsm: ['calonKsm', 'calonTopUpKsm'], calonTopUpKsm: ['calonKsm', 'calonTopUpKsm'] };
   function fmtInt(n) {
     var s = String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return n < 0 ? '−' + s : s;
@@ -1120,16 +1072,14 @@
     if (!has(rules, id)) throw err('BAD_RULE', 'Aturan tidak dikenal: ' + id);
     return rules[id];
   }
-  /** The published rules that never share a customer with this one (itself first); rules that are off are not shown. */
-  function familyOf(id, s) {
-    var on = {};
-    ruleStatus(s).forEach(function (d) { if (d.active) on[d.id] = 1; });
-    return [id].concat((FAMILY[id] || []).filter(function (x) { return x !== id && has(on, x); }));
-  }
+  /**
+   * The rules guarded together with this one. D41 removed the only pair of rules that never shared a customer, so
+   * each rule is guarded alone; the pair logic of rulePlans() and headPlan() stays general (a family of one).
+   */
+  function familyOf(id) { return [id]; }
   function groupKey(v) { return v == null ? NULL_KEY : String(v); }
   function groupLabel(by, key) {
     if (key == null) return 'Tidak diketahui';
-    if (by === 'segmen') return SEGMEN[key] || 'Tidak diketahui';
     if (has(BAND_FIELDS, by)) return bandLabel(by, key);
     return String(key);
   }
@@ -1294,17 +1244,17 @@
 
   /**
    * aggregate(records, by, {rule, settings}) → {by, k, rule, groups: [{key, label, n, text, suppressed, why, pooled}],
-   * total, totalText, hidden, withheld, note}. by: kodeSatuan | segmen | saldoBand | penghasilanBand | tenorBand.
+   * total, totalText, hidden, withheld, note}. by: kodeSatuan | saldoBand | penghasilanBand (any other: NO_GROUPING).
    * A group of 1-4 shows "<5" (n: null) and is left out of the total. Groups marked "–" are hidden
    * too, so that no "<5", and no small difference with the all-customer table, can be worked out from the headline
    * (summary()) or from the other tables; this complementary hiding is always on. With a rule, the groups that the
    * all-customer table hides are one row, "Kelompok kecil lainnya" (key null, pooled true). withheld: true → no groups
    * at all, and note says why. Only groups with at least one customer are listed. There is no filter on another
-   * grouping (a unit × segmen breakdown could open hidden cells): `where` is refused (NO_SUBGROUP).
+   * grouping (a unit × band breakdown could open hidden cells): `where` is refused (NO_SUBGROUP).
    */
   function aggregate(records, by, opts) {
     opts = opts || {};
-    if (!has(BY, by)) throw err('BAD_GROUP', 'Pengelompokan tidak dikenal: ' + by);
+    if (!has(BY, by)) throw err('NO_GROUPING', MESSAGES.NO_GROUPING);
     if (opts.where != null) throw err('NO_SUBGROUP', MESSAGES.NO_SUBGROUP);
     var s = S(opts.settings), k = kOf(s);
     ruleOf(opts.rule || null);
@@ -1366,7 +1316,7 @@
   /**
    * summary(records, settings?) → {k, total: {n, text, suppressed}, rules: [{id, label, what, active, why, n, text, suppressed}]}.
    * A count of 1-4 shows "<5". A count that would let a small group be worked out (all customers but 1-4 meet the
-   * rule, or meet one of calon KSM / calon top up KSM, which never share a customer) shows "–". When no safe
+   * rule) shows "–". When no safe
    * pattern exists (a file of fewer than 5 customers, for one) the rule shows "disembunyikan". A rule that is off
    * shows "—" with why.
    */
@@ -1431,11 +1381,11 @@
 
   // The generic importer knows the type 'leads' for the VAULT PATH only (MCD.importer.applyDataset('leads', rows)):
   // its columns are the stored fields, every one marked personal (no sample is ever shown unmasked), it never
-  // auto-detects a file, and the raw columns (CIF, saldo, penghasilan, sisa tenor, kolektibilitas), the headers of
+  // auto-detects a file, and the raw columns (CIF, saldo, penghasilan, kolektibilitas), the headers of
   // fields that are not approved (usia, kecamatan: NOT_APPROVED) and the personal headers are on its deny list, so a
   // raw file chosen by hand shows them as removed. Raw customer files only ever go through MCD.leads.importSheet
   // (masking needs WebCrypto, which is async).
-  var RAW_ONLY = ['cif', 'saldo', 'penghasilan', 'sisaTenorKsm', 'kolektibilitas'];
+  var RAW_ONLY = ['cif', 'saldo', 'penghasilan', 'kolektibilitas'];
   var CIF_HEADS = {};
   (SYN.cif || []).concat(['cif']).forEach(function (n) { CIF_HEADS[n] = 1; });
   function cifHeader(h) {
@@ -1475,10 +1425,12 @@
     'longitude', 'lat', 'lon', 'lng', 'plat_nomor', 'nomor_polisi', 'no_polisi', 'nopol'];
   RAW_ONLY.forEach(function (f) { (SYN[f] || []).concat([f]).forEach(function (n) { var k = normHeader(n); if (SCHEMA_DENY.indexOf(k) < 0) SCHEMA_DENY.push(k); }); });
   NOT_APPROVED.forEach(function (n) { var k = normHeader(n); if (SCHEMA_DENY.indexOf(k) < 0) SCHEMA_DENY.push(k); });
+  // D41: a raw remaining-tenor column (a date or a number per customer) shows removed too, as the raw amounts do
+  REMOVED_SYN.sisaTenor.forEach(function (n) { var k = normHeader(n); if (SCHEMA_DENY.indexOf(k) < 0) SCHEMA_DENY.push(k); });
   var SCHEMA = {
     label: 'Daftar leads (CIF disamarkan)', dataKey: 'leads',
     description: 'Daftar leads tersimpan di brankas (CIF sudah disamarkan). File nasabah diimpor hanya melalui "Impor daftar leads" di Data & Privasi.\n' +
-      'Nama, NIK, nomor rekening, telepon, email, alamat (termasuk kecamatan) dan usia tidak disimpan. Saldo, penghasilan dan sisa tenor hanya disimpan sebagai kelompok.',
+      'Nama, NIK, nomor rekening, telepon, email, alamat (termasuk kecamatan) dan usia tidak disimpan. Saldo dan penghasilan hanya disimpan sebagai kelompok.',
     columns: STORED_FIELDS.map(function (k) {
       return { key: k, type: 'tersimpan', req: k === 'key' ? 'any:id' : false, syn: [], personal: true, note: 'Kolom daftar leads tersimpan (brankas)' };
     }),
@@ -1508,15 +1460,15 @@
   return {
     VERSION: 1, MIN_K: MIN_K, MASK_HEX: MASK_HEX,
     FIELDS: FIELDS.slice(), PRODUCTS: PRODUCTS.slice(), STORED_FIELDS: STORED_FIELDS.slice(), FIELD_LABELS: FIELD_LABELS, FIELD_KIND: FIELD_KIND,
-    SEGMEN: SEGMEN, DETECTORS: DETECTORS, DEFAULTS: copy(DEFAULTS), REASONS: REASONS, MESSAGES: MESSAGES, RULES: RULES,
+    DETECTORS: DETECTORS, DEFAULTS: copy(DEFAULTS), REASONS: REASONS, MESSAGES: MESSAGES, RULES: RULES, REMOVED_WHY: REMOVED_WHY,
     // switch and session
     enabled: enabled, setEnabled: setEnabled, settings: settings, configure: configure, normSettings: normSettings,
     setKey: setKey, hasKey: hasKey, newKeyBytes: newKeyBytes, reset: reset,
     // mapping
-    normHeader: normHeader, headerDenied: headerDenied, fieldForHeader: fieldForHeader, classifyValue: classifyValue,
+    normHeader: normHeader, headerDenied: headerDenied, fieldForHeader: fieldForHeader, removedForHeader: removedForHeader, classifyValue: classifyValue,
     scanColumn: scanColumn, codeColumnCheck: codeColumnCheck, suggestMapping: suggestMapping, checkMapping: checkMapping,
     // values
-    parse: { amount: parseAmount, flag: parseFlag, segmen: parseSegmen, kol: parseKol, tenor: parseTenor, kodeSatuan: cleanCode },
+    parse: { amount: parseAmount, flag: parseFlag, kol: parseKol, kodeSatuan: cleanCode },
     // import
     readFile: readFile, importSheet: importSheet, mask: mask, normCif: normCif, fingerprint: fingerprint, apply: apply, clear: clear,
     sanitizeStored: sanitizeStored, reader: reader, schema: SCHEMA,
